@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View, Pressable } from 'react-native';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem, type DrawerContentComponentProps } from '@react-navigation/drawer';
 import { CalendarDays, ClipboardList, PlayCircle } from 'lucide-react-native';
@@ -6,6 +6,9 @@ import { colors } from '../theme/colors';
 import { useAuth } from '../state/AuthContext';
 import { WorkerScheduleScreen } from '../screens/worker/ScheduleScreen';
 import { WorkerJobsScreen } from '../screens/worker/JobsScreen';
+import { Badge } from '../components/ui/Badge';
+import { supabase } from '../lib/supabase';
+import { yyyyMmDd } from '../lib/time';
 
 export type WorkerDrawerParamList = {
   Schedule: undefined;
@@ -15,7 +18,52 @@ export type WorkerDrawerParamList = {
 const Drawer = createDrawerNavigator<WorkerDrawerParamList>();
 
 function WorkerDrawerContent(props: DrawerContentComponentProps) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const [badgeCount, setBadgeCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    const refresh = async () => {
+      const day = yyyyMmDd(new Date());
+      const start = new Date(`${day}T00:00:00`).toISOString();
+      const end = new Date(`${day}T23:59:59`).toISOString();
+
+      const [inst, spec] = await Promise.all([
+        supabase
+          .from('installation_jobs')
+          .select('id', { count: 'exact', head: true })
+          .eq('worker_id', user.id)
+          .eq('status', 'pending')
+          .gte('date', start)
+          .lte('date', end),
+        supabase
+          .from('special_jobs')
+          .select('id', { count: 'exact', head: true })
+          .eq('worker_id', user.id)
+          .eq('status', 'pending')
+          .gte('date', start)
+          .lte('date', end),
+      ]);
+
+      if (!alive) return;
+      const c = (inst.count ?? 0) + (spec.count ?? 0);
+      setBadgeCount(c);
+    };
+
+    refresh();
+    const channel = supabase
+      .channel('worker_badge')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'installation_jobs' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_jobs' }, refresh)
+      .subscribe();
+
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const items = useMemo(
     () => [
       { key: 'Schedule' as const, label: 'לוז יומי', icon: <CalendarDays size={18} color={colors.text} /> },
@@ -34,10 +82,14 @@ function WorkerDrawerContent(props: DrawerContentComponentProps) {
         {items.map((it) => (
           <DrawerItem
             key={it.key}
-            label={it.label}
+            label={() => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
+                {it.key === 'Schedule' ? <Badge count={badgeCount} /> : <View />}
+                <Text style={{ color: colors.text, textAlign: 'right', fontWeight: '700', flex: 1 }}>{it.label}</Text>
+              </View>
+            )}
             icon={() => it.icon}
             onPress={() => props.navigation.navigate(it.key as any)}
-            labelStyle={{ color: colors.text, textAlign: 'right', fontWeight: '700' }}
             style={{ borderRadius: 14, marginHorizontal: 4 }}
           />
         ))}

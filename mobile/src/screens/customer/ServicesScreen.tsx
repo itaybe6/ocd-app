@@ -5,10 +5,13 @@ import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { ModalSheet } from '../../components/ModalSheet';
+import { Input } from '../../components/ui/Input';
+import { SelectSheet } from '../../components/ui/SelectSheet';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
+import { yyyyMmDd } from '../../lib/time';
 
 type Job = {
   id: string;
@@ -22,11 +25,25 @@ type JobServicePoint = { id: string; job_id: string; image_url?: string | null }
 export function CustomerServicesScreen() {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [workers, setWorkers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [images, setImages] = useState<string[]>([]);
 
-  const completedJobs = useMemo(() => jobs.filter((j) => j.status === 'completed'), [jobs]);
+  const [statusFilter, setStatusFilter] = useState<'' | 'pending' | 'completed'>('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [q, setQ] = useState('');
+
+  const filteredJobs = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    return jobs.filter((j) => {
+      if (statusFilter && j.status !== statusFilter) return false;
+      if (dateFilter && yyyyMmDd(j.date) !== dateFilter) return false;
+      if (!qq) return true;
+      const w = workers[j.worker_id] ?? '';
+      return j.id.toLowerCase().includes(qq) || w.toLowerCase().includes(qq);
+    });
+  }, [jobs, statusFilter, dateFilter, q, workers]);
 
   const fetchJobs = async () => {
     if (!user?.id) return;
@@ -38,7 +55,18 @@ export function CustomerServicesScreen() {
         .eq('customer_id', user.id)
         .order('date', { ascending: false });
       if (error) throw error;
-      setJobs((data ?? []) as Job[]);
+      const list = (data ?? []) as Job[];
+      setJobs(list);
+
+      const workerIds = Array.from(new Set(list.map((j) => j.worker_id).filter(Boolean)));
+      if (workerIds.length) {
+        const { data: wData, error: wErr } = await supabase.from('users').select('id, name').in('id', workerIds);
+        if (!wErr) {
+          const map: Record<string, string> = {};
+          for (const r of wData ?? []) map[(r as any).id] = (r as any).name;
+          setWorkers(map);
+        }
+      }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -74,24 +102,42 @@ export function CustomerServicesScreen() {
         <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>שירותים</Text>
       </View>
 
-      <Text style={{ color: colors.muted, marginTop: 8, textAlign: 'right' }}>
-        תצוגה בסיסית: משימות “completed” + גלריית תמונות (מ-`job_service_points.image_url`).
-      </Text>
+      <View style={{ marginTop: 12, gap: 10 }}>
+        <Input label="חיפוש (id / עובד)" value={q} onChangeText={setQ} placeholder="חפש…" />
+        <Input label="תאריך (yyyy-MM-dd) אופציונלי" value={dateFilter} onChangeText={setDateFilter} placeholder="2026-03-15" />
+        <SelectSheet
+          label="סטטוס"
+          value={statusFilter}
+          placeholder="הכל"
+          options={[
+            { value: '', label: 'הכל' },
+            { value: 'pending', label: 'pending' },
+            { value: 'completed', label: 'completed' },
+          ]}
+          onChange={(v) => setStatusFilter((v || '') as any)}
+        />
+      </View>
 
       <FlatList
         style={{ marginTop: 12 }}
-        data={completedJobs}
+        data={filteredJobs}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
           <Pressable onPress={() => openJob(item)}>
             <Card>
               <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>משימה #{item.id.slice(0, 6)}</Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>{item.date}</Text>
+              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
+                {item.date}
+              </Text>
+              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
+                עובד: {workers[item.worker_id] ?? item.worker_id}
+              </Text>
+              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>סטטוס: {item.status}</Text>
             </Card>
           </Pressable>
         )}
-        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין משימות שהושלמו.</Text>}
+        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין משימות.</Text>}
       />
 
       <ModalSheet visible={!!selectedJob} onClose={() => setSelectedJob(null)}>

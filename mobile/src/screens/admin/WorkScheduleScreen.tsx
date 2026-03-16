@@ -87,6 +87,9 @@ export function WorkScheduleScreen() {
         return;
       }
 
+      const start = new Date(`${date.trim()}T00:00:00`).toISOString();
+      const end = new Date(`${date.trim()}T23:59:59`).toISOString();
+
       const customerIds = Array.from(new Set(validStations.map((s) => s.customer_id!)));
       const { data: spData, error: spErr } = await supabase
         .from('service_points')
@@ -99,26 +102,54 @@ export function WorkScheduleScreen() {
         spByCustomer.get(sp.customer_id)!.push(sp);
       }
 
-      // create jobs + job_service_points
+      // create/update jobs + ensure job_service_points (idempotent)
       for (const st of validStations) {
         const jobDate = combine(date.trim(), st.scheduled_time || '09:00');
-        const { data: job, error: jobErr } = await supabase
+        const { data: existing, error: existingErr } = await supabase
           .from('jobs')
-          .insert({
-            customer_id: st.customer_id,
-            worker_id: st.worker_id,
-            date: jobDate,
-            status: 'pending',
-          })
           .select('id, customer_id, worker_id, date, status')
-          .single();
-        if (jobErr) throw jobErr;
+          .eq('status', 'pending')
+          .eq('customer_id', st.customer_id!)
+          .eq('worker_id', st.worker_id!)
+          .gte('date', start)
+          .lte('date', end)
+          .maybeSingle();
+        if (existingErr) throw existingErr;
+
+        let jobId: string;
+        if (existing) {
+          jobId = (existing as any).id as string;
+          const { error: updErr } = await supabase.from('jobs').update({ date: jobDate }).eq('id', jobId);
+          if (updErr) throw updErr;
+        } else {
+          const { data: job, error: jobErr } = await supabase
+            .from('jobs')
+            .insert({
+              customer_id: st.customer_id,
+              worker_id: st.worker_id,
+              date: jobDate,
+              status: 'pending',
+            })
+            .select('id')
+            .single();
+          if (jobErr) throw jobErr;
+          jobId = (job as any).id as string;
+        }
 
         const sps = spByCustomer.get(st.customer_id!) ?? [];
         if (sps.length) {
-          const rows = sps.map((sp) => ({ job_id: (job as any).id as string, service_point_id: sp.id, custom_refill_amount: null }));
-          const { error: jspErr } = await supabase.from('job_service_points').insert(rows);
-          if (jspErr) throw jspErr;
+          const { data: existingJsp, error: exJspErr } = await supabase
+            .from('job_service_points')
+            .select('service_point_id')
+            .eq('job_id', jobId);
+          if (exJspErr) throw exJspErr;
+          const existingSpIds = new Set((existingJsp ?? []).map((r: any) => r.service_point_id as string));
+          const missing = sps.filter((sp) => !existingSpIds.has(sp.id));
+          if (missing.length) {
+            const rows = missing.map((sp) => ({ job_id: jobId, service_point_id: sp.id, custom_refill_amount: null }));
+            const { error: jspErr } = await supabase.from('job_service_points').insert(rows);
+            if (jspErr) throw jspErr;
+          }
         }
       }
 
@@ -135,22 +166,39 @@ export function WorkScheduleScreen() {
   const removeTemplate = async (schedule: WorkSchedule) => {
     try {
       setIsLoading(true);
-      const start = new Date(`${schedule.date}T00:00:00`).toISOString();
-      const end = new Date(`${schedule.date}T23:59:59`).toISOString();
+      const day = schedule.date;
+      const start = new Date(`${day}T00:00:00`).toISOString();
+      const end = new Date(`${day}T23:59:59`).toISOString();
 
-      // find pending jobs created for that day; conservative delete: all pending regular jobs within day
-      const { data: jobs, error: jobsErr } = await supabase
-        .from('jobs')
-        .select('id, status')
-        .eq('status', 'pending')
-        .gte('date', start)
-        .lte('date', end);
-      if (jobsErr) throw jobsErr;
-      const jobIds = (jobs ?? []).map((j: any) => j.id);
-      if (jobIds.length) {
-        const { error: jspErr } = await supabase.from('job_service_points').delete().in('job_id', jobIds);
+      const { data: stations, error: stErr } = await supabase
+        .from('template_stations')
+        .select('customer_id, worker_id')
+        .eq('template_id', schedule.template_id);
+      if (stErr) throw stErr;
+
+      const pairs = (stations ?? [])
+        .map((s: any) => ({ customer_id: s.customer_id as string | null, worker_id: s.worker_id as string | null }))
+        .filter((p) => p.customer_id && p.worker_id) as { customer_id: string; worker_id: string }[];
+
+      const jobIdsToDelete: string[] = [];
+      for (const p of pairs) {
+        const { data: job, error: jobErr } = await supabase
+          .from('jobs')
+          .select('id')
+          .eq('status', 'pending')
+          .eq('customer_id', p.customer_id)
+          .eq('worker_id', p.worker_id)
+          .gte('date', start)
+          .lte('date', end)
+          .maybeSingle();
+        if (jobErr) throw jobErr;
+        if (job) jobIdsToDelete.push((job as any).id as string);
+      }
+
+      if (jobIdsToDelete.length) {
+        const { error: jspErr } = await supabase.from('job_service_points').delete().in('job_id', jobIdsToDelete);
         if (jspErr) throw jspErr;
-        const { error: delJobsErr } = await supabase.from('jobs').delete().in('id', jobIds);
+        const { error: delJobsErr } = await supabase.from('jobs').delete().in('id', jobIdsToDelete);
         if (delJobsErr) throw delJobsErr;
       }
 

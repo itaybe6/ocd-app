@@ -134,17 +134,12 @@ export function RootNavigator() {
     );
   }
 
-  const initialRouteName: keyof RootStackParamList = !user
-    ? 'Login'
-    : user.role === 'admin'
-      ? 'Admin'
-      : user.role === 'worker'
-        ? 'Worker'
-        : 'Customer';
-
   return (
     <NavigationContainer theme={navTheme}>
-      <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        key={user ? `role:${user.role}` : 'anon'}
+        screenOptions={{ headerShown: false }}
+      >
         {!user ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : user.role === 'admin' ? (
