@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -41,7 +42,7 @@ export function InstallationJobsScreen() {
   const [selected, setSelected] = useState<Unified | null>(null);
   const [devices, setDevices] = useState<InstallationDevice[]>([]);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       const [instRes, specRes] = await Promise.all([
@@ -58,11 +59,13 @@ export function InstallationJobsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAll();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAll();
+    }, [fetchAll])
+  );
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();

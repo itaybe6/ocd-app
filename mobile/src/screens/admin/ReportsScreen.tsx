@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -29,14 +30,16 @@ export function ReportsScreen() {
     [customers]
   );
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role, price').eq('role', 'customer').order('name');
     if (!error) setCustomers((data ?? []) as any);
-  };
-
-  useEffect(() => {
-    fetchCustomers();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchCustomers();
+    }, [fetchCustomers])
+  );
 
   const runReport = async () => {
     if (!customerId) {

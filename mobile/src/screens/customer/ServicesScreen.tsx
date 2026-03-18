@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -45,7 +46,7 @@ export function CustomerServicesScreen() {
     });
   }, [jobs, statusFilter, dateFilter, q, workers]);
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     if (!user?.id) return;
     try {
       setLoading(true);
@@ -72,7 +73,7 @@ export function CustomerServicesScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const openJob = async (job: Job) => {
     setSelectedJob(job);
@@ -90,10 +91,11 @@ export function CustomerServicesScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchJobs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [fetchJobs])
+  );
 
   return (
     <Screen>

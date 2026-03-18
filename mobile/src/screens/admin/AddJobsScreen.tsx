@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 
 type JobKind = 'regular' | 'installation' | 'special';
 type JobStatus = 'pending' | 'completed';
@@ -86,10 +87,10 @@ export function AddJobsScreen() {
 
   const specialTypeMeta = useMemo(() => SPECIAL_JOB_TYPES.find((t) => t.value === specialJobType), [specialJobType]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role').order('name', { ascending: true });
     if (!error) setUsers((data ?? []) as UserLite[]);
-  };
+  }, []);
 
   const fetchServicePoints = async (custId: string) => {
     const { data, error } = await supabase
@@ -108,9 +109,11 @@ export function AddJobsScreen() {
     );
   };
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+    }, [fetchUsers])
+  );
 
   useEffect(() => {
     if (!customerId || useOneTimeCustomer || kind !== 'regular') {

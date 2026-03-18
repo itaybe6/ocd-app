@@ -63,7 +63,6 @@ export function SupportScreen() {
   }, []);
 
   useEffect(() => {
-    fetchTickets();
     const channel = supabase
       .channel('support_tickets_changes')
       .on(
