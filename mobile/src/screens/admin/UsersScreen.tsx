@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { ModalSheet } from '../../components/ModalSheet';
 import { Screen } from '../../components/Screen';
 import { Button } from '../../components/ui/Button';
@@ -77,16 +78,16 @@ export function UsersScreen() {
     });
   }, [users, roleFilter, query]);
 
-  const fetchLookups = async () => {
+  const fetchLookups = useCallback(async () => {
     const [dRes, sRes] = await Promise.all([
       supabase.from('devices').select('id, name, refill_amount').order('name', { ascending: true }),
       supabase.from('scents').select('id, name').order('name', { ascending: true }),
     ]);
     if (!dRes.error) setDevices((dRes.data ?? []) as DeviceRow[]);
     if (!sRes.error) setScents((sRes.data ?? []) as ScentRow[]);
-  };
+  }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -100,12 +101,19 @@ export function UsersScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUsers();
     fetchLookups();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+      fetchLookups();
+    }, [fetchUsers, fetchLookups])
+  );
 
   const openCreate = () => {
     setEditing(emptyUser());

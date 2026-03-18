@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
-import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -13,6 +12,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
 import { useLoading } from '../../state/LoadingContext';
+import { pickImageFromLibrary } from '../../lib/media';
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
@@ -116,16 +116,7 @@ export function WorkerJobsScreen() {
     }
   };
 
-  const pick = async (): Promise<string | null> => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Toast.show({ type: 'error', text1: 'אין הרשאה לגלריה' });
-      return null;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 1 });
-    if (res.canceled) return null;
-    return res.assets[0]?.uri ?? null;
-  };
+  const pick = pickImageFromLibrary;
 
   const complete = async () => {
     if (!selected) return;

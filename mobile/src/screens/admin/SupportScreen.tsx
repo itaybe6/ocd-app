@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View, FlatList } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { ModalSheet } from '../../components/ModalSheet';
 import { Screen } from '../../components/Screen';
 import { Button } from '../../components/ui/Button';
@@ -36,7 +37,7 @@ export function SupportScreen() {
     });
   }, [tickets, query]);
 
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -59,7 +60,7 @@ export function SupportScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchTickets();
@@ -79,6 +80,12 @@ export function SupportScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTickets();
+    }, [fetchTickets])
+  );
 
   const deleteTicket = async (id: string) => {
     try {

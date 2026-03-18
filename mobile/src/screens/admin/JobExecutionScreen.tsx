@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
-import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -12,6 +12,7 @@ import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { yyyyMmDd } from '../../lib/time';
 import { useLoading } from '../../state/LoadingContext';
+import { pickImageFromLibrary } from '../../lib/media';
 
 type Job = {
   id: string;
@@ -66,6 +67,12 @@ export function JobExecutionScreen() {
     fetchJobs();
   }, []);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchJobs();
+    }, [])
+  );
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -102,18 +109,7 @@ export function JobExecutionScreen() {
   };
 
   const pickImage = async (jspId: string) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Toast.show({ type: 'error', text1: 'אין הרשאה לגלריה' });
-      return;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
-    if (res.canceled) return;
-    const uri = res.assets[0]?.uri;
+    const uri = await pickImageFromLibrary();
     if (!uri) return;
     setPoints((prev) => prev.map((p) => (p.id === jspId ? { ...p, localImageUri: uri } : p)));
   };
