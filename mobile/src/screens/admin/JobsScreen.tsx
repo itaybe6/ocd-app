@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, SectionList, Text, View, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -39,6 +40,18 @@ type ServicePoint = { id: string; device_type: string; scent_type: string; refil
 
 type InstallationDevice = { id: string; installation_job_id: string; image_url?: string | null; device_name?: string | null };
 
+const SPECIAL_JOB_TYPES: { value: string; label: string; needsBattery?: boolean }[] = [
+  { value: 'batteries', label: 'החלפת סוללות', needsBattery: true },
+  { value: 'device_issue', label: 'תקלה במכשיר' },
+  { value: 'customer_request', label: 'בקשת לקוח' },
+  { value: 'other', label: 'אחר' },
+];
+
+const BATTERY_TYPES = [
+  { value: 'AA', label: 'AA' },
+  { value: 'DC', label: 'DC' },
+];
+
 type Filters = {
   date: string; // yyyy-MM-dd or empty
   status: '' | JobStatus;
@@ -67,7 +80,7 @@ export function JobsScreen() {
     if (!error) setUsers((data ?? []) as UserLite[]);
   };
 
-  const fetchUnified = async () => {
+  const fetchUnified = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -78,7 +91,7 @@ export function JobsScreen() {
           .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes'),
         supabase
           .from('special_jobs')
-          .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, job_type, battery_type, image_url'),
+          .select('id, date, status, worker_id, order_number, notes, job_type, battery_type, image_url'),
       ]);
 
       if (regRes.error) throw regRes.error;
@@ -114,12 +127,18 @@ export function JobsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUsers();
     fetchUnified();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnified();
+    }, [fetchUnified])
+  );
 
   const filtered = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
@@ -273,6 +292,12 @@ export function JobsScreen() {
     () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })),
     [users]
   );
+
+  const specialTypeMeta = useMemo(() => {
+    if (!editing || editing.kind !== 'special') return null;
+    const t = String((editing as any).job_type ?? '');
+    return SPECIAL_JOB_TYPES.find((x) => x.value === t) ?? null;
+  }, [editing]);
 
   return (
     <Screen>
@@ -482,6 +507,33 @@ export function JobsScreen() {
                 value={editing.notes ?? ''}
                 onChangeText={(v) => setEditing((p) => (p ? { ...p, notes: v } : p))}
               />
+
+              {editing.kind === 'special' ? (
+                <>
+                  <SelectSheet
+                    label="Special type"
+                    value={String((editing as any).job_type ?? '')}
+                    placeholder="בחר…"
+                    options={SPECIAL_JOB_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                    onChange={(v) =>
+                      setEditing((p) =>
+                        p && p.kind === 'special'
+                          ? ({ ...p, job_type: v, battery_type: SPECIAL_JOB_TYPES.find((t) => t.value === v)?.needsBattery ? (p.battery_type ?? 'AA') : null } as any)
+                          : p
+                      )
+                    }
+                  />
+                  {specialTypeMeta?.needsBattery ? (
+                    <SelectSheet
+                      label="Battery type"
+                      value={String((editing as any).battery_type ?? 'AA')}
+                      options={BATTERY_TYPES}
+                      onChange={(v) => setEditing((p) => (p && p.kind === 'special' ? ({ ...p, battery_type: v } as any) : p))}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+
               <Button title="שמור" onPress={saveEdit} />
               <Button title="סגור" variant="secondary" onPress={() => setEditOpen(false)} />
             </>

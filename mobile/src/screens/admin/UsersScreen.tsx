@@ -58,6 +58,8 @@ export function UsersScreen() {
   const [pointsOpen, setPointsOpen] = useState(false);
   const [pointsUser, setPointsUser] = useState<UserRow | null>(null);
   const [points, setPoints] = useState<ServicePoint[]>([]);
+  const [pointsDraft, setPointsDraft] = useState<Partial<ServicePoint>[]>([]);
+  const [pointsMode, setPointsMode] = useState<'single' | 'batch'>('batch');
 
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [scents, setScents] = useState<ScentRow[]>([]);
@@ -156,9 +158,49 @@ export function UsersScreen() {
         .eq('customer_id', customer.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setPoints((data ?? []) as ServicePoint[]);
+      const list = (data ?? []) as ServicePoint[];
+      setPoints(list);
+      setPointsDraft(
+        list.map((p) => ({
+          id: p.id,
+          customer_id: p.customer_id,
+          device_type: p.device_type,
+          scent_type: p.scent_type,
+          refill_amount: p.refill_amount,
+          notes: p.notes ?? '',
+        }))
+      );
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת נקודות שירות נכשלה', text2: e?.message ?? 'Unknown error' });
+    }
+  };
+
+  const savePointsBatch = async () => {
+    if (!pointsUser) return;
+    const cleaned = pointsDraft
+      .map((p) => ({
+        customer_id: pointsUser.id,
+        device_type: (p.device_type ?? '').trim(),
+        scent_type: (p.scent_type ?? '').trim(),
+        refill_amount: Number(p.refill_amount ?? 0),
+        notes: (p.notes as any)?.trim?.() ? String(p.notes).trim() : null,
+      }))
+      .filter((p) => p.device_type && p.scent_type && p.refill_amount);
+
+    try {
+      setLoading(true);
+      const del = await supabase.from('service_points').delete().eq('customer_id', pointsUser.id);
+      if (del.error) throw del.error;
+      if (cleaned.length) {
+        const ins = await supabase.from('service_points').insert(cleaned);
+        if (ins.error) throw ins.error;
+      }
+      Toast.show({ type: 'success', text1: 'נשמר (delete + insert)' });
+      await fetchServicePoints(pointsUser);
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'שמירה נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -206,6 +248,21 @@ export function UsersScreen() {
     try {
       setLoading(true);
 
+      const tryOp = async (op: PromiseLike<{ error: any }>) => {
+        const res = await op;
+        if (res?.error) {
+          const msg = String(res.error?.message ?? res.error);
+          const code = String(res.error?.code ?? '');
+          const ignorable =
+            code === '42P01' || // undefined_table
+            code === '42703' || // undefined_column
+            msg.includes('does not exist') ||
+            msg.includes('column') && msg.includes('does not exist') ||
+            msg.includes('relation') && msg.includes('does not exist');
+          if (!ignorable) throw res.error;
+        }
+      };
+
       if (u.role === 'customer') {
         // jobs -> job_service_points
         const jobsRes = await supabase.from('jobs').select('id').eq('customer_id', u.id);
@@ -218,19 +275,18 @@ export function UsersScreen() {
           if (jDel.error) throw jDel.error;
         }
 
-        const spDel = await supabase.from('service_points').delete().eq('customer_id', u.id);
-        if (spDel.error) throw spDel.error;
+        await tryOp(supabase.from('service_points').delete().eq('customer_id', u.id));
 
-        await supabase.from('installation_jobs').delete().eq('customer_id', u.id);
-        await supabase.from('special_jobs').delete().eq('customer_id', u.id);
-        await supabase.from('template_stations').delete().eq('customer_id', u.id);
+        await tryOp(supabase.from('installation_jobs').delete().eq('customer_id', u.id));
+        // Special jobs are not necessarily tied to a customer in the original spec.
+        await tryOp(supabase.from('template_stations').delete().eq('customer_id', u.id));
       }
 
       if (u.role === 'worker') {
-        await supabase.from('jobs').delete().eq('worker_id', u.id);
-        await supabase.from('installation_jobs').delete().eq('worker_id', u.id);
-        await supabase.from('special_jobs').delete().eq('worker_id', u.id);
-        await supabase.from('template_stations').delete().eq('worker_id', u.id);
+        await tryOp(supabase.from('jobs').delete().eq('worker_id', u.id));
+        await tryOp(supabase.from('installation_jobs').delete().eq('worker_id', u.id));
+        await tryOp(supabase.from('special_jobs').delete().eq('worker_id', u.id));
+        await tryOp(supabase.from('template_stations').delete().eq('worker_id', u.id));
       }
 
       const { error } = await supabase.from('users').delete().eq('id', u.id);
@@ -348,11 +404,75 @@ export function UsersScreen() {
           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
             נקודות שירות — {pointsUser?.name}
           </Text>
-          <PointEditor
-            devices={devices}
-            scents={scents}
-            onSave={(p) => upsertPoint(p)}
-          />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                title={pointsMode === 'batch' ? 'מצב עריכה: Batch' : 'מצב עריכה: Single'}
+                variant="secondary"
+                onPress={() => setPointsMode((p) => (p === 'batch' ? 'single' : 'batch'))}
+              />
+            </View>
+            {pointsMode === 'batch' ? (
+              <View style={{ flex: 1 }}>
+                <Button title="שמור הכל (delete+insert)" onPress={savePointsBatch} />
+              </View>
+            ) : null}
+          </View>
+
+          {pointsMode === 'single' ? (
+            <PointEditor devices={devices} scents={scents} onSave={(p) => upsertPoint(p)} />
+          ) : (
+            <Card>
+              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>עריכה מרוכזת</Text>
+              <View style={{ gap: 10 }}>
+                {pointsDraft.map((p, idx) => (
+                  <View key={String(p.id ?? idx)} style={{ gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <SelectSheet
+                      label={`מכשיר #${idx + 1}`}
+                      value={String(p.device_type ?? '')}
+                      placeholder="בחר מכשיר…"
+                      options={devices.map((d) => ({ value: d.name, label: d.name }))}
+                      onChange={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, device_type: v } : x)))}
+                    />
+                    <SelectSheet
+                      label="ניחוח"
+                      value={String(p.scent_type ?? '')}
+                      placeholder="בחר ניחוח…"
+                      options={scents.map((s) => ({ value: s.name, label: s.name }))}
+                      onChange={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, scent_type: v } : x)))}
+                    />
+                    <Input
+                      label="כמות מילוי"
+                      value={String(p.refill_amount ?? '')}
+                      keyboardType="numeric"
+                      onChangeText={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, refill_amount: Number(v) } : x)))}
+                    />
+                    <Input
+                      label="הערות"
+                      value={String(p.notes ?? '')}
+                      onChangeText={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, notes: v } : x)))}
+                    />
+                    <Pressable
+                      onPress={() => setPointsDraft((prev) => prev.filter((_, i) => i !== idx))}
+                      style={{ paddingVertical: 6 }}
+                    >
+                      <Text style={{ color: colors.danger, fontWeight: '900', textAlign: 'right' }}>הסר שורה</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                <Button
+                  title="הוסף שורה"
+                  variant="secondary"
+                  onPress={() =>
+                    setPointsDraft((prev) => [
+                      ...prev,
+                      { device_type: '', scent_type: '', refill_amount: 0, notes: '' },
+                    ])
+                  }
+                />
+              </View>
+            </Card>
+          )}
           <FlatList
             data={points}
             keyExtractor={(i) => i.id}

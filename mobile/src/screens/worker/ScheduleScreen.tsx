@@ -39,6 +39,11 @@ export function WorkerScheduleScreen() {
   const [kindFilter, setKindFilter] = useState<'' | Kind>('');
   const [items, setItems] = useState<Unified[]>([]);
   const [loading, setLoading] = useState(false);
+  const [daySummary, setDaySummary] = useState<{
+    scent: { key: string; amount: number }[];
+    equipmentCount: number;
+    batteries: { key: string; count: number }[];
+  }>({ scent: [], equipmentCount: 0, batteries: [] });
 
   const [selected, setSelected] = useState<Unified | null>(null);
   const [regularPoints, setRegularPoints] = useState<(JobServicePoint & { sp?: ServicePoint | null; localImageUri?: string | null; uploading?: boolean })[]>([]);
@@ -89,7 +94,76 @@ export function WorkerScheduleScreen() {
       const regs = (regRes.data ?? []).map((r: any) => ({ kind: 'regular', ...r }) as Unified);
       const insts = (instRes.data ?? []).map((r: any) => ({ kind: 'installation', ...r }) as Unified);
       const specs = (specRes.data ?? []).map((r: any) => ({ kind: 'special', ...r }) as Unified);
-      setItems([...regs, ...insts, ...specs].sort((a, b) => (a.date < b.date ? -1 : 1)));
+      const all = [...regs, ...insts, ...specs].sort((a, b) => (a.date < b.date ? -1 : 1));
+      setItems(all);
+
+      // Daily summaries across ALL jobs for the day
+      const regularIds = regs.map((r) => r.id);
+      const installationIds = insts.map((r) => r.id);
+      const specialIds = specs.map((r) => r.id);
+
+      const safe = async <T,>(p: PromiseLike<{ data: T | null; error: any }>, fallback: T) => {
+        const res = await p;
+        if (res?.error) return fallback;
+        return (res.data ?? fallback) as T;
+      };
+
+      // Scent summary
+      let scentRows: { service_point_id: string; custom_refill_amount?: number | null }[] = [];
+      if (regularIds.length) {
+        scentRows = await safe(
+          supabase
+            .from('job_service_points')
+            .select('service_point_id, custom_refill_amount')
+            .in('job_id', regularIds),
+          []
+        );
+      }
+      const spIds = Array.from(new Set(scentRows.map((r) => r.service_point_id)));
+      const spData = spIds.length
+        ? await safe(
+            supabase.from('service_points').select('id, scent_type, refill_amount').in('id', spIds),
+            []
+          )
+        : [];
+      const spMap = new Map((spData as any[]).map((sp) => [sp.id as string, sp]));
+      const scentMap = new Map<string, number>();
+      for (const r of scentRows) {
+        const sp = spMap.get(r.service_point_id);
+        const scent = String(sp?.scent_type ?? 'unknown');
+        const amt = Number(r.custom_refill_amount ?? sp?.refill_amount ?? 0);
+        scentMap.set(scent, (scentMap.get(scent) ?? 0) + amt);
+      }
+
+      // Equipment summary
+      const instDevices = installationIds.length
+        ? await safe(
+            supabase.from('installation_devices').select('id').in('installation_job_id', installationIds),
+            []
+          )
+        : [];
+
+      // Batteries summary
+      const specRows = specialIds.length
+        ? await safe(
+            supabase.from('special_jobs').select('id, job_type, battery_type').in('id', specialIds),
+            []
+          )
+        : [];
+      const batteryMap = new Map<string, number>();
+      for (const r of specRows as any[]) {
+        if (!r?.battery_type) continue;
+        const key = String(r.battery_type);
+        batteryMap.set(key, (batteryMap.get(key) ?? 0) + 1);
+      }
+
+      setDaySummary({
+        scent: Array.from(scentMap.entries())
+          .map(([key, amount]) => ({ key, amount }))
+          .sort((a, b) => b.amount - a.amount),
+        equipmentCount: (instDevices as any[]).length,
+        batteries: Array.from(batteryMap.entries()).map(([key, count]) => ({ key, count })),
+      });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -275,6 +349,25 @@ export function WorkerScheduleScreen() {
           ]}
           onChange={(v) => setKindFilter((v || '') as any)}
         />
+      </View>
+
+      <View style={{ marginTop: 12, gap: 10 }}>
+        <Card>
+          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>סיכומי יום</Text>
+          <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>
+            ציוד להתקנה: {daySummary.equipmentCount}{'\n'}
+            סוללות: {daySummary.batteries.map((b) => `${b.key}:${b.count}`).join(', ') || '—'}
+          </Text>
+          {daySummary.scent.length ? (
+            <View style={{ marginTop: 10, gap: 6 }}>
+              {daySummary.scent.map((s) => (
+                <Text key={s.key} style={{ color: colors.muted, textAlign: 'right' }}>
+                  {s.key}: {s.amount}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+        </Card>
       </View>
 
       <FlatList

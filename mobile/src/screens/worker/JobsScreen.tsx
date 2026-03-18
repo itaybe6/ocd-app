@@ -29,6 +29,10 @@ type JobServicePoint = { id: string; job_id: string; service_point_id: string; i
 type InstallationDevice = { id: string; installation_job_id: string; device_name?: string | null; image_url?: string | null };
 type SpecialJob = { id: string; image_url?: string | null };
 
+type ExecRegularPoint = JobServicePoint & { localUri?: string | null; uploading?: boolean };
+type ExecInstDevice = InstallationDevice & { localUri?: string | null; uploading?: boolean };
+type ExecSpecial = SpecialJob & { localUri?: string | null; uploading?: boolean };
+
 export function WorkerJobsScreen() {
   const { user } = useAuth();
   const { setIsLoading } = useLoading();
@@ -41,8 +45,9 @@ export function WorkerJobsScreen() {
 
   const [selected, setSelected] = useState<Unified | null>(null);
   const [regularImages, setRegularImages] = useState<string[]>([]);
-  const [instDevices, setInstDevices] = useState<InstallationDevice[]>([]);
-  const [special, setSpecial] = useState<SpecialJob | null>(null);
+  const [instDevices, setInstDevices] = useState<ExecInstDevice[]>([]);
+  const [special, setSpecial] = useState<ExecSpecial | null>(null);
+  const [execRegularPoints, setExecRegularPoints] = useState<ExecRegularPoint[]>([]);
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
@@ -87,17 +92,19 @@ export function WorkerJobsScreen() {
     setRegularImages([]);
     setInstDevices([]);
     setSpecial(null);
+    setExecRegularPoints([]);
     try {
       if (it.kind === 'regular') {
         const { data, error } = await supabase.from('job_service_points').select('id, job_id, service_point_id, image_url').eq('job_id', it.id);
         if (error) throw error;
         const urls = ((data ?? []) as JobServicePoint[]).map((r) => r.image_url).filter(Boolean).map((p) => getPublicUrl(p!));
         setRegularImages(urls);
+        setExecRegularPoints(((data ?? []) as JobServicePoint[]).map((r) => ({ ...r })));
       }
       if (it.kind === 'installation') {
         const { data, error } = await supabase.from('installation_devices').select('id, installation_job_id, device_name, image_url').eq('installation_job_id', it.id);
         if (error) throw error;
-        setInstDevices((data ?? []) as InstallationDevice[]);
+        setInstDevices(((data ?? []) as InstallationDevice[]).map((d) => ({ ...d })));
       }
       if (it.kind === 'special') {
         const { data, error } = await supabase.from('special_jobs').select('id, image_url').eq('id', it.id).single();
@@ -153,12 +160,47 @@ export function WorkerJobsScreen() {
       await uploadCompressedImage({ localUri: uri, path: storagePath });
       const { error } = await supabase.from('special_jobs').update({ image_url: storagePath }).eq('id', selected.id);
       if (error) throw error;
-      setSpecial({ id: selected.id, image_url: storagePath });
+      setSpecial({ id: selected.id, image_url: storagePath, localUri: null, uploading: false });
       Toast.show({ type: 'success', text1: 'הועלה' });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const uploadRegularPoint = async (p: ExecRegularPoint) => {
+    if (!selected || selected.kind !== 'regular') return;
+    if (!p.localUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
+    try {
+      setExecRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
+      const storagePath = `${selected.id}/${p.service_point_id}-${Date.now()}.jpg`;
+      await uploadCompressedImage({ localUri: p.localUri, path: storagePath });
+      const { error } = await supabase.from('job_service_points').update({ image_url: storagePath }).eq('id', p.id);
+      if (error) throw error;
+      setExecRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false } : x)));
+      setRegularImages((prev) => Array.from(new Set([...prev, getPublicUrl(storagePath)])));
+      Toast.show({ type: 'success', text1: 'הועלה' });
+    } catch (e: any) {
+      setExecRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: false } : x)));
+      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
+    }
+  };
+
+  const uploadInstallationDevice = async (d: ExecInstDevice) => {
+    if (!selected || selected.kind !== 'installation') return;
+    if (!d.localUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
+    try {
+      setInstDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: true } : x)));
+      const storagePath = `${selected.id}/${d.id}-${Date.now()}.jpg`;
+      await uploadCompressedImage({ localUri: d.localUri, path: storagePath });
+      const { error } = await supabase.from('installation_devices').update({ image_url: storagePath }).eq('id', d.id);
+      if (error) throw error;
+      setInstDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, image_url: storagePath, uploading: false } : x)));
+      Toast.show({ type: 'success', text1: 'הועלה' });
+    } catch (e: any) {
+      setInstDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: false } : x)));
+      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
     }
   };
 
@@ -240,6 +282,42 @@ export function WorkerJobsScreen() {
                 ) : (
                   <Text style={{ color: colors.muted, textAlign: 'right' }}>אין תמונות.</Text>
                 )}
+
+                {selected.status === 'pending' ? (
+                  <>
+                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>ביצוע (העלאת תמונות)</Text>
+                    <View style={{ gap: 10 }}>
+                      {execRegularPoints.map((p) => (
+                        <Card key={p.id}>
+                          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
+                            נקודה: {p.service_point_id.slice(0, 6)}
+                          </Text>
+                          {p.image_url ? (
+                            <Image source={{ uri: getPublicUrl(p.image_url) }} style={{ width: '100%', height: 180, borderRadius: 14, marginTop: 10 }} />
+                          ) : p.localUri ? (
+                            <Image source={{ uri: p.localUri }} style={{ width: '100%', height: 180, borderRadius: 14, marginTop: 10 }} />
+                          ) : null}
+                          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                            <View style={{ flex: 1 }}>
+                              <Button
+                                title="בחר תמונה"
+                                variant="secondary"
+                                onPress={async () => {
+                                  const uri = await pick();
+                                  if (!uri) return;
+                                  setExecRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, localUri: uri } : x)));
+                                }}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Button title={p.uploading ? 'מעלה…' : 'העלה'} disabled={p.uploading} onPress={() => uploadRegularPoint(p)} />
+                            </View>
+                          </View>
+                        </Card>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
               </>
             ) : null}
 
@@ -253,6 +331,27 @@ export function WorkerJobsScreen() {
                         <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{d.device_name ?? 'Device'}</Text>
                         {d.image_url ? (
                           <Image source={{ uri: getPublicUrl(d.image_url) }} style={{ width: '100%', height: 180, borderRadius: 14, marginTop: 10 }} />
+                        ) : d.localUri ? (
+                          <Image source={{ uri: d.localUri }} style={{ width: '100%', height: 180, borderRadius: 14, marginTop: 10 }} />
+                        ) : null}
+
+                        {selected.status === 'pending' ? (
+                          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                            <View style={{ flex: 1 }}>
+                              <Button
+                                title="בחר תמונה"
+                                variant="secondary"
+                                onPress={async () => {
+                                  const uri = await pick();
+                                  if (!uri) return;
+                                  setInstDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, localUri: uri } : x)));
+                                }}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Button title={d.uploading ? 'מעלה…' : 'העלה'} disabled={d.uploading} onPress={() => uploadInstallationDevice(d)} />
+                            </View>
+                          </View>
                         ) : null}
                       </Card>
                     ))}
@@ -273,7 +372,7 @@ export function WorkerJobsScreen() {
                 ) : (
                   <Text style={{ color: colors.muted, textAlign: 'right' }}>אין תמונה.</Text>
                 )}
-                <Button title="העלה/עדכן תמונה" onPress={uploadSpecialImage} />
+                {selected.status === 'pending' ? <Button title="העלה/עדכן תמונה" onPress={uploadSpecialImage} /> : null}
               </>
             ) : null}
 

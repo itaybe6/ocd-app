@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
@@ -145,15 +145,20 @@ export function CustomerServicesScreen() {
           <View style={{ gap: 10 }}>
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>תמונות</Text>
             {images.length ? (
-              <View style={{ gap: 8 }}>
-                {images.map((u) => (
-                  <Card key={u}>
-                    <Text style={{ color: colors.text, textAlign: 'right' }} numberOfLines={1}>
-                      {u}
-                    </Text>
-                  </Card>
-                ))}
-              </View>
+              <FlatList
+                data={images}
+                keyExtractor={(u) => u}
+                numColumns={2}
+                columnWrapperStyle={{ gap: 10 }}
+                contentContainerStyle={{ gap: 10, paddingBottom: 10 }}
+                renderItem={({ item }) => (
+                  <View style={{ flex: 1 }}>
+                    <Card style={{ padding: 10 }}>
+                      <Image source={{ uri: item }} style={{ width: '100%', height: 140, borderRadius: 12 }} resizeMode="cover" />
+                    </Card>
+                  </View>
+                )}
+              />
             ) : (
               <Text style={{ color: colors.muted, textAlign: 'right' }}>אין תמונות למשימה.</Text>
             )}

@@ -9,6 +9,7 @@ import { SelectSheet } from '../../components/ui/SelectSheet';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
+import { useNavigation } from '@react-navigation/native';
 
 type JobKind = 'regular' | 'installation' | 'special';
 type JobStatus = 'pending' | 'completed';
@@ -50,6 +51,7 @@ function combineDateTimeToIso(dateYmd: string, timeHm: string): string {
 
 export function AddJobsScreen() {
   const { setIsLoading } = useLoading();
+  const navigation = useNavigation<any>();
 
   const [kind, setKind] = useState<JobKind>('regular');
   const [status, setStatus] = useState<JobStatus>('pending');
@@ -126,14 +128,17 @@ export function AddJobsScreen() {
     if (!dateYmd.trim()) throw new Error('חסר תאריך (yyyy-MM-dd)');
     if (!timeHm.trim()) throw new Error('חסרה שעה (HH:mm)');
     if (!workerId) throw new Error('חסר עובד');
-    if (useOneTimeCustomer) {
-      if (!oneTimeCustomer.name.trim()) throw new Error('חסר שם לקוח חד-פעמי');
-    } else {
-      if (!customerId) throw new Error('חסר לקוח');
+    if (kind !== 'special') {
+      if (useOneTimeCustomer) {
+        if (!oneTimeCustomer.name.trim()) throw new Error('חסר שם לקוח חד-פעמי');
+      } else {
+        if (!customerId) throw new Error('חסר לקוח');
+      }
     }
   };
 
   const createOneTimeCustomerIfNeeded = async (): Promise<string | null> => {
+    if (kind === 'special') return null;
     if (!useOneTimeCustomer) return null;
     const payload = {
       name: oneTimeCustomer.name.trim(),
@@ -159,15 +164,20 @@ export function AddJobsScreen() {
         status,
         notes: notes.trim() || null,
         order_number: orderNumber ? Number(orderNumber) : null,
-        customer_id: useOneTimeCustomer ? null : customerId,
-        one_time_customer_id: useOneTimeCustomer ? oneTimeId : null,
       };
+      const customerFields =
+        kind === 'special'
+          ? {}
+          : {
+              customer_id: useOneTimeCustomer ? null : customerId,
+              one_time_customer_id: useOneTimeCustomer ? oneTimeId : null,
+            };
 
       if (kind === 'regular') {
         const selected = servicePoints.filter((p) => p.selected);
         if (!selected.length) throw new Error('בחר לפחות נקודת שירות אחת');
 
-        const { data: job, error: jobErr } = await supabase.from('jobs').insert(common).select('id').single();
+        const { data: job, error: jobErr } = await supabase.from('jobs').insert({ ...common, ...customerFields }).select('id').single();
         if (jobErr) throw jobErr;
         const jobId = (job as any).id as string;
 
@@ -188,7 +198,7 @@ export function AddJobsScreen() {
       }
 
       if (kind === 'installation') {
-        const { data: inst, error: instErr } = await supabase.from('installation_jobs').insert(common).select('id').single();
+        const { data: inst, error: instErr } = await supabase.from('installation_jobs').insert({ ...common, ...customerFields }).select('id').single();
         if (instErr) throw instErr;
         const instId = (inst as any).id as string;
 
@@ -216,6 +226,9 @@ export function AddJobsScreen() {
       // reset minimal fields
       setNotes('');
       setOrderNumber('');
+
+      // UX: go back to Jobs list after create
+      navigation.navigate('Jobs');
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'יצירה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -273,8 +286,9 @@ export function AddJobsScreen() {
 
             <Pressable
               onPress={() => setUseOneTimeCustomer((p) => !p)}
+              disabled={kind === 'special'}
               style={{
-                backgroundColor: useOneTimeCustomer ? colors.primary : colors.elevated,
+                backgroundColor: kind === 'special' ? colors.border : useOneTimeCustomer ? colors.primary : colors.elevated,
                 borderRadius: 14,
                 paddingVertical: 12,
                 paddingHorizontal: 12,
@@ -283,11 +297,11 @@ export function AddJobsScreen() {
               }}
             >
               <Text style={{ color: '#fff', fontWeight: '900', textAlign: 'right' }}>
-                {useOneTimeCustomer ? 'לקוח חד-פעמי: פעיל' : 'לקוח חד-פעמי: כבוי'}
+                {kind === 'special' ? 'לקוח חד-פעמי: לא רלוונטי ל-special' : useOneTimeCustomer ? 'לקוח חד-פעמי: פעיל' : 'לקוח חד-פעמי: כבוי'}
               </Text>
             </Pressable>
 
-            {useOneTimeCustomer ? (
+            {kind === 'special' ? null : useOneTimeCustomer ? (
               <View style={{ gap: 10 }}>
                 <Input label="שם" value={oneTimeCustomer.name} onChangeText={(v) => setOneTimeCustomer((p) => ({ ...p, name: v }))} />
                 <Input
