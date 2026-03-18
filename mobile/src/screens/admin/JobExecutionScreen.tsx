@@ -1,17 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
-import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
-import { uploadCompressedImage, getPublicUrl } from '../../lib/storage';
+import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { yyyyMmDd } from '../../lib/time';
 import { useLoading } from '../../state/LoadingContext';
+import { pickImageFromLibrary } from '../../lib/media';
+import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
 
 type Job = {
   id: string;
@@ -66,6 +68,12 @@ export function JobExecutionScreen() {
     fetchJobs();
   }, []);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchJobs();
+    }, [])
+  );
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return jobs.filter((j) => {
@@ -102,18 +110,7 @@ export function JobExecutionScreen() {
   };
 
   const pickImage = async (jspId: string) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Toast.show({ type: 'error', text1: 'אין הרשאה לגלריה' });
-      return;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
-    if (res.canceled) return;
-    const uri = res.assets[0]?.uri;
+    const uri = await pickImageFromLibrary();
     if (!uri) return;
     setPoints((prev) => prev.map((p) => (p.id === jspId ? { ...p, localImageUri: uri } : p)));
   };
@@ -127,10 +124,12 @@ export function JobExecutionScreen() {
 
     try {
       setPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
-      const storagePath = `${selectedJob.id}/${p.service_point_id}-${Date.now()}.jpg`;
-      await uploadCompressedImage({ localUri: p.localImageUri, path: storagePath });
-      const { error } = await supabase.from('job_service_points').update({ image_url: storagePath }).eq('id', p.id);
-      if (error) throw error;
+      const storagePath = await uploadJobServicePointImage({
+        jobId: selectedJob.id,
+        jobServicePointId: p.id,
+        servicePointId: p.service_point_id,
+        localUri: p.localImageUri,
+      });
       setPoints((prev) =>
         prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false } : x))
       );
@@ -145,8 +144,7 @@ export function JobExecutionScreen() {
     if (!selectedJob) return;
     try {
       setIsLoading(true);
-      const { error } = await supabase.from('jobs').update({ status: 'completed' }).eq('id', selectedJob.id);
-      if (error) throw error;
+      await completeUnifiedJob('regular', selectedJob.id);
       setJobs((prev) => prev.map((j) => (j.id === selectedJob.id ? { ...j, status: 'completed' } : j)));
       Toast.show({ type: 'success', text1: 'המשימה הושלמה' });
       setSelectedJob((p) => (p ? { ...p, status: 'completed' } : p));
