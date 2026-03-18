@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
@@ -63,10 +63,6 @@ export function JobExecutionScreen() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchJobs();
-  }, []);
 
   useFocusEffect(
     React.useCallback(() => {

@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -26,7 +27,7 @@ export function DevicesAndScentsScreen() {
   const [deleteDevice, setDeleteDevice] = useState<Device | null>(null);
   const [deviceUsageCount, setDeviceUsageCount] = useState<number | null>(null);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       const [dRes, sRes] = await Promise.all([
@@ -42,11 +43,13 @@ export function DevicesAndScentsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAll();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAll();
+    }, [fetchAll])
+  );
 
   const addDevice = async () => {
     const name = deviceName.trim();

@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -30,14 +31,16 @@ export function DeviceInstallationScreen() {
   const workerOptions = useMemo(() => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })), [users]);
   const customerOptions = useMemo(() => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })), [users]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role').in('role', ['worker', 'customer']).order('name');
     if (!error) setUsers((data ?? []) as any);
-  };
-
-  useEffect(() => {
-    fetchUsers();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+    }, [fetchUsers])
+  );
 
   const create = async () => {
     try {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
@@ -172,11 +172,6 @@ export function WorkerScheduleScreen() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchForDay();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
 
   useFocusEffect(
     React.useCallback(() => {

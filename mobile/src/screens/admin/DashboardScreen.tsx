@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { startOfMonth, endOfMonth } from 'date-fns';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -19,7 +20,7 @@ export function DashboardScreen() {
   const [customers, setCustomers] = useState<SimpleUser[]>([]);
   const [servicePoints, setServicePoints] = useState<ServicePoint[]>([]);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       const start = startOfMonth(new Date()).toISOString();
@@ -49,11 +50,13 @@ export function DashboardScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAll();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAll();
+    }, [fetchAll])
+  );
 
   const stats = useMemo(() => {
     const customersCount = customers.length;

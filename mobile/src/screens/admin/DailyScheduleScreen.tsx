@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -55,12 +56,12 @@ export function DailyScheduleScreen() {
     [workers]
   );
 
-  const fetchWorkers = async () => {
+  const fetchWorkers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role').eq('role', 'worker').order('name');
     if (!error) setWorkers((data ?? []) as any);
-  };
+  }, []);
 
-  const fetchDay = async () => {
+  const fetchDay = useCallback(async () => {
     try {
       setLoading(true);
       const start = new Date(`${day}T00:00:00`).toISOString();
@@ -99,16 +100,14 @@ export function DailyScheduleScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchWorkers();
-  }, []);
-
-  useEffect(() => {
-    fetchDay();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day, workerId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchWorkers();
+      fetchDay();
+    }, [fetchWorkers, fetchDay])
+  );
 
   const saveTime = async () => {
     if (!edit) return;

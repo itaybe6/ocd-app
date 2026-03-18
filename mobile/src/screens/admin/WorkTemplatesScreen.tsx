@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -49,11 +50,11 @@ export function WorkTemplatesScreen() {
       const { data: again, error: againErr } = await supabase.from('work_templates').select('id, day_of_month').order('day_of_month');
       if (againErr) throw againErr;
       setTemplates((again ?? []) as Template[]);
-      setSelectedTemplateId((again ?? [])[0]?.id ?? '');
+      setSelectedTemplateId((prev) => prev || ((again ?? [])[0]?.id ?? ''));
       return;
     }
     setTemplates(existing);
-    setSelectedTemplateId(existing[0]?.id ?? '');
+    setSelectedTemplateId((prev) => prev || (existing[0]?.id ?? ''));
   };
 
   const fetchUsers = async () => {
@@ -71,7 +72,7 @@ export function WorkTemplatesScreen() {
     setStations((data ?? []) as any);
   };
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       setLoading(true);
       await Promise.all([ensureTemplates(), fetchUsers()]);
@@ -80,11 +81,13 @@ export function WorkTemplatesScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    refresh();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   useEffect(() => {
     if (!selectedTemplateId) return;
