@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -36,7 +37,7 @@ export function CustomerProfileScreen() {
     return unique.map((v) => ({ value: v, label: v }));
   }, [scents, points]);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     if (!user?.id) return;
     try {
       setLoading(true);
@@ -61,12 +62,13 @@ export function CustomerProfileScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAll();
+    }, [fetchAll])
+  );
 
   const updateScent = async (newScent: string) => {
     if (!selectedPoint) return;
