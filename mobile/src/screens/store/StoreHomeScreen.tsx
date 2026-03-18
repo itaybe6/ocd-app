@@ -1,420 +1,1016 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Search, ShieldCheck, ShoppingBag, Sparkles, Star } from 'lucide-react-native';
-import { Screen } from '../../components/Screen';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { colors } from '../../theme/colors';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {
+  fetchCollectionProducts,
+  fetchCollections,
+  fetchProducts,
+  type ShopifyCollection,
+  type ShopifyProduct,
+} from '../../lib/shopify';
 
 type StoreCategory = {
   id: string;
   name: string;
-  description: string;
+  subtitle?: string;
+};
+
+type SidebarMenuSection = {
+  id: string;
+  title: string;
+  categoryId?: string;
+  children?: Array<{
+    id: string;
+    title: string;
+    categoryId: string;
+  }>;
 };
 
 type StoreProduct = {
   id: string;
   name: string;
+  subtitle: string;
   categoryId: string;
   price: number;
+  handle: string;
   description: string;
   badge?: string;
   featured?: boolean;
+  coverColor: string;
+  accentColor: string;
+  imageUrl: string | null;
+  imageAltText: string | null;
 };
 
-const STORE_CATEGORIES: StoreCategory[] = [
-  { id: 'candles', name: 'נרות', description: 'נרות מעוצבים לבית ולאירוח' },
-  { id: 'diffusers', name: 'מפיצי ריח', description: 'מוצרים ליצירת אווירה בחלל' },
-  { id: 'gifts', name: 'מארזים', description: 'מארזי מתנה מוכנים' },
-  { id: 'home', name: 'לבית', description: 'פריטים משלימים לעיצוב הבית' },
+type CollectionCard = {
+  id: string;
+  title: string;
+  subtitle: string;
+  color: string;
+};
+
+const COLLECTIONS: CollectionCard[] = [
+  {
+    id: 'c-1',
+    title: 'קולקציית חדרי שירות',
+    subtitle: 'סדר מלא',
+    color: '#D9D7CF',
+  },
+  {
+    id: 'c-2',
+    title: 'קולקציית האמבט',
+    subtitle: 'רוגע וניקיון',
+    color: '#1E2020',
+  },
 ];
 
-const STORE_PRODUCTS: StoreProduct[] = [
-  {
-    id: 'p-1',
-    name: 'נר וניל יוקרתי',
-    categoryId: 'candles',
-    price: 89,
-    description: 'נר ריחני בצנצנת זכוכית עם בעירה ארוכה.',
-    badge: 'הכי נמכר',
-    featured: true,
-  },
-  {
-    id: 'p-2',
-    name: 'מפיץ ריח לבנדר',
-    categoryId: 'diffusers',
-    price: 119,
-    description: 'מפיץ ריח עם מקלות עץ לעיצוב רגוע ונקי.',
-    badge: 'חדש',
-    featured: true,
-  },
-  {
-    id: 'p-3',
-    name: 'מארז מתנה זוגי',
-    categoryId: 'gifts',
-    price: 159,
-    description: 'מארז מושלם עם נר, סבון ומפיץ ריח קטן.',
-  },
-  {
-    id: 'p-4',
-    name: 'מגש דקורטיבי לבית',
-    categoryId: 'home',
-    price: 69,
-    description: 'מגש שמשלים את פינת הריח והסטייל בבית.',
-  },
-  {
-    id: 'p-5',
-    name: 'נר הדרים רענן',
-    categoryId: 'candles',
-    price: 79,
-    description: 'ריח קליל ונקי שמתאים לסלון או לחדר שינה.',
-  },
-  {
-    id: 'p-6',
-    name: 'מארז אירוח חגיגי',
-    categoryId: 'gifts',
-    price: 199,
-    description: 'פתרון מתנה מוכן לאירוח, חג או תשומת לב.',
-    badge: 'מהדורה מוגבלת',
-  },
+const BOTTOM_NAV_ITEMS = [
+  { id: 'home', label: 'בית', active: true },
+  { id: 'search', label: 'חיפוש' },
+  { id: 'favorites', label: 'מועדפים' },
+  { id: 'profile', label: 'חשבון' },
 ];
 
 function formatPrice(price: number) {
-  return `${price.toLocaleString('he-IL')} ₪`;
+  return `₪${price.toLocaleString('he-IL')}.00`;
+}
+
+function getProductPalette(index: number) {
+  const palettes = [
+    { coverColor: '#89A89C', accentColor: '#DCE9E2' },
+    { coverColor: '#F2EADD', accentColor: '#FCF8F2' },
+    { coverColor: '#E7F0D6', accentColor: '#F8FBEF' },
+    { coverColor: '#DDEAF3', accentColor: '#F5FAFD' },
+  ];
+
+  return palettes[index % palettes.length];
+}
+
+function getProductBadge(index: number) {
+  if (index === 0) return 'SALE';
+  if (index === 1) return 'NEW';
+  return undefined;
+}
+
+function toStoreProduct(product: ShopifyProduct, index: number): StoreProduct {
+  const palette = getProductPalette(index);
+
+  return {
+    id: product.id,
+    name: product.title,
+    subtitle: product.productType || 'מוצר מהקטלוג',
+    categoryId: product.productType || 'all',
+    price: product.price,
+    handle: product.handle,
+    description: product.description,
+    badge: getProductBadge(index),
+    featured: index < 2,
+    coverColor: palette.coverColor,
+    accentColor: palette.accentColor,
+    imageUrl: product.imageUrl,
+    imageAltText: product.imageAltText,
+  };
+}
+
+function ProductImage({
+  product,
+  height,
+}: {
+  product: StoreProduct;
+  height: number;
+}) {
+  if (product.imageUrl) {
+    return (
+      <Image
+        source={{ uri: product.imageUrl }}
+        resizeMode="cover"
+        accessibilityLabel={product.imageAltText ?? product.name}
+        style={{ width: '100%', height, borderRadius: 18 }}
+      />
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: '100%',
+        height,
+        borderRadius: 18,
+        backgroundColor: product.coverColor,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
+      <View
+        style={{
+          width: 58,
+          height: Math.max(72, Math.round(height * 0.65)),
+          borderRadius: 18,
+          backgroundColor: product.accentColor,
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          paddingBottom: 14,
+        }}
+      >
+        <View
+          style={{
+            width: 28,
+            height: 16,
+            borderRadius: 8,
+            backgroundColor: '#FFFFFF',
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+function normalizeCategoryTitle(title: string) {
+  return title.replace(/\s+/g, ' ').trim();
+}
+
+function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[] {
+  const directCategories = categories.filter((category) => category.id !== 'all');
+  const prefixCounts = new Map<string, number>();
+
+  directCategories.forEach((category) => {
+    const words = normalizeCategoryTitle(category.name).split(' ');
+    if (words.length >= 2) {
+      const prefix = `${words[0]} ${words[1]}`;
+      prefixCounts.set(prefix, (prefixCounts.get(prefix) ?? 0) + 1);
+    }
+  });
+
+  const groupedPrefixes = new Set(
+    Array.from(prefixCounts.entries())
+      .filter(([, count]) => count >= 2)
+      .map(([prefix]) => prefix)
+  );
+
+  const sections: SidebarMenuSection[] = [{ id: 'all', title: 'כל המוצרים', categoryId: 'all' }];
+  const usedCategoryIds = new Set<string>(['all']);
+
+  groupedPrefixes.forEach((prefix) => {
+    const matchingCategories = directCategories.filter((category) =>
+      normalizeCategoryTitle(category.name).startsWith(`${prefix} `) || normalizeCategoryTitle(category.name) === prefix
+    );
+
+    if (!matchingCategories.length) return;
+
+    sections.push({
+      id: `group:${prefix}`,
+      title: prefix,
+      children: matchingCategories.map((category) => ({
+        id: `child:${category.id}`,
+        title: normalizeCategoryTitle(category.name).replace(`${prefix} `, '') || category.name,
+        categoryId: category.id,
+      })),
+    });
+
+    matchingCategories.forEach((category) => usedCategoryIds.add(category.id));
+  });
+
+  directCategories.forEach((category) => {
+    if (usedCategoryIds.has(category.id)) return;
+
+    sections.push({
+      id: category.id,
+      title: category.name,
+      categoryId: category.id,
+    });
+  });
+
+  return sections;
 }
 
 export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) {
+  const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
+  const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
+  const [categories, setCategories] = useState<StoreCategory[]>([{ id: 'all', name: 'כל המוצרים' }]);
+  const [loading, setLoading] = useState(true);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [query, setQuery] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    'group:חומרי ניקיון': true,
+  });
 
-  const featuredProducts = useMemo(
-    () => STORE_PRODUCTS.filter((product) => product.featured).slice(0, 2),
-    []
-  );
+  useEffect(() => {
+    let isMounted = true;
 
-  const visibleProducts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const loadStorefrontData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [liveProducts, liveCollections] = await Promise.all([
+          fetchProducts(24),
+          fetchCollections(50),
+        ]);
+        if (!isMounted) return;
+        const mappedProducts = liveProducts.map((product, index) => toStoreProduct(product, index));
+        const mappedCollections: StoreCategory[] = [
+          { id: 'all', name: 'כל המוצרים' },
+          ...liveCollections.map((collection: ShopifyCollection) => ({
+            id: collection.handle,
+            name: collection.title,
+            subtitle: collection.description,
+          })),
+        ];
 
-    return STORE_PRODUCTS.filter((product) => {
-      const matchesCategory =
-        selectedCategory === 'all' || product.categoryId === selectedCategory;
-      const matchesSearch =
-        !normalizedQuery ||
-        product.name.toLowerCase().includes(normalizedQuery) ||
-        product.description.toLowerCase().includes(normalizedQuery);
+        setAllProducts(mappedProducts);
+        setVisibleProducts(mappedProducts);
+        setFeaturedProducts(mappedProducts.slice(0, 2));
+        setCategories(mappedCollections);
+      } catch (err) {
+        if (!isMounted) return;
+        setAllProducts([]);
+        setVisibleProducts([]);
+        setFeaturedProducts([]);
+        setCategories([{ id: 'all', name: 'כל המוצרים' }]);
+        setError(err instanceof Error ? err.message : 'שגיאה בטעינת מוצרים');
+      } finally {
+        if (!isMounted) return;
+        setLoading(false);
+      }
+    };
 
-      return matchesCategory && matchesSearch;
-    });
-  }, [query, selectedCategory]);
+    loadStorefrontData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const selectCategoryFromMenu = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    setMenuOpen(false);
+  };
+
+  const sidebarSections = useMemo(() => buildSidebarSections(categories), [categories]);
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }));
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCategoryProducts = async () => {
+      const normalizedQuery = query.trim().toLowerCase();
+
+      if (selectedCategory === 'all') {
+        const filteredProducts = allProducts.filter((product) => {
+          return (
+            !normalizedQuery ||
+            product.name.toLowerCase().includes(normalizedQuery) ||
+            product.subtitle.toLowerCase().includes(normalizedQuery) ||
+            product.description.toLowerCase().includes(normalizedQuery)
+          );
+        });
+        setVisibleProducts(filteredProducts);
+        return;
+      }
+
+      try {
+        setCategoryLoading(true);
+        setError(null);
+        const collectionProducts = await fetchCollectionProducts(selectedCategory, 40);
+        if (!isMounted) return;
+
+        const mappedProducts = collectionProducts.map((product, index) => toStoreProduct(product, index));
+        const filteredProducts = mappedProducts.filter((product) => {
+          return (
+            !normalizedQuery ||
+            product.name.toLowerCase().includes(normalizedQuery) ||
+            product.subtitle.toLowerCase().includes(normalizedQuery) ||
+            product.description.toLowerCase().includes(normalizedQuery)
+          );
+        });
+
+        setVisibleProducts(filteredProducts);
+      } catch (err) {
+        if (!isMounted) return;
+        setVisibleProducts([]);
+        setError(err instanceof Error ? err.message : 'שגיאה בטעינת קטגוריה');
+      } finally {
+        if (!isMounted) return;
+        setCategoryLoading(false);
+      }
+    };
+
+    loadCategoryProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [allProducts, query, selectedCategory]);
 
   return (
-    <Screen padded={false}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36 }}
-      >
-        <Card style={{ padding: 18, gap: 16 }}>
-          <View
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+        <Modal
+          visible={menuOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setMenuOpen(false)}
+        >
+          <Pressable
+            onPress={() => setMenuOpen(false)}
             style={{
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flex: 1,
+              backgroundColor: 'rgba(17,24,39,0.16)',
+              paddingLeft: 48,
+              alignItems: 'flex-end',
             }}
           >
             <View
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 16,
-                backgroundColor: '#152033',
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: '82%',
+                maxWidth: 320,
+                height: '100%',
+                backgroundColor: '#FFFFFF',
+                paddingHorizontal: 16,
+                paddingTop: 58,
+                paddingBottom: 24,
+                borderTopLeftRadius: 28,
+                borderBottomLeftRadius: 28,
+                shadowColor: '#000',
+                shadowOpacity: 0.12,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: 8,
               }}
             >
-              <ShoppingBag size={22} color={colors.primary} />
+              <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
+                <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900' }}>קטגוריות</Text>
+                <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4 }}>
+                  בחירה מהירה מהקטגוריות של Shopify
+                </Text>
+              </View>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ gap: 8, paddingBottom: 16 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {sidebarSections.map((section) => {
+                  const isDirectItem = !section.children?.length;
+                  const isExpanded = !!expandedSections[section.id];
+                  const isSelected = section.categoryId === selectedCategory;
+
+                  return (
+                    <View key={section.id}>
+                      <Pressable
+                        onPress={() => {
+                          if (isDirectItem && section.categoryId) {
+                            selectCategoryFromMenu(section.categoryId);
+                            return;
+                          }
+
+                          toggleSection(section.id);
+                        }}
+                        style={{
+                          borderRadius: 14,
+                          paddingHorizontal: 14,
+                          paddingVertical: 14,
+                          backgroundColor: isSelected ? '#111827' : '#F7F8FB',
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: 'row-reverse',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: isSelected ? '#FFFFFF' : '#111827',
+                              fontWeight: '800',
+                              textAlign: 'right',
+                              flexShrink: 1,
+                            }}
+                          >
+                            {section.title}
+                          </Text>
+
+                          {!isDirectItem && (
+                            <Text
+                              style={{
+                                color: '#6B7280',
+                                fontSize: 16,
+                                marginLeft: 10,
+                              }}
+                            >
+                              {isExpanded ? '⌄' : '‹'}
+                            </Text>
+                          )}
+                        </View>
+                      </Pressable>
+
+                      {!!section.children?.length && isExpanded && (
+                        <View
+                          style={{
+                            marginTop: 8,
+                            marginRight: 10,
+                            gap: 6,
+                            borderRightWidth: 2,
+                            borderRightColor: '#ECEFF4',
+                            paddingRight: 10,
+                          }}
+                        >
+                          {section.children.map((child) => {
+                            const isChildSelected = selectedCategory === child.categoryId;
+
+                            return (
+                              <Pressable
+                                key={child.id}
+                                onPress={() => selectCategoryFromMenu(child.categoryId)}
+                                style={{
+                                  borderRadius: 12,
+                                  paddingHorizontal: 12,
+                                  paddingVertical: 11,
+                                  backgroundColor: isChildSelected ? '#111827' : '#FBFBFC',
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: isChildSelected ? '#FFFFFF' : '#374151',
+                                    textAlign: 'right',
+                                    fontWeight: '700',
+                                  }}
+                                >
+                                  {child.title}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+
+              <Pressable
+                onPress={() => {
+                  setMenuOpen(false);
+                  onAdminPress();
+                }}
+                style={{
+                  borderRadius: 14,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  backgroundColor: '#EFE3D0',
+                  marginTop: 8,
+                }}
+              >
+                <Text style={{ color: '#7C4A03', fontWeight: '800', textAlign: 'right' }}>ניהול</Text>
+              </Pressable>
             </View>
-            <Pressable
-              onPress={onAdminPress}
+          </Pressable>
+        </Modal>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 110 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ gap: 18 }}>
+            <View
               style={{
                 flexDirection: 'row-reverse',
                 alignItems: 'center',
-                gap: 8,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: colors.elevated,
+                justifyContent: 'space-between',
               }}
             >
-              <ShieldCheck size={16} color={colors.text} />
-              <Text style={{ color: colors.text, fontWeight: '700' }}>כניסת מנהל</Text>
-            </Pressable>
-          </View>
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                style={{
+                  minWidth: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#F8F8F8',
+                }}
+              >
+                <Text style={{ color: '#111827', fontSize: 11, fontWeight: '800' }}>0</Text>
+              </Pressable>
 
-          <View style={{ gap: 8 }}>
-            <Text style={{ color: colors.text, fontSize: 30, fontWeight: '900', textAlign: 'right' }}>
-              החנות שלך
-            </Text>
-            <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22, textAlign: 'right' }}>
-              זהו בסיס לעמוד הבית של החנות. אפשר לעדכן את הקטגוריות, המוצרים,
-              המחירים והטקסטים כדי להפוך אותו לקטלוג מלא שלך.
-            </Text>
-          </View>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ color: '#1F2937', fontSize: 17, fontWeight: '900', letterSpacing: 1.5 }}>
+                  OCD SUPER CLEAN
+                </Text>
+              </View>
 
-          <View
-            style={{
-              flexDirection: 'row-reverse',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
-            <View
-              style={{
-                flexGrow: 1,
-                minWidth: 140,
-                borderRadius: 16,
-                padding: 14,
-                backgroundColor: '#111B2B',
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Text style={{ color: colors.primary, fontWeight: '900', textAlign: 'right' }}>4 קטגוריות</Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>קל להוסיף ולשנות</Text>
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                style={{
+                  minWidth: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#F8F8F8',
+                }}
+              >
+                <Text style={{ color: '#111827', fontSize: 18, fontWeight: '700' }}>≡</Text>
+              </Pressable>
             </View>
-            <View
-              style={{
-                flexGrow: 1,
-                minWidth: 140,
-                borderRadius: 16,
-                padding: 14,
-                backgroundColor: '#111B2B',
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Text style={{ color: colors.primary, fontWeight: '900', textAlign: 'right' }}>6 מוצרים</Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>מוכנים כנתוני התחלה</Text>
-            </View>
-          </View>
-        </Card>
 
-        <View style={{ marginTop: 16 }}>
-          <Card style={{ padding: 14 }}>
             <View
               style={{
-                flexDirection: 'row-reverse',
-                alignItems: 'center',
-                gap: 10,
-                backgroundColor: colors.elevated,
-                borderColor: colors.border,
+                backgroundColor: '#F7F8FB',
+                borderRadius: 20,
                 borderWidth: 1,
-                borderRadius: 16,
+                borderColor: '#EEF0F3',
                 paddingHorizontal: 14,
                 paddingVertical: 12,
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
               }}
             >
-              <Search size={18} color={colors.muted} />
+              <Text style={{ color: '#B7BDC8', marginLeft: 8, fontSize: 12 }}>⌕</Text>
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="חיפוש מוצר או תיאור"
-                placeholderTextColor={colors.muted}
-                style={{ flex: 1, color: colors.text, textAlign: 'right' }}
+                placeholder="מה אתם רוצים לחפש?"
+                placeholderTextColor="#B7BDC8"
+                style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
               />
             </View>
-          </Card>
-        </View>
 
-        <View style={{ marginTop: 24, gap: 12 }}>
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>
-            קטגוריות
-          </Text>
-          <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10 }}>
-            <Pressable
-              onPress={() => setSelectedCategory('all')}
+            <View
               style={{
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: selectedCategory === 'all' ? colors.primary : colors.border,
-                backgroundColor: selectedCategory === 'all' ? '#16263D' : colors.card,
+                height: 148,
+                borderRadius: 22,
+                backgroundColor: '#2A241F',
+                overflow: 'hidden',
+                padding: 18,
+                justifyContent: 'space-between',
               }}
             >
-              <Text style={{ color: colors.text, fontWeight: '700' }}>הכל</Text>
-            </Pressable>
-            {STORE_CATEGORIES.map((category) => {
-              const isSelected = selectedCategory === category.id;
-              return (
-                <Pressable
-                  key={category.id}
-                  onPress={() => setSelectedCategory(category.id)}
+              <View
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '48%',
+                  backgroundColor: '#4B4239',
+                }}
+              />
+              <View
+                style={{
+                  position: 'absolute',
+                  right: 18,
+                  bottom: 0,
+                  width: 76,
+                  height: 128,
+                  borderTopLeftRadius: 14,
+                  borderTopRightRadius: 14,
+                  backgroundColor: '#7A6C5E',
+                }}
+              />
+              <View
+                style={{
+                  position: 'absolute',
+                  right: 100,
+                  bottom: 0,
+                  width: 44,
+                  height: 104,
+                  borderTopLeftRadius: 12,
+                  borderTopRightRadius: 12,
+                  backgroundColor: '#D9D3CC',
+                }}
+              />
+              <View style={{ width: '58%', alignSelf: 'flex-start' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '900', textAlign: 'right' }}>
+                  20% הנחה על כל
+                </Text>
+                <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '900', textAlign: 'right' }}>
+                  מפיצי הריח
+                </Text>
+                <Text style={{ color: '#D0C5B9', marginTop: 8, fontSize: 11, textAlign: 'right' }}>
+                  PROMOTION
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={{
+                flexDirection: 'row-reverse',
+                justifyContent: 'flex-start',
+                alignItems: 'center',
+                gap: 20,
+              }}
+            >
+              {categories.map((category) => {
+                const isSelected = selectedCategory === category.id;
+
+                return (
+                  <Pressable key={category.id} onPress={() => setSelectedCategory(category.id)}>
+                    <View style={{ alignItems: 'center', gap: 8 }}>
+                      <Text
+                        style={{
+                          color: isSelected ? '#111827' : '#9CA3AF',
+                          fontWeight: isSelected ? '900' : '600',
+                          fontSize: 12,
+                        }}
+                      >
+                        {category.name}
+                      </Text>
+                      <View
+                        style={{
+                          width: 28,
+                          height: 2,
+                          borderRadius: 999,
+                          backgroundColor: isSelected ? '#111827' : 'transparent',
+                        }}
+                      />
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>הנמכרים ביותר</Text>
+              <Text style={{ color: '#B1B6C1', fontSize: 11 }}>the lifestyle and fragrance collection</Text>
+            </View>
+
+            {(loading || categoryLoading) && (
+              <View
+                style={{
+                  backgroundColor: '#F8F8F8',
+                  borderRadius: 16,
+                  padding: 18,
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                }}
+              >
+                <ActivityIndicator color="#111827" />
+                <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים מ-Shopify...</Text>
+              </View>
+            )}
+
+            {!!error && !loading && (
+              <View
+                style={{
+                  backgroundColor: '#FFF4F4',
+                  borderRadius: 16,
+                  padding: 16,
+                  alignItems: 'flex-end',
+                }}
+              >
+                <Text style={{ color: '#991B1B', fontWeight: '800' }}>לא הצלחנו לטעון מוצרים כרגע</Text>
+                <Text style={{ color: '#B91C1C', marginTop: 6, textAlign: 'right' }}>{error}</Text>
+              </View>
+            )}
+
+            <View
+              style={{
+                flexDirection: 'row-reverse',
+                justifyContent: 'flex-start',
+                alignItems: 'flex-start',
+                gap: 14,
+              }}
+            >
+              {featuredProducts.map((product) => (
+                <View
+                  key={product.id}
                   style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 999,
-                    borderWidth: 1,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                    backgroundColor: isSelected ? '#16263D' : colors.card,
+                    width: 156,
+                    borderRadius: 18,
+                    backgroundColor: '#FFFFFF',
                   }}
                 >
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>{category.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                  <View
+                    style={{
+                      height: 166,
+                      borderRadius: 18,
+                      backgroundColor: product.coverColor,
+                      overflow: 'hidden',
+                      padding: 10,
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <View
+                      style={{
+                        alignSelf: 'flex-start',
+                        backgroundColor: '#111827',
+                        borderRadius: 999,
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                        {product.badge ?? 'ITEM'}
+                      </Text>
+                    </View>
 
-          <View style={{ gap: 10 }}>
-            {STORE_CATEGORIES.map((category) => (
-              <Card key={category.id} style={{ padding: 14 }}>
-                <Text style={{ color: colors.text, fontWeight: '900', fontSize: 16, textAlign: 'right' }}>
-                  {category.name}
+                    <ProductImage product={product} height={146} />
+
+                    <View
+                      style={{
+                        position: 'absolute',
+                        right: 10,
+                        bottom: 10,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: '#FFFFFF',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#111827', fontSize: 18, fontWeight: '700' }}>+</Text>
+                    </View>
+                  </View>
+
+                  <View style={{ paddingHorizontal: 4, paddingTop: 10, alignItems: 'flex-end' }}>
+                    <Text style={{ color: '#111827', fontSize: 13, fontWeight: '800' }}>{product.name}</Text>
+                    <Text style={{ color: '#8D94A1', fontSize: 10, marginTop: 3 }}>{product.subtitle}</Text>
+                    <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 8 }}>
+                      {formatPrice(product.price)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ alignItems: 'flex-end', gap: 4, marginTop: 8 }}>
+              <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>
+                {selectedCategory === 'all'
+                  ? 'כל המוצרים'
+                  : categories.find((category) => category.id === selectedCategory)?.name ?? 'מוצרים'}
+              </Text>
+              <Text style={{ color: '#B1B6C1', fontSize: 11 }}>
+                {selectedCategory === 'all'
+                  ? 'all products from your Shopify store'
+                  : 'products from the selected Shopify category'}
+              </Text>
+            </View>
+
+            <View style={{ gap: 12 }}>
+              {visibleProducts.map((product) => (
+                <View
+                  key={`list-${product.id}`}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: '#EEF0F3',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
+                    <View style={{ width: 112, padding: 10 }}>
+                      <ProductImage product={product} height={118} />
+                    </View>
+
+                    <View
+                      style={{
+                        flex: 1,
+                        paddingHorizontal: 12,
+                        paddingVertical: 14,
+                        alignItems: 'flex-end',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
+                        {product.name}
+                      </Text>
+                      <Text style={{ color: '#8D94A1', fontSize: 11, marginTop: 4, textAlign: 'right' }}>
+                        {product.subtitle}
+                      </Text>
+                      <Text
+                        numberOfLines={2}
+                        style={{ color: '#6B7280', fontSize: 12, marginTop: 8, textAlign: 'right' }}
+                      >
+                        {product.description || 'מוצר מהקטלוג שלך'}
+                      </Text>
+                      <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 10 }}>
+                        {formatPrice(product.price)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ alignItems: 'flex-end', gap: 4, marginTop: 4 }}>
+              <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>מומלץ במיוחד עבורך</Text>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: '#F8F5EF',
+                borderRadius: 20,
+                paddingHorizontal: 18,
+                paddingVertical: 16,
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: '#C8A467', fontSize: 9, fontWeight: '800' }}>EXCLUSIVE</Text>
+                <Text style={{ color: '#1F2937', fontSize: 16, fontWeight: '900', marginTop: 6 }}>
+                  Midnight in
                 </Text>
-                <Text style={{ color: colors.muted, marginTop: 6, lineHeight: 20, textAlign: 'right' }}>
-                  {category.description}
+                <Text style={{ color: '#1F2937', fontSize: 18, fontWeight: '900' }}>Spa</Text>
+                <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', marginTop: 10 }}>
+                  ₪120.00
                 </Text>
-              </Card>
+              </View>
+
+              <View
+                style={{
+                  width: 84,
+                  height: 72,
+                  borderRadius: 16,
+                  backgroundColor: '#111111',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  paddingBottom: 10,
+                }}
+              >
+                <View
+                  style={{
+                    width: 28,
+                    height: 34,
+                    borderRadius: 8,
+                    backgroundColor: '#D7A14B',
+                  }}
+                />
+              </View>
+            </View>
+
+            <View style={{ alignItems: 'flex-end', gap: 4, marginTop: 4 }}>
+              <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>הקולקציות שלנו</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
+              {COLLECTIONS.map((collection) => (
+                <View
+                  key={collection.id}
+                  style={{
+                    width: '48%',
+                    borderRadius: 20,
+                    overflow: 'hidden',
+                    backgroundColor: collection.color,
+                    height: 152,
+                    justifyContent: 'flex-end',
+                    padding: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: collection.id === 'c-2' ? 'rgba(0,0,0,0.18)' : 'transparent',
+                    }}
+                  />
+                  <Text
+                    style={{
+                      color: collection.id === 'c-2' ? '#FFFFFF' : '#111827',
+                      fontSize: 15,
+                      fontWeight: '800',
+                      textAlign: 'right',
+                    }}
+                  >
+                    {collection.title}
+                  </Text>
+                  <Text
+                    style={{
+                      color: collection.id === 'c-2' ? '#E5E7EB' : '#6B7280',
+                      fontSize: 11,
+                      marginTop: 4,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {collection.subtitle}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {!loading && !categoryLoading && !visibleProducts.length && (
+              <View
+                style={{
+                  backgroundColor: '#F8F8F8',
+                  borderRadius: 16,
+                  padding: 16,
+                  alignItems: 'flex-end',
+                }}
+              >
+                <Text style={{ color: '#111827', fontWeight: '800' }}>לא נמצאו מוצרים לחיפוש הזה</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: '#FFFFFF',
+            borderTopWidth: 1,
+            borderTopColor: '#EDF0F4',
+            paddingHorizontal: 16,
+            paddingTop: 10,
+            paddingBottom: 18,
+          }}
+        >
+          <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
+            {BOTTOM_NAV_ITEMS.map((item) => (
+              <View key={item.id} style={{ alignItems: 'center', gap: 6, flex: 1 }}>
+                <View
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    backgroundColor: item.active ? '#111827' : '#D5DBE4',
+                  }}
+                />
+                <Text
+                  style={{
+                    color: item.active ? '#111827' : '#A0A7B4',
+                    fontSize: 10,
+                    fontWeight: item.active ? '800' : '600',
+                  }}
+                >
+                  {item.label}
+                </Text>
+              </View>
             ))}
           </View>
         </View>
-
-        <View style={{ marginTop: 24, gap: 12 }}>
-          <View
-            style={{
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <Sparkles size={18} color={colors.warning} />
-            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>
-              מומלצים
-            </Text>
-          </View>
-
-          {featuredProducts.map((product) => (
-            <Card key={product.id} style={{ padding: 16 }}>
-              <View
-                style={{
-                  flexDirection: 'row-reverse',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-                  {product.name}
-                </Text>
-                <View
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                    backgroundColor: '#2B1D08',
-                  }}
-                >
-                  <Text style={{ color: '#F8C471', fontWeight: '800', fontSize: 12 }}>
-                    {product.badge ?? 'מומלץ'}
-                  </Text>
-                </View>
-              </View>
-              <Text style={{ color: colors.muted, marginTop: 8, lineHeight: 20, textAlign: 'right' }}>
-                {product.description}
-              </Text>
-              <Text style={{ color: colors.text, marginTop: 12, fontWeight: '900', textAlign: 'right' }}>
-                {formatPrice(product.price)}
-              </Text>
-            </Card>
-          ))}
-        </View>
-
-        <View style={{ marginTop: 24, gap: 12 }}>
-          <View
-            style={{
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <Star size={18} color={colors.primary} />
-            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>
-              כל המוצרים
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 }}>
-            {visibleProducts.map((product) => {
-              const category = STORE_CATEGORIES.find((item) => item.id === product.categoryId);
-              return (
-                <Card
-                  key={product.id}
-                  style={{
-                    width: '48%',
-                    minWidth: 150,
-                    padding: 14,
-                  }}
-                >
-                  {!!product.badge && (
-                    <View
-                      style={{
-                        alignSelf: 'flex-end',
-                        marginBottom: 10,
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                        borderRadius: 999,
-                        backgroundColor: '#152033',
-                      }}
-                    >
-                      <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 12 }}>
-                        {product.badge}
-                      </Text>
-                    </View>
-                  )}
-
-                  <Text style={{ color: colors.text, fontWeight: '900', fontSize: 16, textAlign: 'right' }}>
-                    {product.name}
-                  </Text>
-                  <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>
-                    {category?.name ?? 'מוצר'}
-                  </Text>
-                  <Text
-                    numberOfLines={3}
-                    style={{ color: colors.muted, marginTop: 10, lineHeight: 20, textAlign: 'right' }}
-                  >
-                    {product.description}
-                  </Text>
-                  <Text style={{ color: colors.text, marginTop: 14, fontWeight: '900', textAlign: 'right' }}>
-                    {formatPrice(product.price)}
-                  </Text>
-                </Card>
-              );
-            })}
-          </View>
-
-          {!visibleProducts.length && (
-            <Card style={{ padding: 18 }}>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                לא נמצאו מוצרים
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 8, textAlign: 'right' }}>
-                נסה לבחור קטגוריה אחרת או לשנות את החיפוש.
-              </Text>
-            </Card>
-          )}
-        </View>
-
-        <Card style={{ marginTop: 24, padding: 18, gap: 12 }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            הצעד הבא שלך
-          </Text>
-          <Text style={{ color: colors.muted, lineHeight: 21, textAlign: 'right' }}>
-            כרגע זה בסיס חנות מוכן עם מבנה של קטגוריות, חיפוש, מוצרים מומלצים וקטלוג.
-            בשלב הבא אפשר לחבר מוצרים אמיתיים, תמונות, עמוד מוצר, עגלה והזמנות.
-          </Text>
-          <Button title="כניסת מנהל" variant="secondary" onPress={onAdminPress} />
-        </Card>
-      </ScrollView>
-    </Screen>
+      </View>
+    </SafeAreaView>
   );
 }

@@ -9,9 +9,6 @@ import Toast from 'react-native-toast-message';
 import { colors } from '../theme/colors';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../state/AuthContext';
-import { AdminDrawer } from './AdminDrawer';
-import { WorkerDrawer } from './WorkerDrawer';
-import { CustomerDrawer } from './CustomerDrawer';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { StoreHomeScreen } from '../screens/store/StoreHomeScreen';
@@ -25,6 +22,21 @@ type RootStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function AdminEntryScreen() {
+  const AdminDrawer = require('./AdminDrawer').AdminDrawer as React.ComponentType;
+  return <AdminDrawer />;
+}
+
+function WorkerEntryScreen() {
+  const WorkerDrawer = require('./WorkerDrawer').WorkerDrawer as React.ComponentType;
+  return <WorkerDrawer />;
+}
+
+function CustomerEntryScreen() {
+  const CustomerDrawer = require('./CustomerDrawer').CustomerDrawer as React.ComponentType;
+  return <CustomerDrawer />;
+}
 
 function PublicStoreScreen({
   navigation,
@@ -122,11 +134,11 @@ export function RootNavigator() {
             <Stack.Screen name="Login" component={LoginScreen} />
           </>
         ) : user.role === 'admin' ? (
-          <Stack.Screen name="Admin" component={AdminDrawer} />
+          <Stack.Screen name="Admin" component={AdminEntryScreen} />
         ) : user.role === 'worker' ? (
-          <Stack.Screen name="Worker" component={WorkerDrawer} />
+          <Stack.Screen name="Worker" component={WorkerEntryScreen} />
         ) : (
-          <Stack.Screen name="Customer" component={CustomerDrawer} />
+          <Stack.Screen name="Customer" component={CustomerEntryScreen} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
