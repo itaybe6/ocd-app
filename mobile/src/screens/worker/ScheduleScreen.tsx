@@ -1,19 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { uploadCompressedImage, getPublicUrl } from '../../lib/storage';
+import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { yyyyMmDd } from '../../lib/time';
 import { useAuth } from '../../state/AuthContext';
 import { useLoading } from '../../state/LoadingContext';
 import { pickImageFromLibrary } from '../../lib/media';
+import { completeUnifiedJob, uploadInstallationDeviceImage, uploadJobServicePointImage, uploadSpecialJobImage } from '../../lib/execution';
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
@@ -176,6 +178,12 @@ export function WorkerScheduleScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchForDay();
+    }, [user?.id, date])
+  );
+
   const open = async (it: Unified) => {
     setSelected(it);
     setRegularPoints([]);
@@ -236,10 +244,12 @@ export function WorkerScheduleScreen() {
     if (!p.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
     try {
       setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
-      const storagePath = `${selected.id}/${p.service_point_id}-${Date.now()}.jpg`;
-      await uploadCompressedImage({ localUri: p.localImageUri, path: storagePath });
-      const { error } = await supabase.from('job_service_points').update({ image_url: storagePath }).eq('id', p.id);
-      if (error) throw error;
+      const storagePath = await uploadJobServicePointImage({
+        jobId: selected.id,
+        jobServicePointId: p.id,
+        servicePointId: p.service_point_id,
+        localUri: p.localImageUri,
+      });
       setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false } : x)));
       Toast.show({ type: 'success', text1: 'הועלה' });
     } catch (e: any) {
@@ -253,10 +263,11 @@ export function WorkerScheduleScreen() {
     if (!d.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
     try {
       setInstallationDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: true } : x)));
-      const storagePath = `${selected.id}/${d.id}-${Date.now()}.jpg`;
-      await uploadCompressedImage({ localUri: d.localImageUri, path: storagePath });
-      const { error } = await supabase.from('installation_devices').update({ image_url: storagePath }).eq('id', d.id);
-      if (error) throw error;
+      const storagePath = await uploadInstallationDeviceImage({
+        installationJobId: selected.id,
+        installationDeviceId: d.id,
+        localUri: d.localImageUri,
+      });
       setInstallationDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, image_url: storagePath, uploading: false } : x)));
       Toast.show({ type: 'success', text1: 'הועלה' });
     } catch (e: any) {
@@ -270,10 +281,7 @@ export function WorkerScheduleScreen() {
     if (!special.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
     try {
       setSpecial((p) => (p ? { ...p, uploading: true } : p));
-      const storagePath = `${selected.id}/special-${Date.now()}.jpg`;
-      await uploadCompressedImage({ localUri: special.localImageUri, path: storagePath });
-      const { error } = await supabase.from('special_jobs').update({ image_url: storagePath }).eq('id', special.id);
-      if (error) throw error;
+      const storagePath = await uploadSpecialJobImage({ specialJobId: special.id, localUri: special.localImageUri });
       setSpecial((p) => (p ? { ...p, image_url: storagePath, uploading: false } : p));
       Toast.show({ type: 'success', text1: 'הועלה' });
     } catch (e: any) {
@@ -286,16 +294,7 @@ export function WorkerScheduleScreen() {
     if (!selected) return;
     try {
       setIsLoading(true);
-      if (selected.kind === 'regular') {
-        const { error } = await supabase.from('jobs').update({ status: 'completed' }).eq('id', selected.id);
-        if (error) throw error;
-      } else if (selected.kind === 'installation') {
-        const { error } = await supabase.from('installation_jobs').update({ status: 'completed' }).eq('id', selected.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('special_jobs').update({ status: 'completed' }).eq('id', selected.id);
-        if (error) throw error;
-      }
+      await completeUnifiedJob(selected.kind, selected.id);
       setItems((prev) => prev.filter((x) => x.id !== selected.id));
       Toast.show({ type: 'success', text1: 'הושלם' });
       setSelected(null);

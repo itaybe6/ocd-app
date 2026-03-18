@@ -7,12 +7,13 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
-import { uploadCompressedImage, getPublicUrl } from '../../lib/storage';
+import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { yyyyMmDd } from '../../lib/time';
 import { useLoading } from '../../state/LoadingContext';
 import { pickImageFromLibrary } from '../../lib/media';
+import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
 
 type Job = {
   id: string;
@@ -123,10 +124,12 @@ export function JobExecutionScreen() {
 
     try {
       setPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
-      const storagePath = `${selectedJob.id}/${p.service_point_id}-${Date.now()}.jpg`;
-      await uploadCompressedImage({ localUri: p.localImageUri, path: storagePath });
-      const { error } = await supabase.from('job_service_points').update({ image_url: storagePath }).eq('id', p.id);
-      if (error) throw error;
+      const storagePath = await uploadJobServicePointImage({
+        jobId: selectedJob.id,
+        jobServicePointId: p.id,
+        servicePointId: p.service_point_id,
+        localUri: p.localImageUri,
+      });
       setPoints((prev) =>
         prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false } : x))
       );
@@ -141,8 +144,7 @@ export function JobExecutionScreen() {
     if (!selectedJob) return;
     try {
       setIsLoading(true);
-      const { error } = await supabase.from('jobs').update({ status: 'completed' }).eq('id', selectedJob.id);
-      if (error) throw error;
+      await completeUnifiedJob('regular', selectedJob.id);
       setJobs((prev) => prev.map((j) => (j.id === selectedJob.id ? { ...j, status: 'completed' } : j)));
       Toast.show({ type: 'success', text1: 'המשימה הושלמה' });
       setSelectedJob((p) => (p ? { ...p, status: 'completed' } : p));
