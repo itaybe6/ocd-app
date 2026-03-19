@@ -79,20 +79,21 @@ function DrawerNavItem({
         pressed && !active && styles.itemPressed,
       ]}
     >
-      <View style={styles.itemLeft}>
-        {!!badgeCount && badgeCount > 0 ? <Badge count={badgeCount} /> : null}
-      </View>
-
-      <View style={styles.itemCenter}>
-        <Text numberOfLines={1} style={[styles.itemLabel, active && styles.itemLabelActive]}>
-          {label}
-        </Text>
-      </View>
-
-      <View style={styles.itemRight}>
-        <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
-          <Icon size={18} color={active ? colors.primary : colors.muted} />
+      {/* badge – מופיע רק כשיש ספירה */}
+      {!!badgeCount && badgeCount > 0 && (
+        <View style={styles.itemBadge}>
+          <Badge count={badgeCount} />
         </View>
+      )}
+
+      {/* טקסט – יוצר flex כדי לתפוס את המקום הפנוי */}
+      <Text numberOfLines={1} style={[styles.itemLabel, active && styles.itemLabelActive]}>
+        {label}
+      </Text>
+
+      {/* אייקון */}
+      <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
+        <Icon size={18} color={active ? colors.primary : colors.muted} />
       </View>
     </Pressable>
   );
@@ -302,26 +303,23 @@ const styles = StyleSheet.create({
   },
 
   item: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    marginVertical: 3,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginVertical: 2,
+    gap: 10,
   },
   itemActive: { backgroundColor: '#2563EB12' },
   itemPressed: { backgroundColor: '#0F172A08' },
-  itemLeft: { width: 46, alignItems: 'flex-start' },
-  itemCenter: { flex: 1, paddingHorizontal: 8, justifyContent: 'center' },
-  itemRight: { width: 42, alignItems: 'flex-end', justifyContent: 'center' },
+  itemBadge: { marginLeft: 4 },
   itemLabel: {
+    flex: 1,
     color: colors.text,
     textAlign: 'right',
     fontWeight: '800',
     fontSize: 14,
-    lineHeight: 20,
-    includeFontPadding: false,
-    transform: [{ translateY: 2 }],
   },
   itemLabelActive: { color: colors.primary },
   iconWrap: {
@@ -347,18 +345,14 @@ const styles = StyleSheet.create({
   logoutRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 34,
+    gap: 10,
   },
   logoutText: {
+    flex: 1,
     color: colors.danger,
     fontWeight: '900',
     textAlign: 'right',
-    includeFontPadding: false,
     fontSize: 14,
-    lineHeight: 20,
-    marginTop: 2,
-    transform: [{ translateY: 1 }],
   },
   logoutIcon: {
     width: 34,
