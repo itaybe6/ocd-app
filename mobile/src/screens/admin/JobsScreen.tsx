@@ -4,6 +4,7 @@ import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Eye, Pencil, Rocket, Search, Trash2 } from 'lucide-react-native';
+import { Entypo } from '@expo/vector-icons';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -618,10 +619,36 @@ export function JobsScreen() {
                 >
                   {item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
                 </Text>
+
+                {item.kind === 'regular' && item.status === 'pending' ? (
+                  <View style={{ flexDirection: 'row-reverse', marginTop: 6 }}>
+                    <Pressable
+                      onPress={() => openJob(item, { mode: 'execute' })}
+                      style={({ pressed }) => [
+                        {
+                          flexDirection: 'row-reverse',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          backgroundColor: 'rgba(0,88,188,0.10)',
+                          borderWidth: 1,
+                          borderColor: 'rgba(0,88,188,0.22)',
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 999,
+                          opacity: pressed ? 0.8 : 1,
+                        },
+                      ]}
+                    >
+                      <Entypo name="controller-play" size={18} color="#0058BC" />
+                      <Text style={{ color: '#0058BC', fontWeight: '900' }}>בצע</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             }
             description={item.notes ?? null}
-            onPress={() => openJob(item)}
+            onPress={() => openJob(item, { mode: 'view' })}
             faded={item.status === 'completed'}
             style={{ marginBottom: 12 }}
             actions={

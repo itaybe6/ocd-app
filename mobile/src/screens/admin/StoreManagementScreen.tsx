@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Children, cloneElement, isValidElement, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,7 +11,17 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, FadeInUp, FadeOutDown } from 'react-native-reanimated';
+import Animated, {
+  Extrapolate,
+  FadeIn,
+  FadeInUp,
+  FadeOut,
+  FadeOutDown,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
@@ -74,6 +84,101 @@ function ProductThumb({ imageUrl, size = 56 }: { imageUrl: string | null; size?:
   );
 }
 
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
+
+const ProductPickerCellRenderer = memo(({ children, ...props }: any) => {
+  const itemY = useSharedValue(0);
+  const itemHeight = useSharedValue(0);
+  return (
+    <View
+      {...props}
+      onLayout={(ev) => {
+        itemY.value = ev.nativeEvent.layout.y;
+        itemHeight.value = ev.nativeEvent.layout.height;
+      }}
+    >
+      {Children.map(children, (child) => {
+        if (isValidElement(child)) {
+          return cloneElement(child as any, { itemY, itemHeight });
+        }
+        return child;
+      })}
+    </View>
+  );
+});
+
+function AnimatedProductRow({
+  item,
+  index,
+  scrollY,
+  selected,
+  onPress,
+  itemY,
+  itemHeight,
+}: {
+  item: ProductLite;
+  index: number;
+  scrollY: { value: number };
+  selected: boolean;
+  onPress: () => void;
+  itemY?: { value: number };
+  itemHeight?: { value: number };
+}) {
+  const stylez = useAnimatedStyle(() => {
+    if (!itemY || !itemHeight || itemHeight.value === 0) return {};
+
+    const top = itemY.value;
+    const h = itemHeight.value;
+    const y = scrollY.value;
+
+    return {
+      opacity: interpolate(y, [top - 1, top, top + h], [1, 1, 0], Extrapolate.CLAMP),
+      transform: [
+        { perspective: h * 4 },
+        {
+          translateY: interpolate(y, [top - index - 1, top - index, top - index + 1], [0, 0, 1], Extrapolate.CLAMP),
+        },
+        {
+          scale: interpolate(y, [top - 1, top, top + h], [1, 1, 0.96], Extrapolate.CLAMP),
+        },
+      ],
+    };
+  }, [index]);
+
+  return (
+    <Animated.View style={stylez}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          pickerStyles.productRow,
+          selected && pickerStyles.productRowSelected,
+          pressed && !selected && pickerStyles.productRowPressed,
+        ]}
+      >
+        {selected && <View style={pickerStyles.selectedStrip} />}
+
+        <ProductThumb imageUrl={item.imageUrl} size={58} />
+
+        <View style={pickerStyles.productMeta}>
+          <Text numberOfLines={2} style={[pickerStyles.productTitle, selected && pickerStyles.productTitleSelected]}>
+            {item.title}
+          </Text>
+          {!!item.productType && <Text style={pickerStyles.productType}>{item.productType}</Text>}
+          <Text style={[pickerStyles.productPrice, selected && pickerStyles.productPriceSelected]}>
+            {formatPrice(item.price, item.currencyCode)}
+          </Text>
+        </View>
+
+        {selected && (
+          <View style={pickerStyles.checkCircle}>
+            <Text style={pickerStyles.checkMark}>✓</Text>
+          </View>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 /* ─── Product picker modal ─── */
 function ProductPickerModal({
   visible,
@@ -91,6 +196,10 @@ function ProductPickerModal({
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((ev) => {
+    scrollY.value = ev.contentOffset.y;
+  });
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -156,49 +265,28 @@ function ProductPickerModal({
               <Text style={pickerStyles.loadingText}>טוען מוצרים…</Text>
             </View>
           ) : (
-            <FlatList
+            <AnimatedFlatList
               data={filtered}
               keyExtractor={(item) => item.handle}
               contentContainerStyle={pickerStyles.listContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => {
+              onScroll={onScroll}
+              scrollEventThrottle={16}
+              CellRendererComponent={ProductPickerCellRenderer}
+              renderItem={({ item, index }: any) => {
                 const selected = item.handle === selectedHandle;
                 return (
-                  <Pressable
+                  <AnimatedProductRow
+                    item={item}
+                    index={index}
+                    scrollY={scrollY}
+                    selected={selected}
                     onPress={() => {
                       onSelect(item);
                       onClose();
                     }}
-                    style={({ pressed }) => [
-                      pickerStyles.productRow,
-                      selected && pickerStyles.productRowSelected,
-                      pressed && !selected && pickerStyles.productRowPressed,
-                    ]}
-                  >
-                    {/* Selected side strip */}
-                    {selected && <View style={pickerStyles.selectedStrip} />}
-
-                    <ProductThumb imageUrl={item.imageUrl} size={58} />
-
-                    <View style={pickerStyles.productMeta}>
-                      <Text numberOfLines={2} style={[pickerStyles.productTitle, selected && pickerStyles.productTitleSelected]}>
-                        {item.title}
-                      </Text>
-                      {!!item.productType && (
-                        <Text style={pickerStyles.productType}>{item.productType}</Text>
-                      )}
-                      <Text style={[pickerStyles.productPrice, selected && pickerStyles.productPriceSelected]}>
-                        {formatPrice(item.price, item.currencyCode)}
-                      </Text>
-                    </View>
-
-                    {selected && (
-                      <View style={pickerStyles.checkCircle}>
-                        <Text style={pickerStyles.checkMark}>✓</Text>
-                      </View>
-                    )}
-                  </Pressable>
+                  />
                 );
               }}
               ListEmptyComponent={

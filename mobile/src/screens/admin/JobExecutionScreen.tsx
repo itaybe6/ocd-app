@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Image, Pressable, Text, View } from 'react-native';
+import { FlatList, Image, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
@@ -44,14 +44,12 @@ export function JobExecutionScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [q, setQ] = useState('');
   const [dateFilter, setDateFilter] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [points, setPoints] = useState<JobServicePoint[]>([]);
 
   const fetchJobs = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('jobs')
         .select('id, date, status, worker_id, customer_id, order_number, notes')
@@ -60,8 +58,6 @@ export function JobExecutionScreen() {
       setJobs((data ?? []) as Job[]);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת משימות נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -155,10 +151,6 @@ export function JobExecutionScreen() {
   return (
     <Screen backgroundColor="#FAF9FE">
       <View style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchJobs} />
-          <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>ביצוע משימות</Text>
-        </View>
         <Input label="חיפוש (id / מספר הזמנה)" value={q} onChangeText={setQ} />
         <Input label="תאריך (yyyy-MM-dd) אופציונלי" value={dateFilter} onChangeText={setDateFilter} placeholder="2026-03-15" />
       </View>
@@ -187,72 +179,82 @@ export function JobExecutionScreen() {
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />
 
-      <ModalSheet visible={!!selectedJob} onClose={() => setSelectedJob(null)}>
+      <ModalSheet visible={!!selectedJob} onClose={() => setSelectedJob(null)} containerStyle={{ maxHeight: '90%' }}>
         {!!selectedJob && (
-          <View style={{ gap: 12 }}>
-            <JobCard
-              title={`#${selectedJob.order_number ?? '—'} - משימת ריח`}
-              status={selectedJob.status}
-              description={selectedJob.notes ?? null}
-              chips={
-                <>
-                  <JobChip text="רגילה" />
-                  <JobChip text={yyyyMmDd(selectedJob.date)} muted />
-                </>
+          <View style={{ gap: 12, flex: 1 }}>
+            <FlatList
+              data={points}
+              keyExtractor={(p) => p.id}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ gap: 10, paddingBottom: 8 }}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                <View style={{ gap: 12 }}>
+                  <JobCard
+                    title={`#${selectedJob.order_number ?? '—'} - משימת ריח`}
+                    status={selectedJob.status}
+                    description={selectedJob.notes ?? null}
+                    chips={
+                      <>
+                        <JobChip text="רגילה" />
+                        <JobChip text={yyyyMmDd(selectedJob.date)} muted />
+                      </>
+                    }
+                  />
+
+                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>נקודות שירות</Text>
+                </View>
               }
-            />
-
-            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>נקודות שירות</Text>
-            <View style={{ gap: 10 }}>
-              {points.map((p) => {
+              renderItem={({ item: p }) => {
                 const currentImageUrl = p.image_url ? getPublicUrl(p.image_url) : null;
+                const refill = p.custom_refill_amount ?? p.sp?.refill_amount ?? null;
                 return (
-                  <Card key={p.id}>
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                      {p.sp?.device_type ?? p.service_point_id}
-                    </Text>
-                    <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                      ניחוח: {p.sp?.scent_type ?? '-'} • מילוי: {p.custom_refill_amount ?? p.sp?.refill_amount ?? '-'}
-                    </Text>
+                  <Card style={{ gap: 10 }}>
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }} numberOfLines={2}>
+                        {p.sp?.device_type ?? `נקודה ${p.service_point_id.slice(0, 6)}`}
+                      </Text>
+                      <View style={{ flexDirection: 'row-reverse', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+                        <JobChip text={`ניחוח: ${p.sp?.scent_type ?? '-'}`} muted />
+                        <JobChip text={`מילוי: ${refill ?? '-'}`} muted />
+                      </View>
+                    </View>
 
-                    <View style={{ marginTop: 10, gap: 10 }}>
-                      {p.localImageUri ? (
-                        <Image source={{ uri: p.localImageUri }} style={{ width: '100%', height: 180, borderRadius: 14 }} />
-                      ) : currentImageUrl ? (
-                        <Image source={{ uri: currentImageUrl }} style={{ width: '100%', height: 180, borderRadius: 14 }} />
-                      ) : null}
+                    {p.localImageUri ? (
+                      <Image source={{ uri: p.localImageUri }} style={{ width: '100%', height: 180, borderRadius: 14 }} />
+                    ) : currentImageUrl ? (
+                      <Image source={{ uri: currentImageUrl }} style={{ width: '100%', height: 180, borderRadius: 14 }} />
+                    ) : null}
 
-                      {currentImageUrl ? (
-                        <Text style={{ color: colors.muted, textAlign: 'right' }} numberOfLines={1}>
-                          {currentImageUrl}
-                        </Text>
-                      ) : null}
+                    {currentImageUrl ? (
+                      <Text style={{ color: colors.muted, textAlign: 'right' }} numberOfLines={1} ellipsizeMode="middle">
+                        {currentImageUrl}
+                      </Text>
+                    ) : null}
 
-                      <View style={{ flexDirection: 'row', gap: 10 }}>
-                        <View style={{ flex: 1 }}>
-                          <Button title="בחר תמונה" variant="secondary" onPress={() => pickImage(p.id)} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Button
-                            title={p.uploading ? 'מעלה…' : 'העלה'}
-                            disabled={p.uploading}
-                            onPress={() => uploadForPoint(p)}
-                          />
-                        </View>
+                    <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Button title="בחר תמונה" variant="secondary" onPress={() => pickImage(p.id)} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Button title={p.uploading ? 'מעלה…' : 'העלה'} disabled={p.uploading} onPress={() => uploadForPoint(p)} />
                       </View>
                     </View>
                   </Card>
                 );
-              })}
-              {!points.length ? <Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות.</Text> : null}
-            </View>
-
-            <Button
-              title={selectedJob.status === 'completed' ? 'כבר הושלם' : 'סיים משימה'}
-              disabled={selectedJob.status === 'completed'}
-              onPress={completeJob}
+              }}
+              ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות.</Text>}
+              ListFooterComponent={
+                <View style={{ gap: 10, paddingTop: 6 }}>
+                  <Button
+                    title={selectedJob.status === 'completed' ? 'כבר הושלם' : 'סיים משימה'}
+                    disabled={selectedJob.status === 'completed'}
+                    onPress={completeJob}
+                  />
+                  <Button title="סגור" variant="secondary" onPress={() => setSelectedJob(null)} />
+                </View>
+              }
             />
-            <Button title="סגור" variant="secondary" onPress={() => setSelectedJob(null)} />
           </View>
         )}
       </ModalSheet>

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@faker-js/faker": "^9.2.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/drawer": "^7.9.4",
@@ -20,7 +21,7 @@
     "date-fns": "^4.1.0",
     "expo": "~54.0.0",
     "expo-blur": "^55.0.10",
-    "expo-constants": "~18.0.13",
+    "expo-constants": "~18.0.9",
     "expo-file-system": "~19.0.21",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.10",

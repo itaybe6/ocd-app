@@ -16,6 +16,42 @@ import { supabase, USER_AVATARS_BUCKET } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import type { UserRole } from '../../types/database';
 
+const base64Lookup = (() => {
+  const t = new Int16Array(256);
+  t.fill(-1);
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < alphabet.length; i++) t[alphabet.charCodeAt(i)] = i;
+  t['-'.charCodeAt(0)] = 62; // URL-safe
+  t['_'.charCodeAt(0)] = 63; // URL-safe
+  return t;
+})();
+
+function decodeBase64ToBytes(b64: string): Uint8Array {
+  const clean = (b64 || '').replace(/[\r\n\s]+/g, '');
+  if (!clean) return new Uint8Array(0);
+  const pad = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  const outLen = Math.floor((clean.length * 3) / 4) - pad;
+  const out = new Uint8Array(outLen);
+
+  let outIdx = 0;
+  for (let i = 0; i < clean.length; i += 4) {
+    const c1 = base64Lookup[clean.charCodeAt(i)] ?? -1;
+    const c2 = base64Lookup[clean.charCodeAt(i + 1)] ?? -1;
+    const c3ch = clean.charAt(i + 2);
+    const c4ch = clean.charAt(i + 3);
+    const c3 = c3ch === '=' ? 0 : base64Lookup[clean.charCodeAt(i + 2)] ?? -1;
+    const c4 = c4ch === '=' ? 0 : base64Lookup[clean.charCodeAt(i + 3)] ?? -1;
+    if (c1 < 0 || c2 < 0 || c3 < 0 || c4 < 0) continue;
+
+    const triple = (c1 << 18) | (c2 << 12) | (c3 << 6) | c4;
+    if (outIdx < outLen) out[outIdx++] = (triple >> 16) & 0xff;
+    if (outIdx < outLen && c3ch !== '=') out[outIdx++] = (triple >> 8) & 0xff;
+    if (outIdx < outLen && c4ch !== '=') out[outIdx++] = triple & 0xff;
+  }
+
+  return out;
+}
+
 type UserRow = {
   id: string;
   phone: string;
@@ -62,6 +98,7 @@ export function UsersScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<UserRow>>(emptyUser());
   const [avatarLocalUri, setAvatarLocalUri] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [editAnchor, setEditAnchor] = useState<WindowAnchor | null>(null);
   const isEditExisting = !!editing.id;
@@ -135,6 +172,7 @@ export function UsersScreen() {
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing(emptyUser());
     setAvatarLocalUri(null);
+    setAvatarBase64(null);
     setEditAnchor(anchor ?? null);
     setEditOpen(true);
   };
@@ -143,6 +181,7 @@ export function UsersScreen() {
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing({ ...u, password: u.password ?? '' });
     setAvatarLocalUri(null);
+    setAvatarBase64(null);
     setEditAnchor(anchor ?? null);
     setEditOpen(true);
   };
@@ -150,6 +189,7 @@ export function UsersScreen() {
   const closeEdit = () => {
     setEditOpen(false);
     setAvatarLocalUri(null);
+    setAvatarBase64(null);
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     // Keep anchor during the closing animation so it "returns" to the opening button.
     clearEditAnchorTimer.current = setTimeout(() => setEditAnchor(null), EDIT_WINDOW_DURATION_MS + 40);
@@ -176,9 +216,10 @@ export function UsersScreen() {
       const out = await ImageManipulator.manipulateAsync(
         pickedUri,
         [{ resize: { width: 256, height: 256 } }],
-        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG }
+        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
       setAvatarLocalUri(out.uri);
+      setAvatarBase64(out.base64 ?? null);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'בחירת תמונה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -188,14 +229,15 @@ export function UsersScreen() {
 
   const clearAvatar = () => {
     setAvatarLocalUri(null);
+    setAvatarBase64(null);
     setEditing((p) => ({ ...p, avatar_url: null }));
   };
 
-  const uploadUserAvatar = async (userId: string, localUri: string): Promise<string> => {
-    const resp = await fetch(localUri);
-    const blob = await resp.blob();
+  const uploadUserAvatar = async (userId: string, b64: string): Promise<string> => {
+    const bytes = decodeBase64ToBytes(b64);
+    if (!bytes.length) throw new Error('Avatar file is empty');
     const path = `avatars/${userId}.jpg`;
-    const { error } = await supabase.storage.from(USER_AVATARS_BUCKET).upload(path, blob, {
+    const { error } = await supabase.storage.from(USER_AVATARS_BUCKET).upload(path, bytes, {
       upsert: true,
       contentType: 'image/jpeg',
       cacheControl: '3600',
@@ -223,8 +265,8 @@ export function UsersScreen() {
       const wantsAvatar = payload.role === 'admin' || payload.role === 'worker';
       if (isEditExisting) {
         let avatarUrl: string | null = wantsAvatar ? (editing.avatar_url ?? null) : null;
-        if (avatarLocalUri && wantsAvatar) {
-          avatarUrl = await uploadUserAvatar(editing.id!, avatarLocalUri);
+        if (avatarBase64 && wantsAvatar) {
+          avatarUrl = await uploadUserAvatar(editing.id!, avatarBase64);
         }
         const { error } = await supabase.from('users').update({ ...payload, avatar_url: avatarUrl }).eq('id', editing.id!);
         if (error) throw error;
@@ -236,8 +278,8 @@ export function UsersScreen() {
         const { data, error } = await supabase.from('users').insert({ ...payload, avatar_url: null }).select('id').single();
         if (error) throw error;
         const newId = (data as any)?.id as string;
-        if (newId && avatarLocalUri && wantsAvatar) {
-          const avatarUrl = await uploadUserAvatar(newId, avatarLocalUri);
+        if (newId && avatarBase64 && wantsAvatar) {
+          const avatarUrl = await uploadUserAvatar(newId, avatarBase64);
           const { error: uErr } = await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', newId);
           if (uErr) throw uErr;
         }
@@ -245,6 +287,7 @@ export function UsersScreen() {
       }
       setEditOpen(false);
       setAvatarLocalUri(null);
+      setAvatarBase64(null);
       await fetchUsers();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שמירה נכשלה', text2: e?.message ?? 'Unknown error' });
