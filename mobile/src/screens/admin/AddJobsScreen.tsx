@@ -1,16 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { CalendarDays } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
+import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
 
 type JobKind = 'regular' | 'installation' | 'special';
 type JobStatus = 'pending' | 'completed';
@@ -59,6 +63,7 @@ export function AddJobsScreen() {
 
   const [dateYmd, setDateYmd] = useState('');
   const [timeHm, setTimeHm] = useState('09:00');
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const [workerId, setWorkerId] = useState('');
   const [customerId, setCustomerId] = useState('');
@@ -86,6 +91,24 @@ export function AddJobsScreen() {
   );
 
   const specialTypeMeta = useMemo(() => SPECIAL_JOB_TYPES.find((t) => t.value === specialJobType), [specialJobType]);
+
+  const timeOptions = useMemo(() => timeSlots({ startHm: '08:00', endHm: '20:00', stepMinutes: 30 }).map((t) => ({ value: t, label: t })), []);
+  const dateOptions = useMemo(() => {
+    const base = new Date();
+    const list: { value: string; label: string }[] = [];
+    for (let i = 0; i <= 180; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      const ymd = yyyyMmDd(d);
+      list.push({ value: ymd, label: ymd });
+    }
+    return list;
+  }, []);
+  const dateValue = useMemo(() => {
+    if (!dateYmd) return new Date();
+    const d = toDate(dateYmd);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }, [dateYmd]);
 
   const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role').order('name', { ascending: true });
@@ -272,10 +295,62 @@ export function AddJobsScreen() {
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <Input label="תאריך (yyyy-MM-dd)" value={dateYmd} onChangeText={setDateYmd} placeholder="2026-03-15" />
+                {Platform.OS === 'web' ? (
+                  <SelectSheet
+                    label="תאריך"
+                    value={dateYmd}
+                    placeholder="בחר תאריך…"
+                    options={dateOptions}
+                    onChange={setDateYmd}
+                  />
+                ) : (
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך</Text>
+                    <Pressable
+                      onPress={() => {
+                        if (Platform.OS === 'android') {
+                          DateTimePickerAndroid.open({
+                            value: dateValue,
+                            mode: 'date',
+                            is24Hour: true,
+                            onChange: (_event, selectedDate) => {
+                              if (!selectedDate) return;
+                              setDateYmd(yyyyMmDd(selectedDate));
+                            },
+                          });
+                          return;
+                        }
+                        setDatePickerOpen(true);
+                      }}
+                      style={{
+                        backgroundColor: colors.elevated,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                        borderRadius: 14,
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                      }}
+                    >
+                      <CalendarDays size={18} color={colors.muted} />
+                      <Text style={{ color: dateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
+                        {dateYmd ? dateYmd : 'בחר תאריך…'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
               <View style={{ flex: 1 }}>
-                <Input label="שעה (HH:mm)" value={timeHm} onChangeText={setTimeHm} placeholder="09:00" />
+                <SelectSheet
+                  label="שעה"
+                  value={timeHm}
+                  placeholder="בחר שעה…"
+                  options={timeOptions}
+                  onChange={setTimeHm}
+                />
               </View>
             </View>
 
@@ -432,6 +507,37 @@ export function AddJobsScreen() {
           </Card>
         ) : null}
       </ScrollView>
+
+      <ModalSheet visible={datePickerOpen} onClose={() => setDatePickerOpen(false)}>
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setDatePickerOpen(false)} />
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
+          </View>
+
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
+            <DateTimePicker
+              value={dateValue}
+              mode="date"
+              display="inline"
+              themeVariant="light"
+              onChange={(_event, selectedDate) => {
+                if (!selectedDate) return;
+                setDateYmd(yyyyMmDd(selectedDate));
+              }}
+            />
+          </View>
+
+          {!!dateYmd && (
+            <Button
+              title="אישור"
+              onPress={() => {
+                setDatePickerOpen(false);
+              }}
+            />
+          )}
+        </View>
+      </ModalSheet>
     </Screen>
   );
 }

@@ -33,7 +33,6 @@ import { WorkTemplatesScreen } from '../screens/admin/WorkTemplatesScreen';
 import { WorkScheduleScreen } from '../screens/admin/WorkScheduleScreen';
 import { DailyScheduleScreen } from '../screens/admin/DailyScheduleScreen';
 import { ReportsScreen } from '../screens/admin/ReportsScreen';
-import { DeviceInstallationScreen } from '../screens/admin/DeviceInstallationScreen';
 import { InstallationJobsScreen } from '../screens/admin/InstallationJobsScreen';
 import { DevicesAndScentsScreen } from '../screens/admin/DevicesAndScentsScreen';
 
@@ -48,7 +47,6 @@ export type AdminDrawerParamList = {
   DailySchedule: undefined;
   Support: undefined;
   Reports: undefined;
-  DeviceInstallation: undefined;
   InstallationJobs: undefined;
   DevicesAndScents: undefined;
 };
@@ -200,7 +198,6 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
           { key: 'WorkSchedule', label: 'קווי עבודה', icon: CalendarDays },
           { key: 'Users', label: 'משתמשים', icon: UsersIcon },
           { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
-          { key: 'DeviceInstallation', label: 'התקנת מכשירים', icon: Wrench },
           { key: 'WorkTemplates', label: 'תבניות עבודה', icon: Settings },
         ],
       },
@@ -323,7 +320,6 @@ export function AdminDrawer() {
       <Drawer.Screen name="DailySchedule" options={{ title: 'לוז יומי' }} component={DailyScheduleScreen} />
       <Drawer.Screen name="Support" options={{ title: 'שירות לקוחות' }} component={SupportScreen} />
       <Drawer.Screen name="Reports" options={{ title: 'דוחות' }} component={ReportsScreen} />
-      <Drawer.Screen name="DeviceInstallation" options={{ title: 'התקנת מכשירים' }} component={DeviceInstallationScreen} />
       <Drawer.Screen name="InstallationJobs" options={{ title: 'משימות מיוחדות' }} component={InstallationJobsScreen} />
       <Drawer.Screen name="DevicesAndScents" options={{ title: 'מכשירים וניחוחות' }} component={DevicesAndScentsScreen} />
     </Drawer.Navigator>

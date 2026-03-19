@@ -1,9 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Plus, X } from 'lucide-react-native';
-import { ModalSheet } from '../../components/ModalSheet';
+import { Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
 import { Button } from '../../components/ui/Button';
@@ -44,6 +43,8 @@ const roleOptions = [
   { value: 'customer', label: 'customer' },
 ] as const;
 
+const EDIT_WINDOW_DURATION_MS = 320;
+
 function emptyUser(): Partial<UserRow> {
   return { role: 'customer', name: '', phone: '', password: '' };
 }
@@ -56,7 +57,9 @@ export function UsersScreen() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<UserRow>>(emptyUser());
+  const [editAnchor, setEditAnchor] = useState<WindowAnchor | null>(null);
   const isEditExisting = !!editing.id;
+  const clearEditAnchorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [pointsOpen, setPointsOpen] = useState(false);
   const [pointsUser, setPointsUser] = useState<UserRow | null>(null);
@@ -115,14 +118,32 @@ export function UsersScreen() {
     }, [fetchUsers, fetchLookups])
   );
 
-  const openCreate = () => {
+  useEffect(() => {
+    return () => {
+      if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
+      clearEditAnchorTimer.current = null;
+    };
+  }, []);
+
+  const openCreate = (anchor?: WindowAnchor | null) => {
+    if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing(emptyUser());
+    setEditAnchor(anchor ?? null);
     setEditOpen(true);
   };
 
-  const openEdit = (u: UserRow) => {
+  const openEdit = (u: UserRow, anchor?: WindowAnchor | null) => {
+    if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing({ ...u, password: u.password ?? '' });
+    setEditAnchor(anchor ?? null);
     setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
+    // Keep anchor during the closing animation so it "returns" to the opening button.
+    clearEditAnchorTimer.current = setTimeout(() => setEditAnchor(null), EDIT_WINDOW_DURATION_MS + 40);
   };
 
   const saveUser = async () => {
@@ -299,24 +320,158 @@ export function UsersScreen() {
   return (
     <Screen>
       <View style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button title="הוסף משתמש" fullWidth={false} onPress={openCreate} />
-          <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>משתמשים</Text>
-        </View>
+        {/* iOS-like header */}
+        <View
+          style={{
+            backgroundColor: colors.card,
+            borderRadius: 20,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: 'rgba(60,60,67,0.12)',
+            shadowColor: '#000',
+            shadowOpacity: 0.06,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 2,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Pressable
+              onPress={(e) => openCreate({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="הוסף משתמש"
+              style={({ pressed }) => [
+                {
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: 'rgba(60,60,67,0.16)',
+                  shadowColor: colors.primary,
+                  shadowOpacity: 0.14,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 8 },
+                  elevation: 2,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+            >
+              <Plus size={20} color={colors.primary} />
+            </Pressable>
 
-        <Input label="חיפוש" value={query} onChangeText={setQuery} placeholder="שם/טלפון/role" />
-        <SelectSheet
-          label="פילטר role"
-          value={roleFilter === 'all' ? '' : roleFilter}
-          placeholder="הכל"
-          options={[
-            { value: '', label: 'הכל' },
-            { value: 'admin', label: 'admin' },
-            { value: 'worker', label: 'worker' },
-            { value: 'customer', label: 'customer' },
-          ]}
-          onChange={(v) => setRoleFilter((v || 'all') as any)}
-        />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>משתמשים</Text>
+              <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right', fontWeight: '700' }}>
+                {filtered.length} {filtered.length === 1 ? 'משתמש' : 'משתמשים'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Search */}
+          <View
+            style={{
+              marginTop: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              backgroundColor: 'rgba(118,118,128,0.12)',
+              borderRadius: 14,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderWidth: 1,
+              borderColor: 'rgba(60,60,67,0.08)',
+            }}
+          >
+            <Search size={18} color="rgba(60,60,67,0.6)" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="חיפוש לפי שם / טלפון / role"
+              placeholderTextColor="rgba(60,60,67,0.6)"
+              style={{
+                flex: 1,
+                color: colors.text,
+                fontSize: 16,
+                textAlign: 'right',
+                paddingVertical: 0,
+              }}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {!!query.trim() && (
+              <Pressable
+                onPress={() => setQuery('')}
+                hitSlop={10}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(60,60,67,0.18)',
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="נקה חיפוש"
+              >
+                <X size={16} color="rgba(60,60,67,0.8)" />
+              </Pressable>
+            )}
+          </View>
+
+          {/* Segmented role filter */}
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>פילטר role</Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                backgroundColor: 'rgba(118,118,128,0.12)',
+                borderRadius: 12,
+                padding: 3,
+                borderWidth: 1,
+                borderColor: 'rgba(60,60,67,0.08)',
+              }}
+            >
+              {[
+                { value: 'all' as const, label: 'הכל' },
+                { value: 'admin' as const, label: 'admin' },
+                { value: 'worker' as const, label: 'worker' },
+                { value: 'customer' as const, label: 'customer' },
+              ].map((opt) => {
+                const active = roleFilter === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setRoleFilter(opt.value as any)}
+                    style={{
+                      flex: 1,
+                      borderRadius: 10,
+                      paddingVertical: 8,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: active ? '#FFFFFF' : 'transparent',
+                      shadowColor: '#000',
+                      shadowOpacity: active ? 0.08 : 0,
+                      shadowRadius: active ? 6 : 0,
+                      shadowOffset: { width: 0, height: 3 },
+                      elevation: active ? 1 : 0,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`פילטר ${opt.label}`}
+                  >
+                    <Text style={{ color: active ? colors.text : 'rgba(60,60,67,0.8)', fontWeight: '800' }}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
       </View>
 
       <FlatList
@@ -344,12 +499,47 @@ export function UsersScreen() {
                     <Eye size={18} color={colors.text} />
                   </Pressable>
                 ) : null}
-                <Pressable onPress={() => openEdit(item)} style={{ paddingVertical: 6 }}>
-                  <Text style={{ color: colors.primary, fontWeight: '900' }}>עריכה</Text>
-                </Pressable>
-                <Pressable onPress={() => cascadeDelete(item)} style={{ paddingVertical: 6 }} disabled={loading}>
-                  <Text style={{ color: colors.danger, fontWeight: '900' }}>מחיקה</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  <Pressable
+                    onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+                    hitSlop={10}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="עריכה"
+                  >
+                    <Pencil size={18} color={colors.primary} />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => cascadeDelete(item)}
+                    hitSlop={10}
+                    disabled={loading}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: loading ? 0.6 : 1,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="מחיקה"
+                  >
+                    <Trash2 size={18} color={colors.danger} />
+                  </Pressable>
+                </View>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
@@ -368,47 +558,82 @@ export function UsersScreen() {
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין משתמשים.</Text>}
       />
 
-      <ModalSheet visible={editOpen} onClose={() => setEditOpen(false)}>
-        <View style={{ gap: 10 }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            {isEditExisting ? 'עריכת משתמש' : 'משתמש חדש'}
-          </Text>
-          <Input label="שם" value={editing.name ?? ''} onChangeText={(v) => setEditing((p) => ({ ...p, name: v }))} />
-          <Input
-            label="טלפון"
-            value={editing.phone ?? ''}
-            onChangeText={(v) => setEditing((p) => ({ ...p, phone: v }))}
-            keyboardType="phone-pad"
-          />
-          <Input
-            label="סיסמה"
-            value={editing.password ?? ''}
-            onChangeText={(v) => setEditing((p) => ({ ...p, password: v }))}
-            secureTextEntry
-          />
-          <SelectSheet
-            label="Role"
-            value={editing.role ?? 'customer'}
-            options={roleOptions as any}
-            onChange={(v) => setEditing((p) => ({ ...p, role: v as any }))}
-          />
-          <Input
-            label="כתובת"
-            value={editing.address ?? ''}
-            onChangeText={(v) => setEditing((p) => ({ ...p, address: v }))}
-          />
-          {(editing.role ?? 'customer') === 'customer' ? (
+      <AnchoredWindow visible={editOpen} anchor={editAnchor} onClose={closeEdit} showCloseEye={false} durationMs={EDIT_WINDOW_DURATION_MS}>
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+              marginBottom: 10,
+            }}
+          >
+            <Pressable
+              onPress={closeEdit}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: 'rgba(255,255,255,0.06)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              hitSlop={10}
+            >
+              <X size={18} color={colors.text} />
+            </Pressable>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+              {isEditExisting ? 'עריכת משתמש' : 'משתמש חדש'}
+            </Text>
+          </View>
+
+          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 14 }}>
+            <Input label="שם" value={editing.name ?? ''} onChangeText={(v) => setEditing((p) => ({ ...p, name: v }))} />
             <Input
-              label="מחיר"
-              value={editing.price?.toString?.() ?? ''}
-              onChangeText={(v) => setEditing((p) => ({ ...p, price: v ? Number(v) : null }))}
-              keyboardType="numeric"
+              label="טלפון"
+              value={editing.phone ?? ''}
+              onChangeText={(v) => setEditing((p) => ({ ...p, phone: v }))}
+              keyboardType="phone-pad"
             />
-          ) : null}
-          <Button title="שמור" onPress={saveUser} />
-          <Button title="סגור" variant="secondary" onPress={() => setEditOpen(false)} />
+            <Input
+              label="סיסמה"
+              value={editing.password ?? ''}
+              onChangeText={(v) => setEditing((p) => ({ ...p, password: v }))}
+              secureTextEntry
+            />
+            <SelectSheet
+              label="Role"
+              value={editing.role ?? 'customer'}
+              options={roleOptions as any}
+              onChange={(v) => setEditing((p) => ({ ...p, role: v as any }))}
+            />
+            <Input
+              label="כתובת"
+              value={editing.address ?? ''}
+              onChangeText={(v) => setEditing((p) => ({ ...p, address: v }))}
+            />
+            {(editing.role ?? 'customer') === 'customer' ? (
+              <Input
+                label="מחיר"
+                value={editing.price?.toString?.() ?? ''}
+                onChangeText={(v) => setEditing((p) => ({ ...p, price: v ? Number(v) : null }))}
+                keyboardType="numeric"
+              />
+            ) : null}
+            <Button title="שמור" onPress={saveUser} />
+            <Button
+              title="סגור"
+              variant="secondary"
+              onPress={closeEdit}
+            />
+          </ScrollView>
         </View>
-      </ModalSheet>
+      </AnchoredWindow>
 
       <AnchoredWindow visible={pointsOpen} anchor={pointsAnchor} onClose={() => setPointsOpen(false)} showCloseEye={false}>
         <View style={{ flex: 1 }}>

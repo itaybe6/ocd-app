@@ -167,6 +167,9 @@ export function DevicesAndScentsScreen() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const editCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [editScent, setEditScent] = useState<Scent | null>(null);
+  const [editScentName, setEditScentName] = useState('');
+
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
@@ -282,6 +285,49 @@ export function DevicesAndScentsScreen() {
     }
   };
 
+  const openEditScent = (s: Scent) => {
+    setEditScent(s);
+    setEditScentName(s.name);
+  };
+
+  const closeEditScent = () => {
+    setEditScent(null);
+    setEditScentName('');
+  };
+
+  const saveEditScent = async () => {
+    const s = editScent;
+    if (!s) return;
+    const nextName = editScentName.trim();
+    if (!nextName) {
+      Toast.show({ type: 'error', text1: 'חסר שם ניחוח' });
+      return;
+    }
+    if (nextName === s.name) {
+      closeEditScent();
+      return;
+    }
+
+    const exists = scents.some((x) => x.id !== s.id && x.name.toLocaleLowerCase() === nextName.toLocaleLowerCase());
+    if (exists) {
+      Toast.show({ type: 'error', text1: 'קיים כבר ניחוח בשם הזה' });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const { error } = await supabase.from('scents').update({ name: nextName }).eq('id', s.id);
+      if (error) throw error;
+      Toast.show({ type: 'success', text1: 'עודכן ניחוח' });
+      closeEditScent();
+      await fetchAll();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const openEditDevice = (d: Device) => {
     if (editCloseTimer.current) {
       clearTimeout(editCloseTimer.current);
@@ -372,35 +418,30 @@ export function DevicesAndScentsScreen() {
 
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchAll} />
-        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>מכשירים וניחוחות</Text>
-      </View>
-
       <FlatList
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 4 }}
         data={devices}
         keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 10, paddingBottom: 16 }}
+        contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         ListHeaderComponent={devicesHeader}
         renderItem={({ item }) => (
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Pressable onPress={() => requestDeleteDevice(item)} style={{ paddingVertical: 6 }}>
-                  <Text style={{ color: colors.danger, fontWeight: '900' }}>מחק</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() => requestDeleteDevice(item)}
+                  style={({ pressed }) => [styles.iconBtn, styles.iconBtnDanger, pressed && { opacity: 0.7 }]}
+                >
+                  <Entypo name="trash" size={16} color={colors.danger} />
                 </Pressable>
                 <Pressable
-                  hitSlop={12}
+                  hitSlop={8}
                   onPress={() => openEditDevice(item)}
-                  style={({ pressed }) => [
-                    { paddingVertical: 6, paddingHorizontal: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
-                    pressed ? { opacity: 0.7, backgroundColor: 'rgba(15, 23, 42, 0.06)' } : null,
-                  ]}
+                  style={({ pressed }) => [styles.iconBtn, styles.iconBtnEdit, pressed && { opacity: 0.7 }]}
                 >
-                  <Entypo name="pencil" size={16} color={colors.text} />
-                  <Text style={{ color: colors.text, fontWeight: '900' }}>ערוך</Text>
+                  <Entypo name="pencil" size={16} color={colors.primary} />
                 </Pressable>
               </View>
               <View style={{ flex: 1 }}>
@@ -411,25 +452,38 @@ export function DevicesAndScentsScreen() {
           </Card>
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין מכשירים.</Text>}
-      />
-
-      <FlatList
-        data={scents}
-        keyExtractor={(i) => i.id}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
-        ListHeaderComponent={scentsHeader}
-        renderItem={({ item }) => (
-          <Card>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Pressable onPress={() => deleteScent(item.id)} style={{ paddingVertical: 6 }}>
-                <Text style={{ color: colors.danger, fontWeight: '900' }}>מחק</Text>
-              </Pressable>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>{item.name}</Text>
-            </View>
-          </Card>
-        )}
-        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין ניחוחות.</Text>}
+        ListFooterComponent={
+          <View style={{ gap: 10, marginTop: 10 }}>
+            {scentsHeader}
+            {scents.length === 0 ? (
+              <Text style={{ color: colors.muted, textAlign: 'right' }}>אין ניחוחות.</Text>
+            ) : (
+              scents.map((item) => (
+                <Card key={item.id}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => deleteScent(item.id)}
+                        style={({ pressed }) => [styles.iconBtn, styles.iconBtnDanger, pressed && { opacity: 0.7 }]}
+                      >
+                        <Entypo name="trash" size={16} color={colors.danger} />
+                      </Pressable>
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => openEditScent(item)}
+                        style={({ pressed }) => [styles.iconBtn, styles.iconBtnEdit, pressed && { opacity: 0.7 }]}
+                      >
+                        <Entypo name="pencil" size={16} color={colors.primary} />
+                      </Pressable>
+                    </View>
+                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>{item.name}</Text>
+                  </View>
+                </Card>
+              ))
+            )}
+          </View>
+        }
       />
 
       <ModalSheet visible={!!deleteDevice} onClose={() => setDeleteDevice(null)}>
@@ -443,6 +497,24 @@ export function DevicesAndScentsScreen() {
             <Button title="מחק רק מכשיר" variant="danger" onPress={() => confirmDeleteDevice('deviceOnly')} />
             <Button title="מחק כולל נקודות שירות" variant="danger" onPress={() => confirmDeleteDevice('cascade')} />
             <Button title="ביטול" variant="secondary" onPress={() => setDeleteDevice(null)} />
+          </View>
+        )}
+      </ModalSheet>
+
+      <ModalSheet visible={!!editScent} onClose={closeEditScent}>
+        {!!editScent && (
+          <View style={{ gap: 12 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>עריכת ניחוח</Text>
+            <Text style={{ color: colors.muted, textAlign: 'right' }}>ניחוח: {editScent.name}</Text>
+            <Input label="שם ניחוח חדש" value={editScentName} onChangeText={setEditScentName} placeholder="לדוגמה: Ocean" />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button title="ביטול" variant="secondary" onPress={closeEditScent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button title="שמור" onPress={saveEditScent} />
+              </View>
+            </View>
           </View>
         )}
       </ModalSheet>
@@ -469,4 +541,20 @@ export function DevicesAndScentsScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconBtnDanger: {
+    backgroundColor: '#FEE2E2',
+  },
+  iconBtnEdit: {
+    backgroundColor: '#DBEAFE',
+  },
+});
 

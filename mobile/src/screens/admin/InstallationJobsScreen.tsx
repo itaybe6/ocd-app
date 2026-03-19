@@ -6,14 +6,16 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
+import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
-import { toDate, yyyyMmDd } from '../../lib/time';
+import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
-import { Calendar, Search, X } from 'lucide-react-native';
+import { Calendar, CalendarDays, Plus, Search, X } from 'lucide-react-native';
 
 type Kind = 'installation' | 'special';
 type Status = 'pending' | 'completed';
@@ -31,6 +33,8 @@ type Unified = {
 
 type InstallationDevice = { id: string; installation_job_id: string; device_name?: string | null; image_url?: string | null };
 
+type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer' };
+
 const kindLabel = (k: Kind) => (k === 'installation' ? 'התקנה' : 'מיוחדת');
 
 export function InstallationJobsScreen() {
@@ -46,11 +50,56 @@ export function InstallationJobsScreen() {
   const [selected, setSelected] = useState<Unified | null>(null);
   const [devices, setDevices] = useState<InstallationDevice[]>([]);
 
+  const [users, setUsers] = useState<UserLite[]>([]);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createWorkerId, setCreateWorkerId] = useState('');
+  const [createCustomerId, setCreateCustomerId] = useState('');
+  const [createDateYmd, setCreateDateYmd] = useState('');
+  const [createTimeHm, setCreateTimeHm] = useState('09:00');
+  const [createNotes, setCreateNotes] = useState('');
+  const [createDatePickerOpen, setCreateDatePickerOpen] = useState(false);
+
   const dateValue = useMemo(() => {
     if (!dateFilter) return new Date();
     const d = toDate(dateFilter);
     return Number.isNaN(d.getTime()) ? new Date() : d;
   }, [dateFilter]);
+
+  const createDateValue = useMemo(() => {
+    if (!createDateYmd) return new Date();
+    const d = toDate(createDateYmd);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }, [createDateYmd]);
+
+  const workerOptions = useMemo(
+    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })),
+    [users]
+  );
+  const customerOptions = useMemo(
+    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
+    [users]
+  );
+  const timeOptions = useMemo(
+    () => timeSlots({ startHm: '08:00', endHm: '20:00', stepMinutes: 30 }).map((t) => ({ value: t, label: t })),
+    []
+  );
+  const dateOptions = useMemo(() => {
+    const base = new Date();
+    const list: { value: string; label: string }[] = [];
+    for (let i = 0; i <= 180; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      const ymd = yyyyMmDd(d);
+      list.push({ value: ymd, label: ymd });
+    }
+    return list;
+  }, []);
+
+  const fetchUsers = useCallback(async () => {
+    const { data, error } = await supabase.from('users').select('id, name, role').order('name', { ascending: true });
+    if (!error) setUsers((data ?? []) as any);
+  }, []);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -73,8 +122,9 @@ export function InstallationJobsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      fetchUsers();
       fetchAll();
-    }, [fetchAll])
+    }, [fetchAll, fetchUsers])
   );
 
   const filtered = useMemo(() => {
@@ -125,6 +175,42 @@ export function InstallationJobsScreen() {
     }
   };
 
+  const createInstallation = async () => {
+    try {
+      if (!createWorkerId) throw new Error('בחר עובד');
+      if (!createCustomerId) throw new Error('בחר לקוח');
+      if (!createDateYmd.trim()) throw new Error('בחר תאריך');
+      if (!createTimeHm.trim()) throw new Error('בחר שעה');
+
+      const d = new Date(`${createDateYmd.trim()}T${createTimeHm.trim()}:00`);
+      if (Number.isNaN(d.getTime())) throw new Error('תאריך/שעה לא תקינים');
+      const iso = d.toISOString();
+
+      setIsLoading(true);
+      const { error } = await supabase.from('installation_jobs').insert({
+        worker_id: createWorkerId,
+        customer_id: createCustomerId,
+        date: iso,
+        status: 'pending',
+        notes: createNotes.trim() || null,
+      });
+      if (error) throw error;
+
+      Toast.show({ type: 'success', text1: 'נוצרה משימת התקנה' });
+      setCreateOpen(false);
+      setCreateWorkerId('');
+      setCreateCustomerId('');
+      setCreateDateYmd('');
+      setCreateTimeHm('09:00');
+      setCreateNotes('');
+      await fetchAll();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'יצירה נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Screen backgroundColor="#FAF9FE">
       <FlatList
@@ -149,6 +235,31 @@ export function InstallationJobsScreen() {
                 elevation: 2,
               }}
             >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Pressable
+                  onPress={() => setCreateOpen(true)}
+                  hitSlop={10}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: pressed ? 'rgba(37,99,235,0.14)' : 'rgba(37,99,235,0.10)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(37,99,235,0.22)',
+                  })}
+                >
+                  <Plus size={20} color={colors.primary} />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>משימות מיוחדות</Text>
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '700', marginTop: 2 }}>
+                    יצירת משימת התקנה + סינון
+                  </Text>
+                </View>
+              </View>
+
               <View
                 style={{
                   flexDirection: 'row',
@@ -466,6 +577,112 @@ export function InstallationJobsScreen() {
               }}
             />
           )}
+        </View>
+      </ModalSheet>
+
+      <ModalSheet
+        visible={createOpen}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateDatePickerOpen(false);
+        }}
+      >
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setCreateOpen(false)} />
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>יצירת משימת התקנה</Text>
+          </View>
+
+          <Card>
+            <View style={{ gap: 10 }}>
+              <SelectSheet label="עובד" value={createWorkerId} placeholder="בחר עובד…" options={workerOptions} onChange={setCreateWorkerId} />
+              <SelectSheet label="לקוח" value={createCustomerId} placeholder="בחר לקוח…" options={customerOptions} onChange={setCreateCustomerId} />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  {Platform.OS === 'web' ? (
+                    <SelectSheet
+                      label="תאריך"
+                      value={createDateYmd}
+                      placeholder="בחר תאריך…"
+                      options={dateOptions}
+                      onChange={setCreateDateYmd}
+                    />
+                  ) : (
+                    <View style={{ gap: 6 }}>
+                      <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך</Text>
+                      <Pressable
+                        onPress={() => {
+                          if (Platform.OS === 'android') {
+                            DateTimePickerAndroid.open({
+                              value: createDateValue,
+                              mode: 'date',
+                              is24Hour: true,
+                              onChange: (_event, selectedDate) => {
+                                if (!selectedDate) return;
+                                setCreateDateYmd(yyyyMmDd(selectedDate));
+                              },
+                            });
+                            return;
+                          }
+                          setCreateDatePickerOpen(true);
+                        }}
+                        style={{
+                          backgroundColor: colors.elevated,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 14,
+                          paddingVertical: 12,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <CalendarDays size={18} color={colors.muted} />
+                        <Text style={{ color: createDateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
+                          {createDateYmd ? createDateYmd : 'בחר תאריך…'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <SelectSheet label="שעה" value={createTimeHm} placeholder="בחר שעה…" options={timeOptions} onChange={setCreateTimeHm} />
+                </View>
+              </View>
+
+              <Input label="הערות (אופציונלי)" value={createNotes} onChangeText={setCreateNotes} />
+            </View>
+          </Card>
+
+          <Button title="צור משימת התקנה" onPress={createInstallation} />
+        </View>
+      </ModalSheet>
+
+      <ModalSheet visible={createDatePickerOpen} onClose={() => setCreateDatePickerOpen(false)}>
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setCreateDatePickerOpen(false)} />
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
+          </View>
+
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
+            <DateTimePicker
+              value={createDateValue}
+              mode="date"
+              display="inline"
+              themeVariant="light"
+              onChange={(_event, selectedDate) => {
+                if (!selectedDate) return;
+                setCreateDateYmd(yyyyMmDd(selectedDate));
+              }}
+            />
+          </View>
+
+          {!!createDateYmd && <Button title="אישור" onPress={() => setCreateDatePickerOpen(false)} />}
         </View>
       </ModalSheet>
     </Screen>

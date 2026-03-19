@@ -12,8 +12,9 @@ import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import { useLoading } from '../../state/LoadingContext';
 import { yyyyMmDd } from '../../lib/time';
+import { fetchWorkTemplatesSorted, templateDay, type WorkTemplateLite } from '../../lib/workTemplates';
 
-type Template = { id: string; day_of_month: number };
+type Template = { id: string; day: number };
 type WorkSchedule = { id: string; date: string; template_id: string; created_at?: string };
 type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
 type ServicePoint = { id: string; customer_id: string; refill_amount: number };
@@ -36,7 +37,7 @@ export function WorkScheduleScreen() {
   const [selectedSchedule, setSelectedSchedule] = useState<WorkSchedule | null>(null);
 
   const templateOptions = useMemo(
-    () => templates.map((t) => ({ value: t.id, label: `יום ${t.day_of_month}` })),
+    () => templates.map((t) => ({ value: t.id, label: `יום ${t.day}` })),
     [templates]
   );
 
@@ -44,12 +45,22 @@ export function WorkScheduleScreen() {
     try {
       setLoading(true);
       const [tRes, sRes] = await Promise.all([
-        supabase.from('work_templates').select('id, day_of_month').order('day_of_month'),
+        fetchWorkTemplatesSorted(),
         supabase.from('work_schedules').select('id, date, template_id, created_at').order('date', { ascending: false }),
       ]);
-      if (tRes.error) throw tRes.error;
       if (sRes.error) throw sRes.error;
-      setTemplates((tRes.data ?? []) as Template[]);
+      const normalized = (tRes.templates ?? [])
+        .map((t: WorkTemplateLite) => ({ id: t.id, day: templateDay(t) }))
+        .filter((t): t is Template => typeof t.day === 'number' && t.day >= 1 && t.day <= 28)
+        .sort((a, b) => a.day - b.day);
+      const seen = new Set<number>();
+      const deduped: Template[] = [];
+      for (const t of normalized) {
+        if (seen.has(t.day)) continue;
+        seen.add(t.day);
+        deduped.push(t);
+      }
+      setTemplates(deduped);
       setSchedules((sRes.data ?? []) as WorkSchedule[]);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינה נכשלה', text2: e?.message ?? 'Unknown error' });
