@@ -18,8 +18,7 @@ import { Input } from '../../components/ui/Input';
 import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
 
-const LOGO_URI =
-  'https://wlzreoiumzmfbskzuywj.supabase.co/storage/v1/object/public/logo//ocd%20logo-02.png';
+const LOGO_IMG = require('../../../assets/logo-vertical.png');
 
 type LoginScreenProps = {
   onBackToStore: () => void;
@@ -154,7 +153,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                   elevation: 4,
                 }}
               >
-                <Image source={{ uri: LOGO_URI }} style={{ width: 70, height: 70 }} resizeMode="contain" />
+                <Image source={LOGO_IMG} style={{ width: 70, height: 70 }} resizeMode="contain" />
               </View>
               <Text style={{ color: colors.text, fontSize: 28, fontWeight: '900', marginTop: 14, textAlign: 'center' }}>
                 מערכת ניהול משימות

@@ -6,8 +6,6 @@ import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { ModalSheet } from '../../components/ModalSheet';
-import { SelectSheet } from '../../components/ui/SelectSheet';
 import { ModalDialog } from '../../components/ModalDialog';
 import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +16,7 @@ type Template = { id: string; day: number };
 type TemplateForGrid = { id: string; day: number };
 type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
 type UserLite = { id: string; name: string; role: 'customer' | 'worker' };
+type DropdownKind = 'customer' | 'worker';
 
 export function WorkTemplatesScreen() {
   const { setIsLoading } = useLoading();
@@ -29,11 +28,11 @@ export function WorkTemplatesScreen() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [templateCounts, setTemplateCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [editStation, setEditStation] = useState<Station | null>(null);
-  const [stationCustomerId, setStationCustomerId] = useState('');
-  const [stationWorkerId, setStationWorkerId] = useState('');
-  const [stationTime, setStationTime] = useState('09:00');
+  const [expandedStationId, setExpandedStationId] = useState<string | null>(null);
+  const [timeDraft, setTimeDraft] = useState<Record<string, string>>({});
+  const [timeError, setTimeError] = useState<Record<string, string>>({});
+  const [dropdown, setDropdown] = useState<{ stationId: string; kind: DropdownKind } | null>(null);
+  const [dropdownQuery, setDropdownQuery] = useState('');
 
   const customerOptions = useMemo(
     () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
@@ -81,7 +80,15 @@ export function WorkTemplatesScreen() {
       .eq('template_id', templateId)
       .order('order', { ascending: true });
     if (error) throw error;
-    setStations((data ?? []) as any);
+    const list = (data ?? []) as any as Station[];
+    setStations(list);
+    setExpandedStationId(null);
+    setDropdown(null);
+    setDropdownQuery('');
+    const drafts: Record<string, string> = {};
+    for (const s of list) drafts[s.id] = s.scheduled_time ?? '09:00';
+    setTimeDraft(drafts);
+    setTimeError({});
   };
 
   const refresh = useCallback(async () => {
@@ -153,6 +160,16 @@ export function WorkTemplatesScreen() {
     });
   }, [searchQuery, stations, userNameById]);
 
+  const updateStation = async (stationId: string, updates: Partial<Station>) => {
+    const before = stations;
+    setStations((prev) => prev.map((s) => (s.id === stationId ? { ...s, ...updates } : s)));
+    const { error } = await supabase.from('template_stations').update(updates).eq('id', stationId);
+    if (error) {
+      setStations(before);
+      throw error;
+    }
+  };
+
   const addStation = async () => {
     if (!selectedTemplateId) return;
     try {
@@ -171,36 +188,6 @@ export function WorkTemplatesScreen() {
       Toast.show({ type: 'success', text1: 'נוספה תחנה' });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'הוספה נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const openEdit = (s: Station) => {
-    setEditStation(s);
-    setStationCustomerId(s.customer_id ?? '');
-    setStationWorkerId(s.worker_id ?? '');
-    setStationTime(s.scheduled_time ?? '09:00');
-  };
-
-  const saveStation = async () => {
-    if (!editStation) return;
-    try {
-      setIsLoading(true);
-      const { error } = await supabase
-        .from('template_stations')
-        .update({
-          customer_id: stationCustomerId || null,
-          worker_id: stationWorkerId || null,
-          scheduled_time: stationTime.trim() || '09:00',
-        })
-        .eq('id', editStation.id);
-      if (error) throw error;
-      setEditStation(null);
-      await fetchStations(editStation.template_id);
-      Toast.show({ type: 'success', text1: 'עודכן' });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
     } finally {
       setIsLoading(false);
     }
@@ -227,17 +214,28 @@ export function WorkTemplatesScreen() {
     setDetailOpen(true);
   };
 
+  const dropdownOptions = useMemo(() => {
+    const base = dropdown?.kind === 'worker' ? workerOptions : customerOptions;
+    const q = dropdownQuery.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((o) => (o.label ?? '').toLowerCase().includes(q));
+  }, [customerOptions, dropdown, dropdownQuery, workerOptions]);
+
+  const setStationRef = async (stationId: string, kind: DropdownKind, value: string | null) => {
+    try {
+      setIsLoading(true);
+      await updateStation(stationId, { [kind === 'worker' ? 'worker_id' : 'customer_id']: value } as any);
+      Toast.show({ type: 'success', text1: 'עודכן' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Screen>
-      <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-        <View>
-          <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900', textAlign: 'right' }}>בחירת תבנית</Text>
-          <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>לחץ על יום בחודש כדי לערוך תחנות</Text>
-        </View>
-        <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} variant="secondary" onPress={refresh} />
-      </View>
-
-      <View style={{ marginTop: 12 }}>
+      <View>
         <FlatList
           data={templatesForGrid}
           keyExtractor={(i) => i.id}
@@ -292,7 +290,9 @@ export function WorkTemplatesScreen() {
         visible={detailOpen}
         onClose={() => {
           setDetailOpen(false);
-          setEditStation(null);
+          setExpandedStationId(null);
+          setDropdown(null);
+          setDropdownQuery('');
         }}
         containerStyle={{ height: '88%' }}
       >
@@ -319,54 +319,234 @@ export function WorkTemplatesScreen() {
             renderItem={({ item }) => {
               const customerName = item.customer_id ? userNameById.get(item.customer_id) : null;
               const workerName = item.worker_id ? userNameById.get(item.worker_id) : null;
+              const expanded = expandedStationId === item.id;
+              const draft = timeDraft[item.id] ?? item.scheduled_time ?? '09:00';
+              const err = timeError[item.id] ?? '';
+              const dropOpen = dropdown?.stationId === item.id;
+              const dropKind = dropdown?.kind ?? null;
               return (
-                <Pressable onPress={() => openEdit(item)}>
-                  {({ pressed }) => (
-                    <Card style={{ transform: [{ scale: pressed ? 0.99 : 1 }] }}>
-                      <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תחנה #{item.order}</Text>
-                        <View
-                          style={{
-                            backgroundColor: 'rgba(100,116,139,0.10)',
-                            borderRadius: 999,
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                          }}
-                        >
-                          <Text style={{ color: colors.text, fontWeight: '900', fontSize: 12 }}>{item.scheduled_time}</Text>
-                        </View>
-                      </View>
+                <Card>
+                  <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תחנה #{item.order}</Text>
                       <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>
                         לקוח: {customerName ?? '—'} • עובד: {workerName ?? '—'}
                       </Text>
-                      <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right', fontSize: 12 }}>
-                        לחץ לעריכה
-                      </Text>
-                    </Card>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                      <View
+                        style={{
+                          backgroundColor: 'rgba(100,116,139,0.10)',
+                          borderRadius: 999,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                        }}
+                      >
+                        <Text style={{ color: colors.text, fontWeight: '900', fontSize: 12 }}>{item.scheduled_time}</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          setDropdown(null);
+                          setDropdownQuery('');
+                          setExpandedStationId((prev) => (prev === item.id ? null : item.id));
+                        }}
+                        style={({ pressed }) => ({
+                          backgroundColor: pressed ? 'rgba(37, 99, 235, 0.16)' : 'rgba(37, 99, 235, 0.10)',
+                          borderRadius: 999,
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderWidth: 1,
+                          borderColor: 'rgba(37, 99, 235, 0.25)',
+                        })}
+                      >
+                        <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 12 }}>{expanded ? 'סגור' : 'עריכה'}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {expanded && (
+                    <View style={{ marginTop: 12, gap: 10 }}>
+                      <Pressable
+                        onPress={() => {
+                          setDropdown((prev) => (prev?.stationId === item.id && prev.kind === 'customer' ? null : { stationId: item.id, kind: 'customer' }));
+                          setDropdownQuery('');
+                        }}
+                        style={{
+                          backgroundColor: colors.elevated,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 14,
+                          paddingVertical: 12,
+                        }}
+                      >
+                        <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+                        <Text style={{ color: customerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
+                          {customerName ?? 'בחר לקוח…'}
+                        </Text>
+                      </Pressable>
+
+                      {dropOpen && dropKind === 'customer' && (
+                        <View
+                          style={{
+                            backgroundColor: colors.elevated,
+                            borderColor: colors.border,
+                            borderWidth: 1,
+                            borderRadius: 14,
+                            padding: 12,
+                            gap: 10,
+                          }}
+                        >
+                          <Input value={dropdownQuery} onChangeText={setDropdownQuery} placeholder="חפש לקוח…" />
+                          <Pressable
+                            onPress={() => setStationRef(item.id, 'customer', null)}
+                            style={{
+                              backgroundColor: colors.card,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                              borderRadius: 14,
+                              paddingVertical: 10,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text style={{ color: colors.text, fontWeight: '900' }}>נקה לקוח</Text>
+                          </Pressable>
+                          <View style={{ maxHeight: 220 }}>
+                            <FlatList
+                              data={dropdownOptions}
+                              keyExtractor={(o) => o.value}
+                              keyboardShouldPersistTaps="handled"
+                              contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+                              renderItem={({ item: o }) => (
+                                <Pressable
+                                  onPress={() => setStationRef(item.id, 'customer', o.value)}
+                                  style={{
+                                    backgroundColor: o.value === (item.customer_id ?? '') ? 'rgba(37, 99, 235, 0.10)' : colors.card,
+                                    borderColor: colors.border,
+                                    borderWidth: 1,
+                                    borderRadius: 14,
+                                    paddingVertical: 10,
+                                    paddingHorizontal: 10,
+                                  }}
+                                >
+                                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{o.label}</Text>
+                                </Pressable>
+                              )}
+                            />
+                          </View>
+                        </View>
+                      )}
+
+                      <Pressable
+                        onPress={() => {
+                          setDropdown((prev) => (prev?.stationId === item.id && prev.kind === 'worker' ? null : { stationId: item.id, kind: 'worker' }));
+                          setDropdownQuery('');
+                        }}
+                        style={{
+                          backgroundColor: colors.elevated,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 14,
+                          paddingVertical: 12,
+                        }}
+                      >
+                        <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
+                        <Text style={{ color: workerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
+                          {workerName ?? 'בחר עובד…'}
+                        </Text>
+                      </Pressable>
+
+                      {dropOpen && dropKind === 'worker' && (
+                        <View
+                          style={{
+                            backgroundColor: colors.elevated,
+                            borderColor: colors.border,
+                            borderWidth: 1,
+                            borderRadius: 14,
+                            padding: 12,
+                            gap: 10,
+                          }}
+                        >
+                          <Input value={dropdownQuery} onChangeText={setDropdownQuery} placeholder="חפש עובד…" />
+                          <Pressable
+                            onPress={() => setStationRef(item.id, 'worker', null)}
+                            style={{
+                              backgroundColor: colors.card,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                              borderRadius: 14,
+                              paddingVertical: 10,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text style={{ color: colors.text, fontWeight: '900' }}>נקה עובד</Text>
+                          </Pressable>
+                          <View style={{ maxHeight: 220 }}>
+                            <FlatList
+                              data={dropdownOptions}
+                              keyExtractor={(o) => o.value}
+                              keyboardShouldPersistTaps="handled"
+                              contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+                              renderItem={({ item: o }) => (
+                                <Pressable
+                                  onPress={() => setStationRef(item.id, 'worker', o.value)}
+                                  style={{
+                                    backgroundColor: o.value === (item.worker_id ?? '') ? 'rgba(37, 99, 235, 0.10)' : colors.card,
+                                    borderColor: colors.border,
+                                    borderWidth: 1,
+                                    borderRadius: 14,
+                                    paddingVertical: 10,
+                                    paddingHorizontal: 10,
+                                  }}
+                                >
+                                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{o.label}</Text>
+                                </Pressable>
+                              )}
+                            />
+                          </View>
+                        </View>
+                      )}
+
+                      <Input
+                        label="שעה (HH:mm)"
+                        value={draft}
+                        onChangeText={(v) => {
+                          setTimeDraft((prev) => ({ ...prev, [item.id]: v }));
+                          setTimeError((prev) => ({ ...prev, [item.id]: '' }));
+                        }}
+                        placeholder="09:00"
+                        inputMode="numeric"
+                        onEndEditing={async () => {
+                          const value = (timeDraft[item.id] ?? '').trim();
+                          const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+                          if (!isValid) {
+                            setTimeError((prev) => ({ ...prev, [item.id]: 'יש להזין שעה בפורמט HH:mm (למשל 09:00)' }));
+                            return;
+                          }
+                          try {
+                            setIsLoading(true);
+                            await updateStation(item.id, { scheduled_time: value });
+                            Toast.show({ type: 'success', text1: 'השעה עודכנה' });
+                          } catch (e: any) {
+                            Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
+                          } finally {
+                            setIsLoading(false);
+                          }
+                        }}
+                      />
+                      {!!err && <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>{err}</Text>}
+
+                      <Button title="מחק תחנה" variant="danger" onPress={() => deleteStation(item)} />
+                    </View>
                   )}
-                </Pressable>
+                </Card>
               );
             }}
             ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין תחנות.</Text>}
           />
         </View>
       </ModalDialog>
-
-      <ModalSheet visible={!!editStation} onClose={() => setEditStation(null)}>
-        {!!editStation && (
-          <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              עריכת תחנה #{editStation.order}
-            </Text>
-            <SelectSheet label="לקוח" value={stationCustomerId} placeholder="בחר לקוח…" options={customerOptions} onChange={setStationCustomerId} />
-            <SelectSheet label="עובד" value={stationWorkerId} placeholder="בחר עובד…" options={workerOptions} onChange={setStationWorkerId} />
-            <Input label="שעה (HH:mm)" value={stationTime} onChangeText={setStationTime} placeholder="09:00" />
-            <Button title="שמור" onPress={saveStation} />
-            <Button title="מחק תחנה" variant="danger" onPress={() => deleteStation(editStation)} />
-            <Button title="סגור" variant="secondary" onPress={() => setEditStation(null)} />
-          </View>
-        )}
-      </ModalSheet>
     </Screen>
   );
 }

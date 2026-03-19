@@ -26,8 +26,15 @@ export function Screen({
       )}
       <View
         {...rest}
-        className={padded ? 'flex-1 px-4 py-3' : 'flex-1'}
-        style={[{ backgroundColor }, style]}
+        style={[
+          {
+            flex: 1,
+            backgroundColor,
+            paddingHorizontal: padded ? 16 : 0,
+            paddingVertical: padded ? 12 : 0,
+          },
+          style,
+        ]}
       >
         {children}
       </View>
