@@ -3,6 +3,7 @@ import { Pressable, Text, View, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
 
 export type JobCardStatus = 'pending' | 'completed';
+export type JobCardKind = 'regular' | 'installation' | 'special';
 
 const ui = {
   surface: '#FAF9FE',
@@ -14,8 +15,14 @@ const ui = {
 
 function statusMeta(status: JobCardStatus) {
   return status === 'completed'
-    ? { label: 'הושלם', bg: 'rgba(34,197,94,0.12)', fg: '#166534', border: 'rgba(34,197,94,0.22)' }
-    : { label: 'ממתין', bg: 'rgba(249,115,22,0.12)', fg: '#9A3412', border: 'rgba(249,115,22,0.22)' };
+    ? { label: 'הושלם', bg: 'rgba(34,197,94,0.11)', fg: '#166534', border: 'rgba(34,197,94,0.28)' }
+    : { label: 'ממתין', bg: 'rgba(249,115,22,0.10)', fg: '#9A3412', border: 'rgba(249,115,22,0.28)' };
+}
+
+function kindAccentColor(kind?: JobCardKind): string {
+  if (kind === 'installation') return '#7C3AED';
+  if (kind === 'special') return '#EA580C';
+  return '#0058BC';
 }
 
 export function JobCardAction({
@@ -39,32 +46,63 @@ export function JobCardAction({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          width: 36,
-          height: 36,
-          borderRadius: 999,
-          backgroundColor: variant === 'danger' ? 'rgba(239,68,68,0.10)' : 'rgba(15,23,42,0.04)',
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: disabled ? 0.35 : pressed ? 0.7 : 1,
+          opacity: disabled ? 0.28 : pressed ? 0.55 : 1,
         },
       ]}
     >
-      {children}
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 13,
+          backgroundColor: variant === 'danger' ? 'rgba(239,68,68,0.09)' : 'rgba(15,23,42,0.05)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {children}
+      </View>
     </Pressable>
   );
 }
 
-export function JobChip({ text, muted }: { text: string; muted?: boolean }) {
+export function JobChip({
+  text,
+  muted,
+  accent,
+}: {
+  text: string;
+  muted?: boolean;
+  accent?: 'blue' | 'purple' | 'orange';
+}) {
+  const accentMap = {
+    blue:   { bg: 'rgba(0,88,188,0.09)',   fg: '#0058BC', border: 'rgba(0,88,188,0.22)' },
+    purple: { bg: 'rgba(124,58,237,0.09)', fg: '#6D28D9', border: 'rgba(124,58,237,0.22)' },
+    orange: { bg: 'rgba(234,88,12,0.09)',  fg: '#C2410C', border: 'rgba(234,88,12,0.22)' },
+  };
+  const c = accent ? accentMap[accent] : null;
+
   return (
     <View
       style={{
-        backgroundColor: 'rgba(15,23,42,0.04)',
-        borderRadius: 12,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        backgroundColor: c ? c.bg : muted ? 'rgba(0,0,0,0.05)' : 'rgba(0,88,188,0.08)',
+        borderRadius: 10,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        borderWidth: 1,
+        borderColor: c ? c.border : 'rgba(0,0,0,0.06)',
       }}
     >
-      <Text style={{ color: muted ? ui.outline : '#414755', fontWeight: '900', fontSize: 11, textAlign: 'right' }}>{text}</Text>
+      <Text
+        style={{
+          color: c ? c.fg : muted ? '#717786' : ui.primary,
+          fontWeight: '700',
+          fontSize: 11,
+          textAlign: 'right',
+        }}
+      >
+        {text}
+      </Text>
     </View>
   );
 }
@@ -78,6 +116,7 @@ export function JobCard({
   actions,
   chips,
   faded,
+  kind,
   style,
 }: {
   title: string;
@@ -88,53 +127,86 @@ export function JobCard({
   actions?: React.ReactNode;
   chips?: React.ReactNode;
   faded?: boolean;
+  kind?: JobCardKind;
   style?: ViewStyle;
 }) {
   const shadow: ViewStyle = {
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
   };
 
-  const header = (
-    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-      <Text
-        style={{ color: colors.text, fontWeight: '900', fontSize: 16, textAlign: 'right', flex: 1 }}
-        numberOfLines={1}
-      >
-        {title}
-      </Text>
-      {status ? (
-        <View
-          style={{
-            backgroundColor: statusMeta(status).bg,
-            borderColor: statusMeta(status).border,
-            borderWidth: 1,
-            borderRadius: 12,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-          }}
-        >
-          <Text style={{ color: statusMeta(status).fg, fontWeight: '900', fontSize: 11 }}>{statusMeta(status).label}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
+  const accentColor = kindAccentColor(kind);
 
-  const middle = (
-    <View style={{ gap: 6 }}>
-      {!!primaryText ? (
-        <Text style={{ color: ui.primary, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>
-          {primaryText}
+  const inner = (
+    <View>
+      <View
+        style={{
+          flexDirection: 'row-reverse',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 8,
+        }}
+      >
+        <Text
+          style={{
+            color: colors.text,
+            fontWeight: '800',
+            fontSize: 15,
+            textAlign: 'right',
+            flex: 1,
+            letterSpacing: -0.3,
+          }}
+          numberOfLines={1}
+        >
+          {title}
         </Text>
-      ) : null}
-      {!!description ? (
-        <Text style={{ color: '#6B7280', textAlign: 'right', lineHeight: 20, fontWeight: '600' }} numberOfLines={2}>
-          {description}
-        </Text>
-      ) : null}
+        {status ? (
+          <View
+            style={{
+              backgroundColor: statusMeta(status).bg,
+              borderColor: statusMeta(status).border,
+              borderWidth: 1,
+              borderRadius: 20,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Text style={{ color: statusMeta(status).fg, fontWeight: '700', fontSize: 11 }}>
+              {statusMeta(status).label}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {(!!primaryText || !!description) && (
+        <View style={{ gap: 4, marginTop: 8 }}>
+          {!!primaryText && (
+            <Text
+              style={{ color: accentColor, fontWeight: '700', fontSize: 13, textAlign: 'right' }}
+              numberOfLines={1}
+            >
+              {primaryText}
+            </Text>
+          )}
+          {!!description && (
+            <Text
+              style={{
+                color: '#6B7280',
+                fontSize: 13,
+                lineHeight: 18,
+                textAlign: 'right',
+                fontWeight: '500',
+              }}
+              numberOfLines={2}
+            >
+              {description}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 
@@ -144,37 +216,65 @@ export function JobCard({
         shadow,
         {
           backgroundColor: '#FFFFFF',
-          borderRadius: 24,
-          padding: 16,
+          borderRadius: 20,
+          overflow: 'hidden',
           borderWidth: 1,
-          borderColor: 'rgba(193,198,215,0.18)',
-          opacity: faded ? 0.78 : 1,
+          borderColor: 'rgba(0,0,0,0.06)',
+          opacity: faded ? 0.72 : 1,
         },
         style,
       ]}
     >
-      {onPress ? (
-        <Pressable onPress={onPress} style={({ pressed }) => [{ gap: 10, opacity: pressed ? 0.9 : 1 }]}>
-          {header}
-          {middle}
-        </Pressable>
-      ) : (
-        <View style={{ gap: 10 }}>
-          {header}
-          {middle}
-        </View>
+      {kind && (
+        <View
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            backgroundColor: accentColor,
+          }}
+        />
       )}
 
-      {(actions || chips) ? (
-        <>
-          <View style={{ height: 1, backgroundColor: ui.surfaceContainerHigh, marginTop: 14, marginBottom: 10 }} />
-          <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-            <View style={{ flexDirection: 'row-reverse', gap: 10, alignItems: 'center' }}>{actions}</View>
-            <View style={{ flexDirection: 'row-reverse', gap: 10, alignItems: 'center' }}>{chips}</View>
-          </View>
-        </>
-      ) : null}
+      <View style={{ padding: 16, paddingRight: kind ? 20 : 16 }}>
+        {onPress ? (
+          <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}>
+            {inner}
+          </Pressable>
+        ) : (
+          inner
+        )}
+
+        {(actions || chips) ? (
+          <>
+            <View
+              style={{
+                height: 1,
+                backgroundColor: 'rgba(0,0,0,0.06)',
+                marginTop: 14,
+                marginBottom: 12,
+              }}
+            />
+            <View
+              style={{
+                flexDirection: 'row-reverse',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 10,
+              }}
+            >
+              <View style={{ flexDirection: 'row-reverse', gap: 14, alignItems: 'center' }}>
+                {actions}
+              </View>
+              <View style={{ flexDirection: 'row-reverse', gap: 6, alignItems: 'center' }}>
+                {chips}
+              </View>
+            </View>
+          </>
+        ) : null}
+      </View>
     </View>
   );
 }
-

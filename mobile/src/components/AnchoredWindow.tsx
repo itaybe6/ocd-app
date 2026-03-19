@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Eye } from 'lucide-react-native';
 import { colors } from '../theme/colors';
@@ -102,15 +102,8 @@ export function AnchoredWindow({
   if (!mounted) return null;
 
   return (
-    <Modal
-      visible={mounted}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-      presentationStyle="overFullScreen"
-    >
-      <View style={StyleSheet.absoluteFill}>
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      <View style={[StyleSheet.absoluteFill, styles.rootOverlay]}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} />
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         {closeEye}
@@ -125,11 +118,15 @@ export function AnchoredWindow({
           {children}
         </Animated.View>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootOverlay: {
+    zIndex: 9999,
+    elevation: 9999,
+  },
   backdrop: { backgroundColor: 'rgba(0,0,0,0.55)' },
   window: {
     position: 'absolute',

@@ -3,7 +3,7 @@ import { Alert, FlatList, Pressable, ScrollView, SectionList, Text, View, Image 
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
-import { MoreVertical, Pencil, Rocket, Search, Trash2 } from 'lucide-react-native';
+import { Eye, Pencil, Rocket, Search, Trash2 } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -556,12 +556,9 @@ export function JobsScreen() {
                 placeholder="2026-03-15"
               />
 
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchUnified} />
-                <Text style={{ color: ui.muted, fontWeight: '800', textAlign: 'right' }}>
-                  מציג {filtered.length} משימות
-                </Text>
-              </View>
+              <Text style={{ color: ui.muted, fontWeight: '800', textAlign: 'right' }}>
+                מציג {filtered.length} משימות
+              </Text>
             </View>
           </View>
         }
@@ -572,12 +569,14 @@ export function JobsScreen() {
         )}
         renderItem={({ item }) => (
           <JobCard
-            title={`#${item.order_number ?? '—'} - ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
+            kind={item.kind}
+            title={`${item.order_number ?? '—'} · ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
             status={item.status}
             primaryText={item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
             description={item.notes ?? null}
             onPress={() => openJob(item)}
             faded={item.status === 'completed'}
+            style={{ marginBottom: 12 }}
             actions={
               <>
                 <JobCardAction label="ערוך" onPress={() => openEdit(item)}>
@@ -596,13 +595,16 @@ export function JobsScreen() {
                   <Trash2 size={20} color={colors.danger} />
                 </JobCardAction>
                 <JobCardAction label="נקודות לקוח" disabled={!item.customer_id} onPress={() => openCustomerPoints(item)}>
-                  <MoreVertical size={20} color="#414755" />
+                  <Eye size={20} color="#414755" />
                 </JobCardAction>
               </>
             }
             chips={
               <>
-                <JobChip text={kindLabel(item.kind)} />
+                <JobChip
+                  text={kindLabel(item.kind)}
+                  accent={item.kind === 'installation' ? 'purple' : item.kind === 'special' ? 'orange' : 'blue'}
+                />
                 <JobChip text={yyyyMmDd(item.date)} muted />
               </>
             }
