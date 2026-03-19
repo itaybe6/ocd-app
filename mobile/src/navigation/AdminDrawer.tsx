@@ -17,6 +17,7 @@ import {
   Headset,
   Settings,
   Package,
+  Store,
   Wrench,
   LogOut,
 } from 'lucide-react-native';
@@ -35,6 +36,7 @@ import { DailyScheduleScreen } from '../screens/admin/DailyScheduleScreen';
 import { ReportsScreen } from '../screens/admin/ReportsScreen';
 import { InstallationJobsScreen } from '../screens/admin/InstallationJobsScreen';
 import { DevicesAndScentsScreen } from '../screens/admin/DevicesAndScentsScreen';
+import { StoreManagementScreen } from '../screens/admin/StoreManagementScreen';
 
 export type AdminDrawerParamList = {
   Dashboard: undefined;
@@ -49,6 +51,7 @@ export type AdminDrawerParamList = {
   Reports: undefined;
   InstallationJobs: undefined;
   DevicesAndScents: undefined;
+  StoreManagement: undefined;
 };
 
 /* ─── Design tokens (light premium theme) ─── */
@@ -199,6 +202,7 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
           { key: 'Users', label: 'משתמשים', icon: UsersIcon },
           { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
           { key: 'WorkTemplates', label: 'תבניות עבודה', icon: Settings },
+          { key: 'StoreManagement', label: 'ניהול חנות', icon: Store },
         ],
       },
       {
@@ -322,6 +326,7 @@ export function AdminDrawer() {
       <Drawer.Screen name="Reports" options={{ title: 'דוחות' }} component={ReportsScreen} />
       <Drawer.Screen name="InstallationJobs" options={{ title: 'משימות מיוחדות' }} component={InstallationJobsScreen} />
       <Drawer.Screen name="DevicesAndScents" options={{ title: 'מכשירים וניחוחות' }} component={DevicesAndScentsScreen} />
+      <Drawer.Screen name="StoreManagement" options={{ title: 'ניהול חנות' }} component={StoreManagementScreen} />
     </Drawer.Navigator>
   );
 }

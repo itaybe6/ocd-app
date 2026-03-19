@@ -92,6 +92,15 @@ type ShopifyCollectionProductsQueryResponse = {
   }>;
 };
 
+type ShopifyProductByHandleQueryResponse = {
+  data?: {
+    productByHandle: ShopifyProductNode | null;
+  };
+  errors?: Array<{
+    message: string;
+  }>;
+};
+
 function getShopifyEndpoint() {
   if (!SHOPIFY_DOMAIN || !SHOPIFY_STOREFRONT_TOKEN) {
     return null;
@@ -249,4 +258,40 @@ export async function fetchCollectionProducts(handle: string, first = 40): Promi
   }
 
   return payload.data?.collection?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
+}
+
+export async function fetchProductByHandle(handle: string): Promise<ShopifyProduct | null> {
+  const normalizedHandle = handle.trim();
+  if (!normalizedHandle) return null;
+
+  const query = `
+    query GetProductByHandle($handle: String!) {
+      productByHandle(handle: $handle) {
+        id
+        title
+        description
+        handle
+        productType
+        featuredImage {
+          url
+          altText
+        }
+        priceRange {
+          minVariantPrice {
+            amount
+            currencyCode
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyProductByHandleQueryResponse>(query, { handle: normalizedHandle });
+
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((item) => item.message).join(', '));
+  }
+
+  const node = payload.data?.productByHandle ?? null;
+  return node ? normalizeProduct(node) : null;
 }

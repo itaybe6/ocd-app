@@ -232,7 +232,13 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
   return sections;
 }
 
-export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) {
+export function StoreHomeScreen({
+  onAdminPress,
+  onProductPress,
+}: {
+  onAdminPress: () => void;
+  onProductPress?: (handle: string) => void;
+}) {
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
@@ -751,13 +757,16 @@ export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) 
               }}
             >
               {featuredProducts.map((product) => (
-                <View
+                <Pressable
                   key={product.id}
-                  style={{
+                  onPress={() => onProductPress?.(product.handle)}
+                  style={({ pressed }) => ({
                     width: 156,
                     borderRadius: 18,
                     backgroundColor: '#FFFFFF',
-                  }}
+                    opacity: pressed ? 0.95 : 1,
+                    transform: [{ scale: pressed ? 0.99 : 1 }],
+                  })}
                 >
                   <View
                     style={{
@@ -809,7 +818,7 @@ export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) 
                       {formatPrice(product.price)}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               ))}
             </View>
 
@@ -828,15 +837,18 @@ export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) 
 
             <View style={{ gap: 12 }}>
               {visibleProducts.map((product) => (
-                <View
+                <Pressable
                   key={`list-${product.id}`}
-                  style={{
+                  onPress={() => onProductPress?.(product.handle)}
+                  style={({ pressed }) => ({
                     backgroundColor: '#FFFFFF',
                     borderRadius: 18,
                     borderWidth: 1,
                     borderColor: '#EEF0F3',
                     overflow: 'hidden',
-                  }}
+                    opacity: pressed ? 0.96 : 1,
+                    transform: [{ scale: pressed ? 0.995 : 1 }],
+                  })}
                 >
                   <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
                     <View style={{ width: 112, padding: 10 }}>
@@ -869,7 +881,7 @@ export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) 
                       </Text>
                     </View>
                   </View>
-                </View>
+                </Pressable>
               ))}
             </View>
 

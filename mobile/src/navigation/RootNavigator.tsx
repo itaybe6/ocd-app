@@ -10,14 +10,9 @@ import { Screen } from '../components/Screen';
 import { useAuth } from '../state/AuthContext';
 import { StoreHomeScreen } from '../screens/store/StoreHomeScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
-
-type RootStackParamList = {
-  Store: undefined;
-  Login: undefined;
-  Admin: undefined;
-  Worker: undefined;
-  Customer: undefined;
-};
+import { ProductScreen } from '../screens/store/ProductScreen';
+import { flushPendingNavigation, navigationRef } from './navigationRef';
+import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -36,14 +31,25 @@ function CustomerEntryScreen() {
   return <CustomerDrawer />;
 }
 
-function PublicStoreScreen({
-  navigation,
-}: NativeStackScreenProps<RootStackParamList, 'Store'>) {
-  return <StoreHomeScreen onAdminPress={() => navigation.navigate('Login')} />;
+function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return (
+      <StoreHomeScreen
+        onAdminPress={() => navigation.navigate('Login')}
+        onProductPress={(handle) => navigation.navigate('Product', { handle })}
+      />
+    );
+  }
+
+  if (user.role === 'admin') return <AdminEntryScreen />;
+  if (user.role === 'worker') return <WorkerEntryScreen />;
+  return <CustomerEntryScreen />;
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
-  return <LoginScreen onBackToStore={() => navigation.navigate('Store')} />;
+  return <LoginScreen onBackToStore={() => navigation.navigate('Main')} />;
 }
 
 export function RootNavigator() {
@@ -75,23 +81,29 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      theme={navTheme}
+      ref={navigationRef}
+      onReady={() => flushPendingNavigation()}
+    >
       <Stack.Navigator
         key={user ? `role:${user.role}` : 'anon'}
         screenOptions={{ headerShown: false }}
       >
-        {!user ? (
-          <>
-            <Stack.Screen name="Store" component={PublicStoreScreen} />
-            <Stack.Screen name="Login" component={LoginRoute} />
-          </>
-        ) : user.role === 'admin' ? (
-          <Stack.Screen name="Admin" component={AdminEntryScreen} />
-        ) : user.role === 'worker' ? (
-          <Stack.Screen name="Worker" component={WorkerEntryScreen} />
-        ) : (
-          <Stack.Screen name="Customer" component={CustomerEntryScreen} />
-        )}
+        <Stack.Screen name="Main" component={MainEntryScreen} />
+        <Stack.Screen name="Login" component={LoginRoute} />
+        <Stack.Screen
+          name="Product"
+          component={ProductScreen}
+          options={{
+            headerShown: true,
+            headerTitle: 'מוצר',
+            headerTitleStyle: { fontWeight: '900' },
+            headerTintColor: colors.text,
+            headerStyle: { backgroundColor: colors.card },
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
