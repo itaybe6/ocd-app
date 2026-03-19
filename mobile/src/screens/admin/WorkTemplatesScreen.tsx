@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
+import { Pencil, X } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
+import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalDialog } from '../../components/ModalDialog';
@@ -28,11 +30,15 @@ export function WorkTemplatesScreen() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [templateCounts, setTemplateCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedStationId, setExpandedStationId] = useState<string | null>(null);
-  const [timeDraft, setTimeDraft] = useState<Record<string, string>>({});
-  const [timeError, setTimeError] = useState<Record<string, string>>({});
-  const [dropdown, setDropdown] = useState<{ stationId: string; kind: DropdownKind } | null>(null);
-  const [dropdownQuery, setDropdownQuery] = useState('');
+  const [editingStationId, setEditingStationId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{ customerId: string | null; workerId: string | null; scheduledTime: string }>({
+    customerId: null,
+    workerId: null,
+    scheduledTime: '09:00',
+  });
+  const [editError, setEditError] = useState('');
+  const [pickerKind, setPickerKind] = useState<DropdownKind | null>(null);
+  const [pickerQuery, setPickerQuery] = useState('');
 
   const customerOptions = useMemo(
     () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
@@ -82,13 +88,10 @@ export function WorkTemplatesScreen() {
     if (error) throw error;
     const list = (data ?? []) as any as Station[];
     setStations(list);
-    setExpandedStationId(null);
-    setDropdown(null);
-    setDropdownQuery('');
-    const drafts: Record<string, string> = {};
-    for (const s of list) drafts[s.id] = s.scheduled_time ?? '09:00';
-    setTimeDraft(drafts);
-    setTimeError({});
+    setEditingStationId(null);
+    setPickerKind(null);
+    setPickerQuery('');
+    setEditError('');
   };
 
   const refresh = useCallback(async () => {
@@ -147,6 +150,12 @@ export function WorkTemplatesScreen() {
   const userNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const u of users) map.set(u.id, u.name);
+    return map;
+  }, [users]);
+
+  const userById = useMemo(() => {
+    const map = new Map<string, UserLite>();
+    for (const u of users) map.set(u.id, u);
     return map;
   }, [users]);
 
@@ -214,18 +223,51 @@ export function WorkTemplatesScreen() {
     setDetailOpen(true);
   };
 
-  const dropdownOptions = useMemo(() => {
-    const base = dropdown?.kind === 'worker' ? workerOptions : customerOptions;
-    const q = dropdownQuery.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter((o) => (o.label ?? '').toLowerCase().includes(q));
-  }, [customerOptions, dropdown, dropdownQuery, workerOptions]);
+  const editingStation = useMemo(
+    () => (editingStationId ? stations.find((s) => s.id === editingStationId) ?? null : null),
+    [editingStationId, stations]
+  );
 
-  const setStationRef = async (stationId: string, kind: DropdownKind, value: string | null) => {
+  const pickerUsers = useMemo(() => {
+    const base = pickerKind === 'worker' ? users.filter((u) => u.role === 'worker') : users.filter((u) => u.role === 'customer');
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((u) => (u.name ?? '').toLowerCase().includes(q));
+  }, [pickerKind, pickerQuery, users]);
+
+  const openStationEditor = (s: Station) => {
+    setEditingStationId(s.id);
+    setEditForm({
+      customerId: s.customer_id ?? null,
+      workerId: s.worker_id ?? null,
+      scheduledTime: (s.scheduled_time ?? '09:00').trim() || '09:00',
+    });
+    setEditError('');
+    setPickerKind(null);
+    setPickerQuery('');
+  };
+
+  const saveEditingStation = async () => {
+    if (!editingStation) return;
+    const value = editForm.scheduledTime.trim();
+    const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+    if (!isValid) {
+      setEditError('יש להזין שעה בפורמט HH:mm (למשל 09:00)');
+      return;
+    }
+
     try {
       setIsLoading(true);
-      await updateStation(stationId, { [kind === 'worker' ? 'worker_id' : 'customer_id']: value } as any);
+      await updateStation(editingStation.id, {
+        customer_id: editForm.customerId,
+        worker_id: editForm.workerId,
+        scheduled_time: value,
+      });
       Toast.show({ type: 'success', text1: 'עודכן' });
+      setEditingStationId(null);
+      setPickerKind(null);
+      setPickerQuery('');
+      setEditError('');
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -290,9 +332,10 @@ export function WorkTemplatesScreen() {
         visible={detailOpen}
         onClose={() => {
           setDetailOpen(false);
-          setExpandedStationId(null);
-          setDropdown(null);
-          setDropdownQuery('');
+          setEditingStationId(null);
+          setPickerKind(null);
+          setPickerQuery('');
+          setEditError('');
         }}
         containerStyle={{ height: '88%' }}
       >
@@ -317,21 +360,60 @@ export function WorkTemplatesScreen() {
             keyExtractor={(i) => i.id}
             contentContainerStyle={{ gap: 10, paddingBottom: 6 }}
             renderItem={({ item }) => {
-              const customerName = item.customer_id ? userNameById.get(item.customer_id) : null;
-              const workerName = item.worker_id ? userNameById.get(item.worker_id) : null;
-              const expanded = expandedStationId === item.id;
-              const draft = timeDraft[item.id] ?? item.scheduled_time ?? '09:00';
-              const err = timeError[item.id] ?? '';
-              const dropOpen = dropdown?.stationId === item.id;
-              const dropKind = dropdown?.kind ?? null;
+              const customer = item.customer_id ? userById.get(item.customer_id) ?? null : null;
+              const worker = item.worker_id ? userById.get(item.worker_id) ?? null : null;
+              const customerName = customer?.name ?? null;
+              const workerName = worker?.name ?? null;
               return (
                 <Card>
                   <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תחנה #{item.order}</Text>
-                      <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>
-                        לקוח: {customerName ?? '—'} • עובד: {workerName ?? '—'}
-                      </Text>
+                      <View style={{ marginTop: 10, flexDirection: 'row-reverse', gap: 10 }}>
+                        <View style={{ flex: 1, gap: 6 }}>
+                          <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+                          <View
+                            style={{
+                              backgroundColor: colors.elevated,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                              borderRadius: 14,
+                              paddingVertical: 10,
+                              paddingHorizontal: 12,
+                              flexDirection: 'row-reverse',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <Avatar size={22} uri={customer?.avatar_url ?? null} name={customerName} style={{ backgroundColor: '#fff' }} />
+                            <Text style={{ color: customerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', flex: 1 }} numberOfLines={1}>
+                              {customerName ?? 'לא נבחר'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={{ flex: 1, gap: 6 }}>
+                          <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
+                          <View
+                            style={{
+                              backgroundColor: colors.elevated,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                              borderRadius: 14,
+                              paddingVertical: 10,
+                              paddingHorizontal: 12,
+                              flexDirection: 'row-reverse',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <Avatar size={22} uri={worker?.avatar_url ?? null} name={workerName} style={{ backgroundColor: '#fff' }} />
+                            <Text style={{ color: workerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', flex: 1 }} numberOfLines={1}>
+                              {workerName ?? 'לא נבחר'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 8 }}>
                       <View
@@ -345,206 +427,232 @@ export function WorkTemplatesScreen() {
                         <Text style={{ color: colors.text, fontWeight: '900', fontSize: 12 }}>{item.scheduled_time}</Text>
                       </View>
                       <Pressable
-                        onPress={() => {
-                          setDropdown(null);
-                          setDropdownQuery('');
-                          setExpandedStationId((prev) => (prev === item.id ? null : item.id));
-                        }}
+                        accessibilityLabel={`עריכת תחנה ${item.order}`}
+                        onPress={() => openStationEditor(item)}
                         style={({ pressed }) => ({
+                          width: 38,
+                          height: 38,
+                          borderRadius: 19,
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           backgroundColor: pressed ? 'rgba(37, 99, 235, 0.16)' : 'rgba(37, 99, 235, 0.10)',
-                          borderRadius: 999,
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
                           borderWidth: 1,
                           borderColor: 'rgba(37, 99, 235, 0.25)',
                         })}
                       >
-                        <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 12 }}>{expanded ? 'סגור' : 'עריכה'}</Text>
+                        <Pencil size={18} color={colors.primary} />
                       </Pressable>
                     </View>
                   </View>
-
-                  {expanded && (
-                    <View style={{ marginTop: 12, gap: 10 }}>
-                      <Pressable
-                        onPress={() => {
-                          setDropdown((prev) => (prev?.stationId === item.id && prev.kind === 'customer' ? null : { stationId: item.id, kind: 'customer' }));
-                          setDropdownQuery('');
-                        }}
-                        style={{
-                          backgroundColor: colors.elevated,
-                          borderColor: colors.border,
-                          borderWidth: 1,
-                          borderRadius: 14,
-                          paddingHorizontal: 14,
-                          paddingVertical: 12,
-                        }}
-                      >
-                        <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
-                        <Text style={{ color: customerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
-                          {customerName ?? 'בחר לקוח…'}
-                        </Text>
-                      </Pressable>
-
-                      {dropOpen && dropKind === 'customer' && (
-                        <View
-                          style={{
-                            backgroundColor: colors.elevated,
-                            borderColor: colors.border,
-                            borderWidth: 1,
-                            borderRadius: 14,
-                            padding: 12,
-                            gap: 10,
-                          }}
-                        >
-                          <Input value={dropdownQuery} onChangeText={setDropdownQuery} placeholder="חפש לקוח…" />
-                          <Pressable
-                            onPress={() => setStationRef(item.id, 'customer', null)}
-                            style={{
-                              backgroundColor: colors.card,
-                              borderColor: colors.border,
-                              borderWidth: 1,
-                              borderRadius: 14,
-                              paddingVertical: 10,
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Text style={{ color: colors.text, fontWeight: '900' }}>נקה לקוח</Text>
-                          </Pressable>
-                          <View style={{ maxHeight: 220 }}>
-                            <FlatList
-                              data={dropdownOptions}
-                              keyExtractor={(o) => o.value}
-                              keyboardShouldPersistTaps="handled"
-                              contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
-                              renderItem={({ item: o }) => (
-                                <Pressable
-                                  onPress={() => setStationRef(item.id, 'customer', o.value)}
-                                  style={{
-                                    backgroundColor: o.value === (item.customer_id ?? '') ? 'rgba(37, 99, 235, 0.10)' : colors.card,
-                                    borderColor: colors.border,
-                                    borderWidth: 1,
-                                    borderRadius: 14,
-                                    paddingVertical: 10,
-                                    paddingHorizontal: 10,
-                                  }}
-                                >
-                                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{o.label}</Text>
-                                </Pressable>
-                              )}
-                            />
-                          </View>
-                        </View>
-                      )}
-
-                      <Pressable
-                        onPress={() => {
-                          setDropdown((prev) => (prev?.stationId === item.id && prev.kind === 'worker' ? null : { stationId: item.id, kind: 'worker' }));
-                          setDropdownQuery('');
-                        }}
-                        style={{
-                          backgroundColor: colors.elevated,
-                          borderColor: colors.border,
-                          borderWidth: 1,
-                          borderRadius: 14,
-                          paddingHorizontal: 14,
-                          paddingVertical: 12,
-                        }}
-                      >
-                        <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
-                        <Text style={{ color: workerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
-                          {workerName ?? 'בחר עובד…'}
-                        </Text>
-                      </Pressable>
-
-                      {dropOpen && dropKind === 'worker' && (
-                        <View
-                          style={{
-                            backgroundColor: colors.elevated,
-                            borderColor: colors.border,
-                            borderWidth: 1,
-                            borderRadius: 14,
-                            padding: 12,
-                            gap: 10,
-                          }}
-                        >
-                          <Input value={dropdownQuery} onChangeText={setDropdownQuery} placeholder="חפש עובד…" />
-                          <Pressable
-                            onPress={() => setStationRef(item.id, 'worker', null)}
-                            style={{
-                              backgroundColor: colors.card,
-                              borderColor: colors.border,
-                              borderWidth: 1,
-                              borderRadius: 14,
-                              paddingVertical: 10,
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Text style={{ color: colors.text, fontWeight: '900' }}>נקה עובד</Text>
-                          </Pressable>
-                          <View style={{ maxHeight: 220 }}>
-                            <FlatList
-                              data={dropdownOptions}
-                              keyExtractor={(o) => o.value}
-                              keyboardShouldPersistTaps="handled"
-                              contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
-                              renderItem={({ item: o }) => (
-                                <Pressable
-                                  onPress={() => setStationRef(item.id, 'worker', o.value)}
-                                  style={{
-                                    backgroundColor: o.value === (item.worker_id ?? '') ? 'rgba(37, 99, 235, 0.10)' : colors.card,
-                                    borderColor: colors.border,
-                                    borderWidth: 1,
-                                    borderRadius: 14,
-                                    paddingVertical: 10,
-                                    paddingHorizontal: 10,
-                                  }}
-                                >
-                                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{o.label}</Text>
-                                </Pressable>
-                              )}
-                            />
-                          </View>
-                        </View>
-                      )}
-
-                      <Input
-                        label="שעה (HH:mm)"
-                        value={draft}
-                        onChangeText={(v) => {
-                          setTimeDraft((prev) => ({ ...prev, [item.id]: v }));
-                          setTimeError((prev) => ({ ...prev, [item.id]: '' }));
-                        }}
-                        placeholder="09:00"
-                        inputMode="numeric"
-                        onEndEditing={async () => {
-                          const value = (timeDraft[item.id] ?? '').trim();
-                          const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
-                          if (!isValid) {
-                            setTimeError((prev) => ({ ...prev, [item.id]: 'יש להזין שעה בפורמט HH:mm (למשל 09:00)' }));
-                            return;
-                          }
-                          try {
-                            setIsLoading(true);
-                            await updateStation(item.id, { scheduled_time: value });
-                            Toast.show({ type: 'success', text1: 'השעה עודכנה' });
-                          } catch (e: any) {
-                            Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
-                          } finally {
-                            setIsLoading(false);
-                          }
-                        }}
-                      />
-                      {!!err && <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>{err}</Text>}
-
-                      <Button title="מחק תחנה" variant="danger" onPress={() => deleteStation(item)} />
-                    </View>
-                  )}
                 </Card>
               );
             }}
             ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין תחנות.</Text>}
           />
+        </View>
+      </ModalDialog>
+
+      <ModalDialog
+        visible={!!editingStationId}
+        onClose={() => {
+          setEditingStationId(null);
+          setPickerKind(null);
+          setPickerQuery('');
+          setEditError('');
+        }}
+        containerStyle={{ height: '78%' }}
+      >
+        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+            {editingStation ? `עריכת תחנה #${editingStation.order}` : 'עריכת תחנה'}
+          </Text>
+          <Pressable
+            accessibilityLabel="סגור"
+            onPress={() => {
+              setEditingStationId(null);
+              setPickerKind(null);
+              setPickerQuery('');
+              setEditError('');
+            }}
+            style={({ pressed }) => ({
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: pressed ? 'rgba(100,116,139,0.18)' : 'rgba(100,116,139,0.10)',
+              borderWidth: 1,
+              borderColor: colors.border,
+            })}
+          >
+            <X size={18} color={colors.text} />
+          </Pressable>
+        </View>
+
+        <View style={{ marginTop: 12, gap: 10 }}>
+          <Pressable
+            onPress={() => {
+              setPickerKind('customer');
+              setPickerQuery('');
+            }}
+            style={{
+              backgroundColor: colors.elevated,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 14,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+            }}
+          >
+            <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+            <Text style={{ color: editForm.customerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
+              {editForm.customerId ? userNameById.get(editForm.customerId) ?? '—' : 'בחר לקוח…'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setPickerKind('worker');
+              setPickerQuery('');
+            }}
+            style={{
+              backgroundColor: colors.elevated,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 14,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+            }}
+          >
+            <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
+            <Text style={{ color: editForm.workerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
+              {editForm.workerId ? userNameById.get(editForm.workerId) ?? '—' : 'בחר עובד…'}
+            </Text>
+          </Pressable>
+
+          <Input
+            label="שעה (HH:mm)"
+            value={editForm.scheduledTime}
+            onChangeText={(v) => {
+              setEditForm((prev) => ({ ...prev, scheduledTime: v }));
+              setEditError('');
+            }}
+            placeholder="09:00"
+            inputMode="numeric"
+          />
+          {!!editError && <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>{editError}</Text>}
+
+          <Button title="שמור" variant="primary" onPress={saveEditingStation} />
+          <Button
+            title="מחק תחנה"
+            variant="danger"
+            onPress={async () => {
+              if (!editingStation) return;
+              const toDelete = editingStation;
+              setEditingStationId(null);
+              setPickerKind(null);
+              setPickerQuery('');
+              setEditError('');
+              await deleteStation(toDelete);
+            }}
+          />
+        </View>
+      </ModalDialog>
+
+      <ModalDialog
+        visible={pickerKind !== null}
+        onClose={() => {
+          setPickerKind(null);
+          setPickerQuery('');
+        }}
+        containerStyle={{ height: '78%' }}
+      >
+        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+            {pickerKind === 'worker' ? 'בחר עובד' : 'בחר לקוח'}
+          </Text>
+          <Pressable
+            accessibilityLabel="סגור"
+            onPress={() => {
+              setPickerKind(null);
+              setPickerQuery('');
+            }}
+            style={({ pressed }) => ({
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: pressed ? 'rgba(100,116,139,0.18)' : 'rgba(100,116,139,0.10)',
+              borderWidth: 1,
+              borderColor: colors.border,
+            })}
+          >
+            <X size={18} color={colors.text} />
+          </Pressable>
+        </View>
+
+        <View style={{ marginTop: 12, gap: 10, flex: 1 }}>
+          <Input
+            value={pickerQuery}
+            onChangeText={setPickerQuery}
+            placeholder={pickerKind === 'worker' ? 'חפש עובד…' : 'חפש לקוח…'}
+          />
+
+          <Pressable
+            onPress={() => {
+              setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: null } as any));
+              setPickerKind(null);
+              setPickerQuery('');
+            }}
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 14,
+              paddingVertical: 12,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: colors.text, fontWeight: '900' }}>{pickerKind === 'worker' ? 'נקה עובד' : 'נקה לקוח'}</Text>
+          </Pressable>
+
+          <View style={{ flex: 1 }}>
+            <FlatList
+              data={pickerUsers}
+              keyExtractor={(u) => u.id}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+              renderItem={({ item: u }) => {
+                const selectedId = pickerKind === 'worker' ? editForm.workerId : editForm.customerId;
+                const selected = selectedId === u.id;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: u.id } as any));
+                      setPickerKind(null);
+                      setPickerQuery('');
+                    }}
+                    style={({ pressed }) => ({
+                      backgroundColor: selected ? 'rgba(37, 99, 235, 0.12)' : colors.elevated,
+                      borderColor: selected ? 'rgba(37, 99, 235, 0.35)' : colors.border,
+                      borderWidth: 1,
+                      borderRadius: 14,
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                      transform: [{ scale: pressed ? 0.99 : 1 }],
+                    })}
+                  >
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                      <Avatar size={28} uri={u.avatar_url ?? null} name={u.name} style={{ backgroundColor: '#fff' }} />
+                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>{u.name}</Text>
+                    </View>
+                  </Pressable>
+                );
+              }}
+              ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין תוצאות.</Text>}
+            />
+          </View>
         </View>
       </ModalDialog>
     </Screen>

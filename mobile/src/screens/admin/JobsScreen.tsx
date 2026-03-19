@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, SectionList, Text, View, Image } from 'react-native';
+import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, StyleSheet, Text, View, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
-import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Pencil, Rocket, Search, Trash2 } from 'lucide-react-native';
+import { Eye, Pencil, Search, Trash2 } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
@@ -15,10 +14,15 @@ import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
 import { Avatar } from '../../components/ui/Avatar';
 import { getPublicUrl } from '../../lib/storage';
+import { pickImageFromLibrary } from '../../lib/media';
+import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
 import { supabase } from '../../lib/supabase';
 import { yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
-import type { AdminDrawerParamList } from '../../navigation/AdminDrawer';
+import { useLoading } from '../../state/LoadingContext';
+import { FabButton } from '../../components/ui/FabButton';
+
+const { height: screenHeight } = Dimensions.get('window');
 
 type JobStatus = 'pending' | 'completed';
 type JobKind = 'regular' | 'installation' | 'special';
@@ -76,7 +80,7 @@ type Filters = {
 };
 
 export function JobsScreen() {
-  const navigation = useNavigation<any>();
+  const { setIsLoading } = useLoading();
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserLite[]>([]);
   const [items, setItems] = useState<UnifiedJob[]>([]);
@@ -86,6 +90,13 @@ export function JobsScreen() {
   const [selected, setSelected] = useState<UnifiedJob | null>(null);
   const [regularPoints, setRegularPoints] = useState<(JobServicePoint & { sp?: ServicePoint | null })[]>([]);
   const [images, setImages] = useState<string[]>([]);
+
+  const [execJob, setExecJob] = useState<UnifiedJob | null>(null);
+  const [execOpen, setExecOpen] = useState(false);
+  const [execPoints, setExecPoints] = useState<
+    (JobServicePoint & { sp?: ServicePoint | null; localImageUri?: string | null; uploading?: boolean })[]
+  >([]);
+  const execCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<UnifiedJob | null>(null);
@@ -202,8 +213,27 @@ export function JobsScreen() {
     return keys.map((k) => ({ title: k, data: map.get(k)! }));
   }, [filtered]);
 
-  const openJob = async (job: UnifiedJob) => {
-    setSelected(job);
+  const closeExec = useCallback(() => {
+    setExecOpen(false);
+    if (execCloseTimerRef.current) clearTimeout(execCloseTimerRef.current);
+    execCloseTimerRef.current = setTimeout(() => {
+      setExecJob(null);
+      setExecPoints([]);
+    }, 520);
+  }, []);
+
+  const openJob = async (job: UnifiedJob, opts?: { mode?: 'view' | 'execute' }) => {
+    const mode = opts?.mode ?? 'view';
+    if (mode === 'execute') {
+      setSelected(null);
+      setExecJob(job);
+      setExecOpen(false);
+      setExecPoints([]);
+      setTimeout(() => setExecOpen(true), 0);
+    } else {
+      setSelected(job);
+    }
+
     setRegularPoints([]);
     setImages([]);
 
@@ -226,7 +256,11 @@ export function JobsScreen() {
           spMap = new Map(((sps ?? []) as ServicePoint[]).map((sp) => [sp.id, sp]));
         }
 
-        setRegularPoints(rows.map((r) => ({ ...r, sp: spMap.get(r.service_point_id) ?? null })));
+        const enriched = rows.map((r) => ({ ...r, sp: spMap.get(r.service_point_id) ?? null }));
+        setRegularPoints(enriched);
+        if (mode === 'execute') {
+          setExecPoints(enriched.map((r) => ({ ...r, localImageUri: null, uploading: false })));
+        }
         const urls = rows
           .map((r) => r.image_url)
           .filter(Boolean)
@@ -253,6 +287,52 @@ export function JobsScreen() {
       }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת פרטים נכשלה', text2: e?.message ?? 'Unknown error' });
+    }
+  };
+
+  const pickExecImage = async (jobServicePointId: string) => {
+    const uri = await pickImageFromLibrary();
+    if (!uri) return;
+    setExecPoints((prev) => prev.map((p) => (p.id === jobServicePointId ? { ...p, localImageUri: uri } : p)));
+  };
+
+  const uploadExecPoint = async (
+    p: JobServicePoint & { localImageUri?: string | null; uploading?: boolean }
+  ) => {
+    if (!execJob || execJob.kind !== 'regular') return;
+    if (!p.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
+    try {
+      setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
+      const storagePath = await uploadJobServicePointImage({
+        jobId: execJob.id,
+        jobServicePointId: p.id,
+        servicePointId: p.service_point_id,
+        localUri: p.localImageUri,
+      });
+      setExecPoints((prev) =>
+        prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false, localImageUri: null } : x))
+      );
+      setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath } : x)));
+      setImages((prev) => Array.from(new Set([...prev, getPublicUrl(storagePath)])));
+      Toast.show({ type: 'success', text1: 'התמונה הועלתה' });
+    } catch (e: any) {
+      setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: false } : x)));
+      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
+    }
+  };
+
+  const completeExecJob = async () => {
+    if (!execJob || execJob.kind !== 'regular') return;
+    try {
+      setIsLoading(true);
+      await completeUnifiedJob('regular', execJob.id);
+      setItems((prev) => prev.map((j) => (j.kind === 'regular' && j.id === execJob.id ? { ...j, status: 'completed' } : j)));
+      setExecJob((p) => (p ? { ...p, status: 'completed' } : p));
+      Toast.show({ type: 'success', text1: 'המשימה הושלמה' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'סיום נכשל', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -409,73 +489,6 @@ export function JobsScreen() {
         contentContainerStyle={{ paddingBottom: 24 }}
         ListHeaderComponent={
           <View style={{ gap: 14, marginBottom: 14, paddingTop: 4 }}>
-            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <View style={{ gap: 4 }}>
-                <Text style={{ color: ui.text, fontSize: 30, fontWeight: '900', textAlign: 'right' }}>ניהול משימות</Text>
-                <Text style={{ color: '#414755', fontSize: 13, fontWeight: '700', textAlign: 'right' }}>
-                  צפייה וניהול כל המשימות במערכת
-                </Text>
-              </View>
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 14,
-                  backgroundColor: '#D8E2FF',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Rocket size={26} color={ui.primary} />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-              <Pressable
-                onPress={() => navigation.navigate('JobExecution' satisfies keyof AdminDrawerParamList)}
-                style={({ pressed }) => [
-                  {
-                    flex: 1,
-                    backgroundColor: ui.primary,
-                    borderRadius: 999,
-                    paddingVertical: 16,
-                    paddingHorizontal: 16,
-                    flexDirection: 'row-reverse',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    shadowColor: ui.primary,
-                    shadowOpacity: 0.18,
-                    shadowRadius: 18,
-                    shadowOffset: { width: 0, height: 10 },
-                    elevation: 3,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <Text style={{ color: '#fff', fontWeight: '900' }}>ביצוע משימה</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => navigation.navigate('AddJobs' satisfies keyof AdminDrawerParamList)}
-                style={({ pressed }) => [
-                  {
-                    flex: 1,
-                    backgroundColor: ui.surfaceContainerHigh,
-                    borderRadius: 999,
-                    paddingVertical: 16,
-                    paddingHorizontal: 16,
-                    flexDirection: 'row-reverse',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <Text style={{ color: ui.text, fontWeight: '900' }}>הוסף משימה</Text>
-              </Pressable>
-            </View>
-
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
               {[
                 { label: 'הושלמו', value: stats.completed, bg: 'rgba(34,197,94,0.12)', fg: '#166534' },
@@ -622,27 +635,12 @@ export function JobsScreen() {
 
                 {item.kind === 'regular' && item.status === 'pending' ? (
                   <View style={{ flexDirection: 'row-reverse', marginTop: 6 }}>
-                    <Pressable
+                    <Button
+                      title="בצע משימה"
+                      fullWidth={false}
                       onPress={() => openJob(item, { mode: 'execute' })}
-                      style={({ pressed }) => [
-                        {
-                          flexDirection: 'row-reverse',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 8,
-                          backgroundColor: 'rgba(0,88,188,0.10)',
-                          borderWidth: 1,
-                          borderColor: 'rgba(0,88,188,0.22)',
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          borderRadius: 999,
-                          opacity: pressed ? 0.8 : 1,
-                        },
-                      ]}
-                    >
-                      <Entypo name="controller-play" size={18} color="#0058BC" />
-                      <Text style={{ color: '#0058BC', fontWeight: '900' }}>בצע</Text>
-                    </Pressable>
+                      style={{ borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 }}
+                    />
                   </View>
                 ) : null}
               </View>
@@ -889,7 +887,103 @@ export function JobsScreen() {
           <Button title="סגור" variant="secondary" onPress={() => setCustomerPointsOpen(false)} />
         </View>
       </OriginWindow>
+
+      {!!execJob ? (
+        <>
+          {execOpen ? (
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={closeExec}>
+              <View style={stylesExecBackdrop.backdrop} />
+            </Pressable>
+          ) : null}
+
+          <FabButton
+            isOpen={execOpen}
+            onPress={() => (execOpen ? closeExec() : setExecOpen(true))}
+            openedSize={Math.min(420, Math.max(320, Dimensions.get('window').width * 0.92))}
+            panelStyle={{
+              right: 12,
+              maxHeight: screenHeight * 0.84,
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+            fabStyle={{ backgroundColor: colors.primary }}
+            openIconName="controller-play"
+          >
+            <View style={{ gap: 10 }}>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
+                ביצוע משימה
+              </Text>
+              <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right' }}>
+                #{execJob.order_number ?? '—'} • סטטוס: {execJob.status}
+              </Text>
+            </View>
+
+            <FlatList
+              data={execPoints}
+              keyExtractor={(i) => i.id}
+              style={{ maxHeight: screenHeight * 0.52 }}
+              contentContainerStyle={{ gap: 10, paddingBottom: 6, paddingTop: 2 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
+                const previewUri = item.localImageUri ?? currentImageUrl ?? null;
+                const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
+                return (
+                  <Card style={{ gap: 10 }}>
+                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }} numberOfLines={2}>
+                      {item.sp?.device_type ?? `נקודה ${item.service_point_id.slice(0, 6)}`}
+                    </Text>
+                    <Text style={{ color: colors.muted, textAlign: 'right' }}>
+                      ניחוח: {item.sp?.scent_type ?? '-'} • מילוי: {refill ?? '-'}
+                    </Text>
+
+                    {previewUri ? (
+                      <Image
+                        source={{ uri: previewUri }}
+                        style={{ width: '100%', height: 150, borderRadius: 14 }}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+
+                    <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Button title="בחר תמונה" variant="secondary" onPress={() => pickExecImage(item.id)} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Button
+                          title={item.uploading ? 'מעלה…' : 'העלה'}
+                          disabled={!!item.uploading}
+                          onPress={() => uploadExecPoint(item)}
+                        />
+                      </View>
+                    </View>
+                  </Card>
+                );
+              }}
+              ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות.</Text>}
+            />
+
+            <View style={{ gap: 10 }}>
+              <Button
+                title={execJob.status === 'completed' ? 'כבר הושלם' : 'סיים משימה'}
+                disabled={execJob.status === 'completed'}
+                onPress={completeExecJob}
+              />
+              <Button title="סגור" variant="secondary" onPress={closeExec} />
+            </View>
+          </FabButton>
+        </>
+      ) : null}
     </Screen>
   );
 }
+
+const stylesExecBackdrop = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+});
 
