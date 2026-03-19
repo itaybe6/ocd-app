@@ -1,19 +1,19 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, Pressable, Text, View } from 'react-native';
+import { FlatList, Image, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
-import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
-import { yyyyMmDd } from '../../lib/time';
+import { toDate, yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
+import { Calendar, Search, X } from 'lucide-react-native';
 
 type Kind = 'installation' | 'special';
 type Status = 'pending' | 'completed';
@@ -41,9 +41,16 @@ export function InstallationJobsScreen() {
   const [statusFilter, setStatusFilter] = useState<'' | Status>('');
   const [kindFilter, setKindFilter] = useState<'' | Kind>('');
   const [dateFilter, setDateFilter] = useState('');
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const [selected, setSelected] = useState<Unified | null>(null);
   const [devices, setDevices] = useState<InstallationDevice[]>([]);
+
+  const dateValue = useMemo(() => {
+    if (!dateFilter) return new Date();
+    const d = toDate(dateFilter);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }, [dateFilter]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -120,48 +127,248 @@ export function InstallationJobsScreen() {
 
   return (
     <Screen backgroundColor="#FAF9FE">
-      <View style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchAll} />
-          <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>משימות מיוחדות</Text>
-        </View>
-        <Input label="חיפוש (id/מספר הזמנה)" value={q} onChangeText={setQ} />
-        <Input label="תאריך (yyyy-MM-dd) אופציונלי" value={dateFilter} onChangeText={setDateFilter} placeholder="2026-03-15" />
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <View style={{ flex: 1 }}>
-            <SelectSheet
-              label="סוג"
-              value={kindFilter}
-              placeholder="הכל"
-              options={[
-                { value: '', label: 'הכל' },
-                { value: 'installation', label: 'installation' },
-                { value: 'special', label: 'special' },
-              ]}
-              onChange={(v) => setKindFilter((v || '') as any)}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <SelectSheet
-              label="סטטוס"
-              value={statusFilter}
-              placeholder="הכל"
-              options={[
-                { value: '', label: 'הכל' },
-                { value: 'pending', label: 'pending' },
-                { value: 'completed', label: 'completed' },
-              ]}
-              onChange={(v) => setStatusFilter((v || '') as any)}
-            />
-          </View>
-        </View>
-      </View>
-
       <FlatList
-        style={{ marginTop: 12 }}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchAll} />}
+        style={{ marginTop: 8 }}
         data={filtered}
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View style={{ gap: 10 }}>
+            <View
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 18,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: 'rgba(60,60,67,0.12)',
+                shadowColor: '#000',
+                shadowOpacity: 0.06,
+                shadowRadius: 10,
+                shadowOffset: { width: 0, height: 6 },
+                elevation: 2,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  backgroundColor: 'rgba(118,118,128,0.12)',
+                  borderRadius: 14,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderWidth: 1,
+                  borderColor: 'rgba(60,60,67,0.08)',
+                }}
+              >
+                <Search size={18} color="rgba(60,60,67,0.6)" />
+                <TextInput
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder="חיפוש לפי מזהה / מספר הזמנה"
+                  placeholderTextColor="rgba(60,60,67,0.6)"
+                  style={{
+                    flex: 1,
+                    color: colors.text,
+                    fontSize: 16,
+                    textAlign: 'right',
+                    paddingVertical: 0,
+                  }}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+                {!!q.trim() && (
+                  <Pressable
+                    onPress={() => setQ('')}
+                    hitSlop={10}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(60,60,67,0.18)',
+                    }}
+                  >
+                    <X size={16} color="rgba(60,60,67,0.8)" />
+                  </Pressable>
+                )}
+              </View>
+
+              <View style={{ marginTop: 10, flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>סוג</Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      backgroundColor: 'rgba(118,118,128,0.12)',
+                      borderRadius: 12,
+                      padding: 3,
+                      borderWidth: 1,
+                      borderColor: 'rgba(60,60,67,0.08)',
+                    }}
+                  >
+                    {[
+                      { value: '' as const, label: 'הכל' },
+                      { value: 'installation' as const, label: 'התקנה' },
+                      { value: 'special' as const, label: 'מיוחדת' },
+                    ].map((opt) => {
+                      const active = kindFilter === opt.value;
+                      return (
+                        <Pressable
+                          key={opt.value || 'all'}
+                          onPress={() => setKindFilter(opt.value)}
+                          style={{
+                            flex: 1,
+                            borderRadius: 10,
+                            paddingVertical: 8,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: active ? '#FFFFFF' : 'transparent',
+                            shadowColor: '#000',
+                            shadowOpacity: active ? 0.08 : 0,
+                            shadowRadius: active ? 6 : 0,
+                            shadowOffset: { width: 0, height: 3 },
+                            elevation: active ? 1 : 0,
+                          }}
+                        >
+                          <Text style={{ color: active ? colors.text : 'rgba(60,60,67,0.8)', fontWeight: '800' }}>{opt.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>סטטוס</Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      backgroundColor: 'rgba(118,118,128,0.12)',
+                      borderRadius: 12,
+                      padding: 3,
+                      borderWidth: 1,
+                      borderColor: 'rgba(60,60,67,0.08)',
+                    }}
+                  >
+                    {[
+                      { value: '' as const, label: 'הכל' },
+                      { value: 'pending' as const, label: 'ממתין' },
+                      { value: 'completed' as const, label: 'הושלם' },
+                    ].map((opt) => {
+                      const active = statusFilter === opt.value;
+                      return (
+                        <Pressable
+                          key={opt.value || 'all'}
+                          onPress={() => setStatusFilter(opt.value)}
+                          style={{
+                            flex: 1,
+                            borderRadius: 10,
+                            paddingVertical: 8,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: active ? '#FFFFFF' : 'transparent',
+                            shadowColor: '#000',
+                            shadowOpacity: active ? 0.08 : 0,
+                            shadowRadius: active ? 6 : 0,
+                            shadowOffset: { width: 0, height: 3 },
+                            elevation: active ? 1 : 0,
+                          }}
+                        >
+                          <Text style={{ color: active ? colors.text : 'rgba(60,60,67,0.8)', fontWeight: '800' }}>{opt.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+
+              <View style={{ marginTop: 10 }}>
+                <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>תאריך (אופציונלי)</Text>
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS === 'android') {
+                      DateTimePickerAndroid.open({
+                        value: dateValue,
+                        mode: 'date',
+                        is24Hour: true,
+                        onChange: (_event, selectedDate) => {
+                          if (!selectedDate) return;
+                          setDateFilter(yyyyMmDd(selectedDate));
+                        },
+                      });
+                      return;
+                    }
+                    setDatePickerOpen(true);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    backgroundColor: 'rgba(118,118,128,0.12)',
+                    borderRadius: 14,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderWidth: 1,
+                    borderColor: 'rgba(60,60,67,0.08)',
+                  }}
+                >
+                  <Calendar size={18} color="rgba(60,60,67,0.6)" />
+                  <Text
+                    style={{
+                      flex: 1,
+                      color: dateFilter ? colors.text : 'rgba(60,60,67,0.6)',
+                      fontSize: 16,
+                      fontWeight: '700',
+                      textAlign: 'right',
+                    }}
+                  >
+                    {dateFilter ? dateFilter : 'בחירת תאריך'}
+                  </Text>
+                  {!!dateFilter.trim() && (
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setDateFilter('');
+                      }}
+                      hitSlop={10}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(60,60,67,0.18)',
+                      }}
+                    >
+                      <X size={16} color="rgba(60,60,67,0.8)" />
+                    </Pressable>
+                  )}
+                </Pressable>
+              </View>
+
+              <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Button title="נקה סינון" variant="secondary" fullWidth onPress={() => {
+                    setQ('');
+                    setDateFilter('');
+                    setKindFilter('');
+                    setStatusFilter('');
+                  }} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button title={loading ? 'טוען…' : 'רענון'} fullWidth onPress={fetchAll} />
+                </View>
+              </View>
+            </View>
+
+            <Text style={{ color: colors.muted, textAlign: 'right' }}>
+              מציג {filtered.length} {filtered.length === 1 ? 'משימה' : 'משימות'}
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <JobCard
             title={`#${item.order_number ?? '—'} - ${kindLabel(item.kind)}`}
@@ -227,6 +434,39 @@ export function InstallationJobsScreen() {
             <Button title="סגור" variant="secondary" onPress={() => setSelected(null)} />
           </View>
         )}
+      </ModalSheet>
+
+      <ModalSheet visible={datePickerOpen} onClose={() => setDatePickerOpen(false)}>
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setDatePickerOpen(false)} />
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
+          </View>
+
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
+            <DateTimePicker
+              value={dateValue}
+              mode="date"
+              display="inline"
+              themeVariant="light"
+              onChange={(_event, selectedDate) => {
+                if (!selectedDate) return;
+                setDateFilter(yyyyMmDd(selectedDate));
+              }}
+            />
+          </View>
+
+          {!!dateFilter && (
+            <Button
+              title="נקה תאריך"
+              variant="secondary"
+              onPress={() => {
+                setDateFilter('');
+                setDatePickerOpen(false);
+              }}
+            />
+          )}
+        </View>
       </ModalSheet>
     </Screen>
   );

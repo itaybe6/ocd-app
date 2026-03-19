@@ -139,17 +139,15 @@ function SectionGroup({ section, activeKey, supportNewCount, navigate }: {
         <Text style={styles.sectionTitle}>{section.title}</Text>
       </View>
       <View style={styles.sectionCard}>
-        {section.items.map((it, idx) => (
-          <React.Fragment key={String(it.key)}>
-            {idx > 0 && <View style={styles.itemDivider} />}
-            <DrawerNavItem
-              label={it.label}
-              Icon={it.icon}
-              active={activeKey === it.key}
-              badgeCount={it.badge === 'supportNew' ? supportNewCount : undefined}
-              onPress={() => navigate(it.key as string)}
-            />
-          </React.Fragment>
+        {section.items.map((it) => (
+          <DrawerNavItem
+            key={String(it.key)}
+            label={it.label}
+            Icon={it.icon}
+            active={activeKey === it.key}
+            badgeCount={it.badge === 'supportNew' ? supportNewCount : undefined}
+            onPress={() => navigate(it.key as string)}
+          />
         ))}
       </View>
     </View>
@@ -481,7 +479,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: D.border,
     overflow: 'hidden',
-    paddingVertical: 6,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     shadowColor: D.text,
     shadowOpacity: 0.06,
     shadowRadius: 14,
@@ -495,6 +495,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 58,
     paddingHorizontal: 14,
+    marginHorizontal: 0,
+    borderRadius: 12,
     gap: 10,
     position: 'relative',
     overflow: 'hidden',
@@ -514,11 +516,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
   },
-  itemDivider: {
-    height: 1,
-    marginHorizontal: 14,
-    backgroundColor: D.borderFaint,
-  },
+  itemDivider: { height: 0 },
   iconBubble: {
     width: 34,
     height: 34,

@@ -2,7 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
+import { addDays, format } from 'date-fns';
+import { he } from 'date-fns/locale';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -11,11 +14,33 @@ import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
-import { yyyyMmDd } from '../../lib/time';
+import { toDate, yyyyMmDd } from '../../lib/time';
 import { useLoading } from '../../state/LoadingContext';
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
+
+LocaleConfig.locales.he = {
+  monthNames: [
+    'ינואר',
+    'פברואר',
+    'מרץ',
+    'אפריל',
+    'מאי',
+    'יוני',
+    'יולי',
+    'אוגוסט',
+    'ספטמבר',
+    'אוקטובר',
+    'נובמבר',
+    'דצמבר',
+  ],
+  monthNamesShort: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יונ׳', 'יול׳', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'],
+  dayNames: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
+  dayNamesShort: ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'],
+  today: 'היום',
+};
+LocaleConfig.defaultLocale = 'he';
 
 type Unified = {
   kind: Kind;
@@ -53,7 +78,8 @@ function updateIsoTime(iso: string, timeHm: string): string {
 export function DailyScheduleScreen() {
   const { setIsLoading } = useLoading();
   const [day, setDay] = useState(yyyyMmDd(new Date()));
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateSheetOpen, setDateSheetOpen] = useState(false);
+  const [tempDay, setTempDay] = useState(day);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [workerId, setWorkerId] = useState('');
   const [items, setItems] = useState<Unified[]>([]);
@@ -76,15 +102,15 @@ export function DailyScheduleScreen() {
     return Number.isNaN(d.getTime()) ? new Date() : d;
   }, [day]);
 
-  const onDatePicked = useCallback(
-    (event: DateTimePickerEvent, selected?: Date) => {
-      if (Platform.OS !== 'ios') setShowDatePicker(false);
-      if (event.type !== 'set') return;
-      if (!selected) return;
-      setDay(yyyyMmDd(selected));
-    },
-    []
-  );
+  const openDatePicker = useCallback(() => {
+    setTempDay(day);
+    setDateSheetOpen(true);
+  }, [day]);
+
+  const prettyDay = useMemo(() => {
+    const d = toDate(day);
+    return format(d, 'EEEE, dd/MM/yyyy', { locale: he });
+  }, [day]);
 
   const fetchWorkers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role').eq('role', 'worker').order('name');
@@ -171,23 +197,128 @@ export function DailyScheduleScreen() {
           <Input label="תאריך (yyyy-MM-dd)" value={day} onChangeText={setDay} />
         ) : (
           <>
-            <Pressable onPress={() => setShowDatePicker(true)}>
-              <Input
-                label="תאריך"
-                value={day}
-                editable={false}
-                onPressIn={() => setShowDatePicker(true)}
-                pointerEvents="none"
-              />
-            </Pressable>
-            {showDatePicker && (
-              <DateTimePicker
-                value={parsedDay}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={onDatePicked}
-              />
-            )}
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right' }}>תאריך</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Pressable
+                  onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -1)))}
+                  style={{
+                    width: 44,
+                    height: 52,
+                    borderRadius: 16,
+                    backgroundColor: colors.elevated,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ChevronRight size={20} color={colors.text} />
+                </Pressable>
+
+                <Pressable
+                  onPress={openDatePicker}
+                  style={{
+                    flex: 1,
+                    minHeight: 52,
+                    borderRadius: 16,
+                    backgroundColor: colors.elevated,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    paddingHorizontal: 14,
+                    justifyContent: 'center',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <CalendarDays size={20} color={colors.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{prettyDay}</Text>
+                      <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right' }}>{day}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 1)))}
+                  style={{
+                    width: 44,
+                    height: 52,
+                    borderRadius: 16,
+                    backgroundColor: colors.elevated,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ChevronLeft size={20} color={colors.text} />
+                </Pressable>
+              </View>
+            </View>
+
+            <ModalSheet visible={dateSheetOpen} onClose={() => setDateSheetOpen(false)} containerStyle={{ paddingBottom: 18 }}>
+              <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
+                  <Pressable
+                    onPress={() => setTempDay(yyyyMmDd(new Date()))}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 999,
+                      backgroundColor: colors.elevated,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text style={{ color: colors.text, fontWeight: '900' }}>היום</Text>
+                  </Pressable>
+                </View>
+
+                <Calendar
+                  current={tempDay}
+                  onDayPress={(d) => setTempDay(d.dateString)}
+                  markedDates={{
+                    [tempDay]: { selected: true, selectedColor: colors.primary, selectedTextColor: '#fff' },
+                  }}
+                  enableSwipeMonths
+                  firstDay={0}
+                  style={{ borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}
+                  theme={{
+                    calendarBackground: colors.card,
+                    textSectionTitleColor: colors.muted,
+                    todayTextColor: colors.primary,
+                    dayTextColor: colors.text,
+                    monthTextColor: colors.text,
+                    textMonthFontWeight: '900',
+                    textDayFontWeight: '700',
+                    textDayHeaderFontWeight: '800',
+                    arrowColor: colors.text,
+                    selectedDayBackgroundColor: colors.primary,
+                    selectedDayTextColor: '#fff',
+                  }}
+                />
+
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <Button
+                    title="ביטול"
+                    variant="secondary"
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    onPress={() => setDateSheetOpen(false)}
+                  />
+                  <Button
+                    title="אישור"
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    onPress={() => {
+                      setDay(tempDay);
+                      setDateSheetOpen(false);
+                    }}
+                  />
+                </View>
+              </View>
+            </ModalSheet>
           </>
         )}
         <SelectSheet label="עובד" value={workerId} options={workerOptions} onChange={setWorkerId} />

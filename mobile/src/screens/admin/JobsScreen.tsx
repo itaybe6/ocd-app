@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, SectionList, Text, View, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
+import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
@@ -86,11 +87,17 @@ export function JobsScreen() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<UnifiedJob | null>(null);
+  const [editOriginRect, setEditOriginRect] = useState<OriginRect | null>(null);
+  // ref stores the rect immediately from onPressIn (measureInWindow callback);
+  // state is set when the modal actually opens so the animation starts from the right place
+  const editOriginRectRef = useRef<OriginRect | null>(null);
 
   const [customerPointsOpen, setCustomerPointsOpen] = useState(false);
   const [customerPointsLoading, setCustomerPointsLoading] = useState(false);
   const [customerPointsUserId, setCustomerPointsUserId] = useState<string | null>(null);
   const [customerPoints, setCustomerPoints] = useState<CustomerServicePoint[]>([]);
+  const [customerPointsOriginRect, setCustomerPointsOriginRect] = useState<OriginRect | null>(null);
+  const customerPointsOriginRectRef = useRef<OriginRect | null>(null);
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
 
@@ -253,6 +260,8 @@ export function JobsScreen() {
       return;
     }
 
+    // Flush the latest captured rect into state right before opening
+    setCustomerPointsOriginRect(customerPointsOriginRectRef.current);
     setCustomerPointsOpen(true);
     setCustomerPointsLoading(true);
     setCustomerPointsUserId(custId);
@@ -300,6 +309,8 @@ export function JobsScreen() {
 
   const openEdit = (job: UnifiedJob) => {
     setEditing({ ...job });
+    // Flush the latest captured rect into state right before opening
+    setEditOriginRect(editOriginRectRef.current);
     setEditOpen(true);
   };
 
@@ -570,7 +581,7 @@ export function JobsScreen() {
         renderItem={({ item }) => (
           <JobCard
             kind={item.kind}
-            title={`${item.order_number ?? '—'} · ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
+            title={`${item.order_number ?? '—'} ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
             status={item.status}
             primaryText={item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
             description={item.notes ?? null}
@@ -579,7 +590,11 @@ export function JobsScreen() {
             style={{ marginBottom: 12 }}
             actions={
               <>
-                <JobCardAction label="ערוך" onPress={() => openEdit(item)}>
+                <JobCardAction
+                  label="ערוך"
+                  onPress={() => openEdit(item)}
+                  onOriginRect={(r) => { editOriginRectRef.current = r; }}
+                >
                   <Pencil size={20} color="#414755" />
                 </JobCardAction>
                 <JobCardAction
@@ -594,7 +609,12 @@ export function JobsScreen() {
                 >
                   <Trash2 size={20} color={colors.danger} />
                 </JobCardAction>
-                <JobCardAction label="נקודות לקוח" disabled={!item.customer_id} onPress={() => openCustomerPoints(item)}>
+                <JobCardAction
+                  label="נקודות לקוח"
+                  disabled={!item.customer_id}
+                  onPress={() => openCustomerPoints(item)}
+                  onOriginRect={(r) => { customerPointsOriginRectRef.current = r; }}
+                >
                   <Eye size={20} color="#414755" />
                 </JobCardAction>
               </>
@@ -680,8 +700,12 @@ export function JobsScreen() {
         )}
       </ModalSheet>
 
-      <ModalSheet visible={editOpen} onClose={() => setEditOpen(false)}>
-        <View style={{ gap: 10 }}>
+      <OriginWindow visible={editOpen} originRect={editOriginRect} onClose={() => setEditOpen(false)}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 14, gap: 10, paddingBottom: 22 }}
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>עריכת משימה</Text>
           {!!editing && (
             <>
@@ -738,7 +762,9 @@ export function JobsScreen() {
                       label="Battery type"
                       value={String((editing as any).battery_type ?? 'AA')}
                       options={BATTERY_TYPES}
-                      onChange={(v) => setEditing((p) => (p && p.kind === 'special' ? ({ ...p, battery_type: v } as any) : p))}
+                      onChange={(v) =>
+                        setEditing((p) => (p && p.kind === 'special' ? ({ ...p, battery_type: v } as any) : p))
+                      }
                     />
                   ) : null}
                 </>
@@ -748,11 +774,12 @@ export function JobsScreen() {
               <Button title="סגור" variant="secondary" onPress={() => setEditOpen(false)} />
             </>
           )}
-        </View>
-      </ModalSheet>
+        </ScrollView>
+      </OriginWindow>
 
-      <ModalSheet
+      <OriginWindow
         visible={customerPointsOpen}
+        originRect={customerPointsOriginRect}
         onClose={() => {
           setCustomerPointsOpen(false);
           setCustomerPointsUserId(null);
@@ -760,7 +787,7 @@ export function JobsScreen() {
           setCustomerPointsLoading(false);
         }}
       >
-        <View style={{ gap: 12 }}>
+        <View style={{ flex: 1, padding: 14, gap: 12 }}>
           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
             נקודות שירות ללקוח
           </Text>
@@ -775,6 +802,7 @@ export function JobsScreen() {
               data={customerPoints}
               keyExtractor={(i) => i.id}
               contentContainerStyle={{ gap: 10, paddingBottom: 6 }}
+              style={{ flex: 1 }}
               renderItem={({ item }) => (
                 <Card>
                   <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.device_type}</Text>
@@ -794,7 +822,7 @@ export function JobsScreen() {
 
           <Button title="סגור" variant="secondary" onPress={() => setCustomerPointsOpen(false)} />
         </View>
-      </ModalSheet>
+      </OriginWindow>
     </Screen>
   );
 }

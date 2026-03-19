@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, Text, View, type ViewStyle } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, Text, View, type GestureResponderEvent, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
 
 export type JobCardStatus = 'pending' | 'completed';
@@ -28,29 +28,47 @@ function kindAccentColor(kind?: JobCardKind): string {
 export function JobCardAction({
   label,
   onPress,
+  onPressIn,
+  onOriginRect,
   disabled,
   children,
   variant = 'neutral',
 }: {
   label: string;
   onPress: () => void;
+  onPressIn?: (e: GestureResponderEvent) => void;
+  onOriginRect?: (rect: { x: number; y: number; width: number; height: number; borderRadius: number }) => void;
   disabled?: boolean;
   variant?: 'neutral' | 'danger';
   children: React.ReactNode;
 }) {
+  // ref must be on the inner View (not Pressable) for measureInWindow to work reliably
+  const innerRef = useRef<View>(null);
+
+  const captureOriginRect = () => {
+    if (!onOriginRect) return;
+    innerRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        onOriginRect({ x, y, width, height, borderRadius: 13 });
+      }
+    });
+  };
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        {
-          opacity: disabled ? 0.28 : pressed ? 0.55 : 1,
-        },
-      ]}
+      onPressIn={(e) => {
+        captureOriginRect();
+        onPressIn?.(e);
+      }}
+      style={({ pressed }) => [{ opacity: disabled ? 0.28 : pressed ? 0.55 : 1 }]}
     >
       <View
+        ref={innerRef}
+        collapsable={false}
         style={{
           width: 40,
           height: 40,
@@ -217,7 +235,6 @@ export function JobCard({
         {
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
-          overflow: 'hidden',
           borderWidth: 1,
           borderColor: 'rgba(0,0,0,0.06)',
           opacity: faded ? 0.72 : 1,
@@ -225,20 +242,7 @@ export function JobCard({
         style,
       ]}
     >
-      {kind && (
-        <View
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 4,
-            backgroundColor: accentColor,
-          }}
-        />
-      )}
-
-      <View style={{ padding: 16, paddingRight: kind ? 20 : 16 }}>
+      <View style={{ padding: 16 }}>
         {onPress ? (
           <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}>
             {inner}
