@@ -10,7 +10,7 @@ import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import { useLoading } from '../../state/LoadingContext';
 
-type Customer = { id: string; name: string; role: 'customer'; price?: number | null };
+type Customer = { id: string; name: string; role: 'customer'; price?: number | null; avatar_url?: string | null };
 type Job = { id: string; date: string; status: 'pending' | 'completed' };
 type ServicePoint = { id: string; refill_amount: number };
 type JobServicePoint = { id: string; job_id: string; service_point_id: string; custom_refill_amount?: number | null };
@@ -26,12 +26,12 @@ export function ReportsScreen() {
   const [customerPrice, setCustomerPrice] = useState<number | null>(null);
 
   const customerOptions = useMemo(
-    () => customers.map((c) => ({ value: c.id, label: c.name })),
+    () => customers.map((c) => ({ value: c.id, label: c.name, avatarUrl: c.avatar_url ?? null })),
     [customers]
   );
 
   const fetchCustomers = useCallback(async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role, price').eq('role', 'customer').order('name');
+    const { data, error } = await supabase.from('users').select('id, name, role, price, avatar_url').eq('role', 'customer').order('name');
     if (!error) setCustomers((data ?? []) as any);
   }, []);
 

@@ -3,13 +3,16 @@ import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Screen } from '../../components/Screen';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { supabase } from '../../lib/supabase';
+import { Avatar } from '../../components/ui/Avatar';
+import { supabase, USER_AVATARS_BUCKET } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import type { UserRole } from '../../types/database';
 
@@ -21,6 +24,7 @@ type UserRow = {
   name: string;
   address?: string | null;
   price?: number | null;
+  avatar_url?: string | null;
   created_at?: string;
 };
 
@@ -57,6 +61,8 @@ export function UsersScreen() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<UserRow>>(emptyUser());
+  const [avatarLocalUri, setAvatarLocalUri] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [editAnchor, setEditAnchor] = useState<WindowAnchor | null>(null);
   const isEditExisting = !!editing.id;
   const clearEditAnchorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,7 +106,7 @@ export function UsersScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('users')
-        .select('id, phone, password, role, name, address, price, created_at')
+        .select('id, phone, password, role, name, address, price, avatar_url, created_at')
         .order('created_at', { ascending: false });
       if (error) throw error;
       setUsers((data ?? []) as UserRow[]);
@@ -128,6 +134,7 @@ export function UsersScreen() {
   const openCreate = (anchor?: WindowAnchor | null) => {
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing(emptyUser());
+    setAvatarLocalUri(null);
     setEditAnchor(anchor ?? null);
     setEditOpen(true);
   };
@@ -135,15 +142,67 @@ export function UsersScreen() {
   const openEdit = (u: UserRow, anchor?: WindowAnchor | null) => {
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing({ ...u, password: u.password ?? '' });
+    setAvatarLocalUri(null);
     setEditAnchor(anchor ?? null);
     setEditOpen(true);
   };
 
   const closeEdit = () => {
     setEditOpen(false);
+    setAvatarLocalUri(null);
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     // Keep anchor during the closing animation so it "returns" to the opening button.
     clearEditAnchorTimer.current = setTimeout(() => setEditAnchor(null), EDIT_WINDOW_DURATION_MS + 40);
+  };
+
+  const pickAvatar = async () => {
+    try {
+      setAvatarBusy(true);
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Toast.show({ type: 'error', text1: 'אין הרשאה לגלריה' });
+        return;
+      }
+
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+      if (res.canceled || !res.assets?.length) return;
+
+      const pickedUri = res.assets[0].uri;
+      const out = await ImageManipulator.manipulateAsync(
+        pickedUri,
+        [{ resize: { width: 256, height: 256 } }],
+        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      setAvatarLocalUri(out.uri);
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'בחירת תמונה נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const clearAvatar = () => {
+    setAvatarLocalUri(null);
+    setEditing((p) => ({ ...p, avatar_url: null }));
+  };
+
+  const uploadUserAvatar = async (userId: string, localUri: string): Promise<string> => {
+    const resp = await fetch(localUri);
+    const blob = await resp.blob();
+    const path = `avatars/${userId}.jpg`;
+    const { error } = await supabase.storage.from(USER_AVATARS_BUCKET).upload(path, blob, {
+      upsert: true,
+      contentType: 'image/jpeg',
+      cacheControl: '3600',
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from(USER_AVATARS_BUCKET).getPublicUrl(path);
+    return `${data.publicUrl}?v=${Date.now()}`;
   };
 
   const saveUser = async () => {
@@ -153,7 +212,7 @@ export function UsersScreen() {
       role: (editing.role ?? 'customer') as UserRole,
       name: (editing.name ?? '').trim(),
       address: (editing.address ?? null) || null,
-      price: editing.role === 'customer' ? (editing.price ?? null) : null,
+      price: (editing.role ?? 'customer') === 'customer' ? (editing.price ?? null) : null,
     };
     if (!payload.phone || !payload.name) {
       Toast.show({ type: 'error', text1: 'חסר שם/טלפון' });
@@ -161,16 +220,31 @@ export function UsersScreen() {
     }
 
     try {
+      const wantsAvatar = payload.role === 'admin' || payload.role === 'worker';
       if (isEditExisting) {
-        const { error } = await supabase.from('users').update(payload).eq('id', editing.id!);
+        let avatarUrl: string | null = wantsAvatar ? (editing.avatar_url ?? null) : null;
+        if (avatarLocalUri && wantsAvatar) {
+          avatarUrl = await uploadUserAvatar(editing.id!, avatarLocalUri);
+        }
+        const { error } = await supabase.from('users').update({ ...payload, avatar_url: avatarUrl }).eq('id', editing.id!);
         if (error) throw error;
+        if (wantsAvatar && !avatarUrl) {
+          await supabase.storage.from(USER_AVATARS_BUCKET).remove([`avatars/${editing.id!}.jpg`]);
+        }
         Toast.show({ type: 'success', text1: 'עודכן' });
       } else {
-        const { error } = await supabase.from('users').insert(payload);
+        const { data, error } = await supabase.from('users').insert({ ...payload, avatar_url: null }).select('id').single();
         if (error) throw error;
+        const newId = (data as any)?.id as string;
+        if (newId && avatarLocalUri && wantsAvatar) {
+          const avatarUrl = await uploadUserAvatar(newId, avatarLocalUri);
+          const { error: uErr } = await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', newId);
+          if (uErr) throw uErr;
+        }
         Toast.show({ type: 'success', text1: 'נוצר' });
       }
       setEditOpen(false);
+      setAvatarLocalUri(null);
       await fetchUsers();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שמירה נכשלה', text2: e?.message ?? 'Unknown error' });
@@ -541,16 +615,19 @@ export function UsersScreen() {
                   </Pressable>
                 </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
-                <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>
-                  {item.phone} • {item.role}
-                </Text>
-                {item.role === 'customer' ? (
-                  <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6, fontWeight: '700' }}>
-                    נקודות ריח
+              <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                <Avatar size={42} uri={item.avatar_url ?? null} name={item.name} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
+                  <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>
+                    {item.phone} • {item.role}
                   </Text>
-                ) : null}
+                  {item.role === 'customer' ? (
+                    <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6, fontWeight: '700' }}>
+                      נקודות ריח
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             </View>
           </Card>
@@ -593,6 +670,36 @@ export function UsersScreen() {
           </View>
 
           <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 14 }}>
+            {(editing.role ?? 'customer') !== 'customer' ? (
+              <Card style={{ padding: 12 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <Avatar size={56} uri={avatarLocalUri ?? editing.avatar_url ?? null} name={editing.name ?? ''} />
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תמונת משתמש</Text>
+                    <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right', fontWeight: '700' }}>
+                      מוצג בלוח בקרה ובמשימות
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                  <Button
+                    title={avatarBusy ? 'טוען…' : 'בחר תמונה'}
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    disabled={avatarBusy || loading}
+                    onPress={pickAvatar}
+                  />
+                  <Button
+                    title="הסר"
+                    variant="secondary"
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    disabled={avatarBusy || loading}
+                    onPress={clearAvatar}
+                  />
+                </View>
+              </Card>
+            ) : null}
             <Input label="שם" value={editing.name ?? ''} onChangeText={(v) => setEditing((p) => ({ ...p, name: v }))} />
             <Input
               label="טלפון"

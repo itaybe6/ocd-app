@@ -141,9 +141,8 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                   width: 96,
                   height: 96,
                   borderRadius: 28,
-                  backgroundColor: colors.elevated,
-                  borderWidth: 1,
-                  borderColor: colors.border,
+                  backgroundColor: colors.primary,
+                  borderWidth: 0,
                   alignItems: 'center',
                   justifyContent: 'center',
                   shadowColor: '#000',
@@ -153,7 +152,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                   elevation: 4,
                 }}
               >
-                <Image source={LOGO_IMG} style={{ width: 70, height: 70 }} resizeMode="contain" />
+                <Image source={LOGO_IMG} style={{ width: 86, height: 86 }} resizeMode="contain" />
               </View>
               <Text style={{ color: colors.text, fontSize: 28, fontWeight: '900', marginTop: 14, textAlign: 'center' }}>
                 מערכת ניהול משימות

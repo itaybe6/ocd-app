@@ -15,7 +15,7 @@ import { useLoading } from '../../state/LoadingContext';
 type Template = { id: string; day: number };
 type TemplateForGrid = { id: string; day: number };
 type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
-type UserLite = { id: string; name: string; role: 'customer' | 'worker' };
+type UserLite = { id: string; name: string; role: 'customer' | 'worker'; avatar_url?: string | null };
 type DropdownKind = 'customer' | 'worker';
 
 export function WorkTemplatesScreen() {
@@ -69,7 +69,7 @@ export function WorkTemplatesScreen() {
   };
 
   const fetchUsers = async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role').in('role', ['customer', 'worker']).order('name');
+    const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').in('role', ['customer', 'worker']).order('name');
     if (!error) setUsers((data ?? []) as any);
   };
 

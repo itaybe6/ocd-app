@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
 import { ModalSheet } from '../ModalSheet';
+import { Avatar } from './Avatar';
 import { colors } from '../../theme/colors';
 
-export type SelectOption = { value: string; label?: string };
+export type SelectOption = { value: string; label?: string; avatarUrl?: string | null };
 
 type SelectSheetProps = {
   label?: string;
@@ -16,10 +17,9 @@ type SelectSheetProps = {
 
 export function SelectSheet({ label, value, placeholder = 'בחר…', options, onChange }: SelectSheetProps) {
   const [open, setOpen] = useState(false);
-  const selectedLabel = useMemo(() => {
-    const found = options.find((o) => o.value === value);
-    return found?.label ?? found?.value ?? '';
-  }, [options, value]);
+  const selected = useMemo(() => options.find((o) => o.value === value), [options, value]);
+  const selectedLabel = useMemo(() => selected?.label ?? selected?.value ?? '', [selected]);
+  const selectedAvatarUrl = useMemo(() => (selected?.avatarUrl === undefined ? undefined : selected?.avatarUrl ?? null), [selected]);
 
   return (
     <View style={{ gap: 6 }}>
@@ -41,9 +41,14 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
         }}
       >
         <ChevronDown size={18} color={colors.muted} />
-        <Text style={{ color: value ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
-          {value ? selectedLabel : placeholder}
-        </Text>
+        <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
+          {value && selectedAvatarUrl !== undefined ? (
+            <Avatar size={24} uri={selectedAvatarUrl} name={selectedLabel} style={{ backgroundColor: '#fff' }} />
+          ) : null}
+          <Text style={{ color: value ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
+            {value ? selectedLabel : placeholder}
+          </Text>
+        </View>
       </Pressable>
 
       <ModalSheet visible={open} onClose={() => setOpen(false)}>
@@ -68,15 +73,26 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
                   borderColor: colors.border,
                 }}
               >
-                <Text
-                  style={{
-                    color: o.value === value ? '#fff' : colors.text,
-                    fontWeight: '800',
-                    textAlign: 'right',
-                  }}
-                >
-                  {o.label ?? o.value}
-                </Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                  {o.avatarUrl !== undefined ? (
+                    <Avatar
+                      size={26}
+                      uri={o.avatarUrl ?? null}
+                      name={o.label ?? o.value}
+                      style={{ backgroundColor: o.value === value ? 'rgba(255,255,255,0.12)' : '#fff', borderColor: 'rgba(0,0,0,0.10)' }}
+                    />
+                  ) : null}
+                  <Text
+                    style={{
+                      color: o.value === value ? '#fff' : colors.text,
+                      fontWeight: '800',
+                      textAlign: 'right',
+                      flex: 1,
+                    }}
+                  >
+                    {o.label ?? o.value}
+                  </Text>
+                </View>
               </Pressable>
             ))}
           </View>

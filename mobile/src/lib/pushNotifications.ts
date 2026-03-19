@@ -9,7 +9,9 @@ const ANDROID_CHANNEL_ID = 'marketing' as const;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    // Expo SDK 54+ expects banner/list flags (and 'shouldShowAlert' is deprecated).
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),

@@ -19,7 +19,7 @@ import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
 type JobKind = 'regular' | 'installation' | 'special';
 type JobStatus = 'pending' | 'completed';
 
-type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer' };
+type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; avatar_url?: string | null };
 type ServicePoint = { id: string; device_type: string; scent_type: string; refill_amount: number };
 
 type OneTimeCustomerPayload = { name: string; phone?: string; address?: string };
@@ -82,11 +82,11 @@ export function AddJobsScreen() {
   const [installationDevices, setInstallationDevices] = useState<InstallationDeviceDraft[]>([{ device_name: '' }]);
 
   const workerOptions = useMemo(
-    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })),
+    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
     [users]
   );
   const customerOptions = useMemo(
-    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
+    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
     [users]
   );
 
@@ -111,7 +111,7 @@ export function AddJobsScreen() {
   }, [dateYmd]);
 
   const fetchUsers = useCallback(async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role').order('name', { ascending: true });
+    const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').order('name', { ascending: true });
     if (!error) setUsers((data ?? []) as UserLite[]);
   }, []);
 

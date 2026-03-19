@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, type Theme } from '@react-navigation/native';
 import {
@@ -49,6 +49,13 @@ function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamLi
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+  }, [navigation, user]);
+
   return <LoginScreen onBackToStore={() => navigation.navigate('Main')} />;
 }
 

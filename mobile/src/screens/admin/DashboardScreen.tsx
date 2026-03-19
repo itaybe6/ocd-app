@@ -6,10 +6,17 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ClipboardList, Coins, UserRound, Users } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
+import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 
-type SimpleUser = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; price?: number | null };
+type SimpleUser = {
+  id: string;
+  name: string;
+  role: 'admin' | 'worker' | 'customer';
+  price?: number | null;
+  avatar_url?: string | null;
+};
 type SimpleJob = {
   id: string;
   date: string;
@@ -73,7 +80,7 @@ export function DashboardScreen() {
           .select('id, date, status, worker_id, customer_id, order_number, notes')
           .order('date', { ascending: false })
           .limit(3),
-        supabase.from('users').select('id, name, role, price'),
+        supabase.from('users').select('id, name, role, price, avatar_url'),
         supabase.from('service_points').select('id, device_type'),
       ]);
 
@@ -127,8 +134,9 @@ export function DashboardScreen() {
         return acc;
       }, {});
       const nameById = new Map(workers.map((w) => [w.id, w.name]));
+      const avatarById = new Map(workers.map((w) => [w.id, w.avatar_url ?? null]));
       return Object.entries(counts)
-        .map(([id, count]) => ({ id, count, name: nameById.get(id) ?? 'עובד' }))
+        .map(([id, count]) => ({ id, count, name: nameById.get(id) ?? 'עובד', avatar_url: avatarById.get(id) ?? null }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
     })();
@@ -412,6 +420,7 @@ export function DashboardScreen() {
                       backgroundColor: colors.bg,
                     }}
                   >
+                    <Avatar size={34} uri={w.avatar_url ?? null} name={w.name} />
                     <View
                       style={{
                         minWidth: 40,

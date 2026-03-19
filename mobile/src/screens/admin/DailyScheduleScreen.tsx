@@ -13,6 +13,7 @@ import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
+import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { toDate, yyyyMmDd } from '../../lib/time';
@@ -55,7 +56,7 @@ type Unified = {
   notes?: string | null;
 };
 
-type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer' };
+type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; avatar_url?: string | null };
 type OneTimeCustomerLite = { id: string; name: string };
 
 type JobServicePoint = {
@@ -115,11 +116,15 @@ export function DailyScheduleScreen() {
   const [jobPoints, setJobPoints] = useState<(JobServicePoint & { sp?: ServicePoint | null })[]>([]);
 
   const workerOptions = useMemo(
-    () => [{ value: '', label: 'הכל' }, ...users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name }))],
+    () => [
+      { value: '', label: 'הכל' },
+      ...users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
+    ],
     [users]
   );
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
+  const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
 
   const kindLabel = useCallback((k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת'), []);
@@ -140,7 +145,7 @@ export function DailyScheduleScreen() {
   }, [day]);
 
   const fetchUsers = useCallback(async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role').order('name');
+    const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').order('name');
     if (!error) setUsers((data ?? []) as any);
   }, []);
 
@@ -419,7 +424,28 @@ export function DailyScheduleScreen() {
             kind={item.kind}
             title={customerLabel(item)}
             status={item.status}
-            primaryText={`#${item.order_number ?? '—'} עובד: ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
+            primaryNode={
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Avatar
+                  size={22}
+                  uri={userAvatarMap.get(item.worker_id) ?? null}
+                  name={userMap.get(item.worker_id) ?? ''}
+                  style={{ backgroundColor: '#fff' }}
+                />
+                <Text
+                  style={{
+                    color: item.kind === 'installation' ? '#7C3AED' : item.kind === 'special' ? '#EA580C' : '#0058BC',
+                    fontWeight: '700',
+                    fontSize: 13,
+                    textAlign: 'right',
+                    flex: 1,
+                  }}
+                  numberOfLines={1}
+                >
+                  #{item.order_number ?? '—'} עובד: {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
+                </Text>
+              </View>
+            }
             description={item.notes ?? null}
             onPress={() => {
               setEdit(item);

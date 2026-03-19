@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobChip } from '../../components/jobs/JobCard';
+import { Avatar } from '../../components/ui/Avatar';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
@@ -33,7 +34,7 @@ type Unified = {
 
 type InstallationDevice = { id: string; installation_job_id: string; device_name?: string | null; image_url?: string | null };
 
-type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer' };
+type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; avatar_url?: string | null };
 
 const kindLabel = (k: Kind) => (k === 'installation' ? 'התקנה' : 'מיוחדת');
 
@@ -51,6 +52,8 @@ export function InstallationJobsScreen() {
   const [devices, setDevices] = useState<InstallationDevice[]>([]);
 
   const [users, setUsers] = useState<UserLite[]>([]);
+  const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
+  const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createWorkerId, setCreateWorkerId] = useState('');
@@ -73,11 +76,11 @@ export function InstallationJobsScreen() {
   }, [createDateYmd]);
 
   const workerOptions = useMemo(
-    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })),
+    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
     [users]
   );
   const customerOptions = useMemo(
-    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
+    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
     [users]
   );
   const timeOptions = useMemo(
@@ -97,7 +100,7 @@ export function InstallationJobsScreen() {
   }, []);
 
   const fetchUsers = useCallback(async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role').order('name', { ascending: true });
+    const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').order('name', { ascending: true });
     if (!error) setUsers((data ?? []) as any);
   }, []);
 
@@ -484,6 +487,14 @@ export function InstallationJobsScreen() {
           <JobCard
             title={`#${item.order_number ?? '—'} - ${kindLabel(item.kind)}`}
             status={item.status}
+            primaryNode={
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Avatar size={22} uri={userAvatarMap.get(item.worker_id) ?? null} name={userMap.get(item.worker_id) ?? ''} />
+                <Text style={{ color: item.kind === 'installation' ? '#7C3AED' : '#EA580C', fontWeight: '700', fontSize: 13, textAlign: 'right', flex: 1 }} numberOfLines={1}>
+                  עובד: {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
+                </Text>
+              </View>
+            }
             description={item.notes ?? null}
             onPress={() => open(item)}
             faded={item.status === 'completed'}
@@ -505,6 +516,12 @@ export function InstallationJobsScreen() {
               <Button title="מחק" variant="danger" fullWidth={false} onPress={() => del(selected)} />
               <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
                 {selected.kind} • #{selected.order_number ?? '—'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <Avatar size={28} uri={userAvatarMap.get(selected.worker_id) ?? null} name={userMap.get(selected.worker_id) ?? ''} />
+              <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '800' }}>
+                עובד: {userMap.get(selected.worker_id) ?? selected.worker_id.slice(0, 6)}
               </Text>
             </View>
 

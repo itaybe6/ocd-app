@@ -129,6 +129,7 @@ export function JobCard({
   title,
   status,
   primaryText,
+  primaryNode,
   description,
   onPress,
   actions,
@@ -140,6 +141,7 @@ export function JobCard({
   title: string;
   status?: JobCardStatus;
   primaryText?: string;
+  primaryNode?: React.ReactNode;
   description?: string | null;
   onPress?: () => void;
   actions?: React.ReactNode;
@@ -199,16 +201,18 @@ export function JobCard({
         ) : null}
       </View>
 
-      {(!!primaryText || !!description) && (
+      {(!!primaryNode || !!primaryText || !!description) && (
         <View style={{ gap: 4, marginTop: 8 }}>
-          {!!primaryText && (
-            <Text
-              style={{ color: accentColor, fontWeight: '700', fontSize: 13, textAlign: 'right' }}
-              numberOfLines={1}
-            >
-              {primaryText}
-            </Text>
-          )}
+          {!!primaryNode
+            ? primaryNode
+            : !!primaryText && (
+                <Text
+                  style={{ color: accentColor, fontWeight: '700', fontSize: 13, textAlign: 'right' }}
+                  numberOfLines={1}
+                >
+                  {primaryText}
+                </Text>
+              )}
           {!!description && (
             <Text
               style={{

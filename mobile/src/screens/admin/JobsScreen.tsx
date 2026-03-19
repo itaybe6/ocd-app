@@ -12,6 +12,7 @@ import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
+import { Avatar } from '../../components/ui/Avatar';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { yyyyMmDd } from '../../lib/time';
@@ -38,7 +39,7 @@ type UnifiedJob =
   | (BaseUnified & { kind: 'installation' })
   | (BaseUnified & { kind: 'special'; job_type?: string | null; battery_type?: string | null; image_url?: string | null });
 
-type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer' };
+type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; avatar_url?: string | null };
 
 type JobServicePoint = { id: string; job_id: string; service_point_id: string; image_url?: string | null; custom_refill_amount?: number | null };
 type ServicePoint = { id: string; device_type: string; scent_type: string; refill_amount: number };
@@ -100,9 +101,10 @@ export function JobsScreen() {
   const customerPointsOriginRectRef = useRef<OriginRect | null>(null);
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
+  const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
 
   const fetchUsers = async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role');
+    const { data, error } = await supabase.from('users').select('id, name, role, avatar_url');
     if (!error) setUsers((data ?? []) as UserLite[]);
   };
 
@@ -581,9 +583,43 @@ export function JobsScreen() {
         renderItem={({ item }) => (
           <JobCard
             kind={item.kind}
-            title={`${item.order_number ?? '—'} ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
+            title={`#${item.order_number ?? '—'} • ${kindLabel(item.kind)}`}
             status={item.status}
-            primaryText={item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
+            primaryNode={
+              <View style={{ gap: 4 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  <Avatar
+                    size={22}
+                    uri={userAvatarMap.get(item.worker_id) ?? null}
+                    name={userMap.get(item.worker_id) ?? ''}
+                    style={{ backgroundColor: '#fff' }}
+                  />
+                  <Text
+                    style={{
+                      color: item.kind === 'installation' ? '#7C3AED' : item.kind === 'special' ? '#EA580C' : '#0058BC',
+                      fontWeight: '700',
+                      fontSize: 13,
+                      textAlign: 'right',
+                      flex: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    עובד: {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    color: item.kind === 'installation' ? '#7C3AED' : item.kind === 'special' ? '#EA580C' : '#0058BC',
+                    fontWeight: '700',
+                    fontSize: 13,
+                    textAlign: 'right',
+                  }}
+                  numberOfLines={1}
+                >
+                  {item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
+                </Text>
+              </View>
+            }
             description={item.notes ?? null}
             onPress={() => openJob(item)}
             faded={item.status === 'completed'}
@@ -646,9 +682,12 @@ export function JobsScreen() {
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
               {selected.kind} • {selected.status}
             </Text>
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>
-              עובד: {userMap.get(selected.worker_id) ?? selected.worker_id}
-            </Text>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <Avatar size={28} uri={userAvatarMap.get(selected.worker_id) ?? null} name={userMap.get(selected.worker_id) ?? ''} />
+              <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '800' }}>
+                עובד: {userMap.get(selected.worker_id) ?? selected.worker_id}
+              </Text>
+            </View>
 
             {selected.kind === 'regular' ? (
               <View style={{ gap: 10 }}>
