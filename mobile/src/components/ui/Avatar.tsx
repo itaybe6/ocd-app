@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Text, View, type ImageStyle, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
 
@@ -27,6 +27,11 @@ export function Avatar({
   const [failed, setFailed] = useState(false);
   const showImage = !!uri && !failed;
   const initials = useMemo(() => initialsFromName(name), [name]);
+
+  useEffect(() => {
+    // If the URI changes (e.g. new upload), allow retry.
+    setFailed(false);
+  }, [uri]);
 
   const outer: ViewStyle = {
     width: size,

@@ -18,16 +18,27 @@ set public = excluded.public;
 drop policy if exists "user_avatars_insert_any" on storage.objects;
 create policy "user_avatars_insert_any" on storage.objects
   for insert
+  to public
   with check (bucket_id = 'user-avatars');
 
 drop policy if exists "user_avatars_update_any" on storage.objects;
 create policy "user_avatars_update_any" on storage.objects
   for update
+  to public
   using (bucket_id = 'user-avatars')
   with check (bucket_id = 'user-avatars');
 
 drop policy if exists "user_avatars_delete_any" on storage.objects;
 create policy "user_avatars_delete_any" on storage.objects
   for delete
+  to public
+  using (bucket_id = 'user-avatars');
+
+-- Public read is handled by the bucket's `public=true`, but adding an explicit
+-- select policy keeps behavior stable even if bucket visibility changes later.
+drop policy if exists "user_avatars_select_any" on storage.objects;
+create policy "user_avatars_select_any" on storage.objects
+  for select
+  to public
   using (bucket_id = 'user-avatars');
 

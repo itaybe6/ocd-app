@@ -1,9 +1,9 @@
-import React, { Children, cloneElement, isValidElement, memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Image,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,19 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
-import Animated, {
-  FadeIn,
-  FadeInUp,
-  FadeOut,
-  FadeOutDown,
-  interpolate,
-  useAnimatedProps,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeOut, FadeInUp, FadeOutDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
@@ -59,9 +47,6 @@ function formatPrice(price: number, currencyCode: string) {
   return `${price.toLocaleString('he-IL')} ${currencyCode}`;
 }
 
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
-const ITEM_HEIGHT = 170;
-
 /* ─── Product image placeholder ─── */
 function ProductThumb({ imageUrl, size = 56 }: { imageUrl: string | null; size?: number }) {
   if (imageUrl) {
@@ -89,196 +74,6 @@ function ProductThumb({ imageUrl, size = 56 }: { imageUrl: string | null; size?:
   );
 }
 
-/* ─── Custom cell renderer provides itemY ─── */
-const CustomCellRendererComponent = memo(({ children, ...props }: any) => {
-  const itemY = useSharedValue(0);
-  return (
-    <View
-      {...props}
-      onLayout={(e) => {
-        itemY.set(e.nativeEvent.layout.y);
-      }}
-    >
-      {Children.map(children, (child) => {
-        if (isValidElement(child)) {
-          return cloneElement(child, { itemY } as any);
-        }
-        return child;
-      })}
-    </View>
-  );
-});
-CustomCellRendererComponent.displayName = 'CustomCellRendererComponent';
-
-function AnimatedProductRow({
-  item,
-  index,
-  scrollY,
-  itemY,
-  headerHeight,
-  selected,
-  onPress,
-}: {
-  item: ProductLite;
-  index: number;
-  scrollY: any;
-  itemY: any;
-  headerHeight: number;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const rContainerStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateY: interpolate(
-            scrollY.value,
-            [itemY.value - index - 1 - headerHeight, itemY.value - index - headerHeight, itemY.value - index + 1 - headerHeight],
-            [0, 0, 1]
-          ),
-        },
-        {
-          scale: interpolate(
-            scrollY.value,
-            [itemY.value - 1 - headerHeight, itemY.value - headerHeight, itemY.value + ITEM_HEIGHT - headerHeight],
-            [1, 1, 0.9]
-          ),
-        },
-      ],
-    };
-  });
-
-  const backdropAnimatedProps = useAnimatedProps(() => {
-    const intensity = interpolate(
-      scrollY.value,
-      [itemY.value - 1 - headerHeight, itemY.value - headerHeight, itemY.value + ITEM_HEIGHT - headerHeight],
-      [0, 0, 15]
-    );
-    return { intensity } as any;
-  });
-
-  return (
-    <Animated.View style={[animRowStyles.container, rContainerStyle]}>
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [
-          animRowStyles.card,
-          selected && animRowStyles.cardSelected,
-          pressed && !selected && { transform: [{ scale: 0.995 }], opacity: 0.96 },
-        ]}
-      >
-        {/* Left column (meta pills) */}
-        <View style={animRowStyles.leftCol}>
-          <View style={animRowStyles.badgeTop} />
-          <View style={animRowStyles.badgeBottom} />
-        </View>
-
-        {/* Main content */}
-        <View style={animRowStyles.content}>
-          <View style={animRowStyles.meta}>
-            <Text numberOfLines={2} style={[animRowStyles.title, selected && animRowStyles.titleSelected]}>
-              {item.title}
-            </Text>
-            <Text numberOfLines={1} style={animRowStyles.sub}>
-              {item.productType || 'מוצר'}
-            </Text>
-            <Text style={[animRowStyles.price, selected && animRowStyles.priceSelected]}>
-              {formatPrice(item.price, item.currencyCode)}
-            </Text>
-          </View>
-
-          <View style={animRowStyles.imageWrap}>
-            <ProductThumb imageUrl={item.imageUrl} size={110} />
-          </View>
-        </View>
-
-        {selected && <View style={animRowStyles.selectedStrip} />}
-      </Pressable>
-
-      {Platform.OS === 'ios' && (
-        <AnimatedBlurView
-          pointerEvents="none"
-          style={StyleSheet.absoluteFill}
-          tint="light"
-          animatedProps={backdropAnimatedProps}
-        />
-      )}
-    </Animated.View>
-  );
-}
-
-const animRowStyles = StyleSheet.create({
-  container: {
-    height: ITEM_HEIGHT,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  card: {
-    flex: 1,
-    borderRadius: 26,
-    backgroundColor: colors.elevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    flexDirection: 'row-reverse',
-    alignItems: 'stretch',
-  },
-  cardSelected: {
-    borderColor: 'rgba(37,99,235,0.35)',
-    backgroundColor: 'rgba(37,99,235,0.07)',
-  },
-  selectedStrip: {
-    position: 'absolute',
-    right: 0,
-    top: 16,
-    bottom: 16,
-    width: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(37,99,235,0.85)',
-  },
-  leftCol: {
-    width: 56,
-    paddingTop: 18,
-    alignItems: 'center',
-    gap: 10,
-  },
-  badgeTop: {
-    width: 36,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: 'rgba(245, 158, 11, 0.28)',
-  },
-  badgeBottom: {
-    width: 32,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(100,116,139,0.22)',
-  },
-  content: {
-    flex: 1,
-    padding: 12,
-    flexDirection: 'row-reverse',
-    gap: 12,
-    alignItems: 'center',
-  },
-  meta: { flex: 1, alignItems: 'flex-end' },
-  title: { color: colors.text, fontWeight: '900', fontSize: 15, textAlign: 'right' },
-  titleSelected: { color: 'rgba(37,99,235,1)' },
-  sub: { color: colors.muted, marginTop: 6, fontWeight: '700', fontSize: 11, textAlign: 'right' },
-  price: { color: colors.text, marginTop: 10, fontWeight: '900', fontSize: 14, textAlign: 'right' },
-  priceSelected: { color: 'rgba(37,99,235,0.95)' },
-  imageWrap: {
-    width: 122,
-    height: 132,
-    borderRadius: 20,
-    backgroundColor: 'rgba(15,23,42,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
-
 /* ─── Product picker modal ─── */
 function ProductPickerModal({
   visible,
@@ -295,16 +90,7 @@ function ProductPickerModal({
   onSelect: (p: ProductLite) => void;
   onClose: () => void;
 }) {
-  const insets = useSafeAreaInsets();
-  const headerHeight = Platform.OS === 'ios' ? insets.top + 45 : 0;
   const [q, setQ] = useState('');
-  const scrollY = useSharedValue(0);
-
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
-    },
-  });
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -370,29 +156,51 @@ function ProductPickerModal({
               <Text style={pickerStyles.loadingText}>טוען מוצרים…</Text>
             </View>
           ) : (
-            <Animated.FlatList
+            <FlatList
               data={filtered}
               keyExtractor={(item) => item.handle}
               contentContainerStyle={pickerStyles.listContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              scrollEventThrottle={16}
-              onScroll={onScroll}
-              CellRendererComponent={CustomCellRendererComponent as any}
-              renderItem={({ item, index }: any) => (
-                <AnimatedProductRow
-                  item={item}
-                  index={index}
-                  scrollY={scrollY}
-                  itemY={(undefined as any)}
-                  headerHeight={headerHeight}
-                  selected={item.handle === selectedHandle}
-                  onPress={() => {
-                    onSelect(item);
-                    onClose();
-                  }}
-                />
-              )}
+              renderItem={({ item }) => {
+                const selected = item.handle === selectedHandle;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      onSelect(item);
+                      onClose();
+                    }}
+                    style={({ pressed }) => [
+                      pickerStyles.productRow,
+                      selected && pickerStyles.productRowSelected,
+                      pressed && !selected && pickerStyles.productRowPressed,
+                    ]}
+                  >
+                    {/* Selected side strip */}
+                    {selected && <View style={pickerStyles.selectedStrip} />}
+
+                    <ProductThumb imageUrl={item.imageUrl} size={58} />
+
+                    <View style={pickerStyles.productMeta}>
+                      <Text numberOfLines={2} style={[pickerStyles.productTitle, selected && pickerStyles.productTitleSelected]}>
+                        {item.title}
+                      </Text>
+                      {!!item.productType && (
+                        <Text style={pickerStyles.productType}>{item.productType}</Text>
+                      )}
+                      <Text style={[pickerStyles.productPrice, selected && pickerStyles.productPriceSelected]}>
+                        {formatPrice(item.price, item.currencyCode)}
+                      </Text>
+                    </View>
+
+                    {selected && (
+                      <View style={pickerStyles.checkCircle}>
+                        <Text style={pickerStyles.checkMark}>✓</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              }}
               ListEmptyComponent={
                 <View style={pickerStyles.emptyWrap}>
                   <Text style={pickerStyles.emptyText}>לא נמצאו מוצרים{q ? ` עבור "${q}"` : ''}</Text>
@@ -459,11 +267,60 @@ const pickerStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  listContent: { paddingBottom: 10 },
+  listContent: { paddingHorizontal: 14, paddingBottom: 8, gap: 8 },
   loadingWrap: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   loadingText: { color: colors.muted, fontWeight: '700' },
   emptyWrap: { alignItems: 'center', paddingVertical: 32 },
   emptyText: { color: colors.muted, fontWeight: '700' },
+  productRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.elevated,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  productRowSelected: {
+    backgroundColor: 'rgba(37,99,235,0.08)',
+    borderColor: 'rgba(37,99,235,0.30)',
+  },
+  productRowPressed: { backgroundColor: 'rgba(15,23,42,0.04)' },
+  selectedStrip: {
+    position: 'absolute',
+    right: 0,
+    top: 10,
+    bottom: 10,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(37,99,235,0.8)',
+  },
+  productMeta: { flex: 1, gap: 3, alignItems: 'flex-end' },
+  productTitle: {
+    color: colors.text,
+    fontWeight: '800',
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  productTitleSelected: { color: 'rgba(37,99,235,1)' },
+  productType: { color: colors.muted, fontWeight: '600', fontSize: 11, textAlign: 'right' },
+  productPrice: { color: colors.muted, fontWeight: '900', fontSize: 13, textAlign: 'right', marginTop: 2 },
+  productPriceSelected: { color: 'rgba(37,99,235,0.9)' },
+  checkCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(37,99,235,0.14)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(37,99,235,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkMark: { color: 'rgba(37,99,235,1)', fontSize: 13, fontWeight: '900' },
 });
 
 /* ─── Main screen ─── */
