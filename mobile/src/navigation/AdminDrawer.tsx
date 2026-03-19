@@ -79,22 +79,17 @@ function DrawerNavItem({
         pressed && !active && styles.itemPressed,
       ]}
     >
-      {/* badge – מופיע רק כשיש ספירה */}
-      {!!badgeCount && badgeCount > 0 && (
-        <View style={styles.itemBadge}>
-          <Badge count={badgeCount} />
-        </View>
-      )}
-
-      {/* טקסט – יוצר flex כדי לתפוס את המקום הפנוי */}
-      <Text numberOfLines={1} style={[styles.itemLabel, active && styles.itemLabelActive]}>
-        {label}
-      </Text>
-
-      {/* אייקון */}
       <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
         <Icon size={18} color={active ? colors.primary : colors.muted} />
       </View>
+
+      <View style={styles.itemTextWrap}>
+        <Text numberOfLines={1} style={[styles.itemLabel, active && styles.itemLabelActive]}>
+          {label}
+        </Text>
+      </View>
+
+      {!!badgeCount && badgeCount > 0 && <Badge count={badgeCount} />}
     </Pressable>
   );
 }
@@ -304,30 +299,34 @@ const styles = StyleSheet.create({
 
   item: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
+    height: 46,
     borderRadius: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     marginVertical: 2,
-    gap: 10,
+    gap: 8,
   },
   itemActive: { backgroundColor: '#2563EB12' },
   itemPressed: { backgroundColor: '#0F172A08' },
-  itemBadge: { marginLeft: 4 },
-  itemLabel: {
+  itemTextWrap: {
     flex: 1,
+    alignSelf: 'stretch',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  itemLabel: {
     color: colors.text,
     textAlign: 'right',
     fontWeight: '800',
     fontSize: 14,
+    includeFontPadding: false,
   },
   itemLabelActive: { color: colors.primary },
   iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 32,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
     backgroundColor: '#0F172A08',
   },
   iconWrapActive: { backgroundColor: '#2563EB1A' },
@@ -344,19 +343,22 @@ const styles = StyleSheet.create({
   logoutPressed: { backgroundColor: '#DC26260A' },
   logoutRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
+    height: 44,
     gap: 10,
   },
   logoutText: {
     flex: 1,
+    alignSelf: 'stretch',
+    textAlignVertical: 'center',
     color: colors.danger,
     fontWeight: '900',
     textAlign: 'right',
     fontSize: 14,
+    includeFontPadding: false,
   },
   logoutIcon: {
     width: 34,
-    height: 34,
+    alignSelf: 'stretch',
     borderRadius: 12,
     backgroundColor: '#DC26260F',
     alignItems: 'center',

@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye } from 'lucide-react-native';
+import { Eye, Plus, X } from 'lucide-react-native';
 import { ModalSheet } from '../../components/ModalSheet';
 import { Screen } from '../../components/Screen';
+import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -60,8 +61,11 @@ export function UsersScreen() {
   const [pointsOpen, setPointsOpen] = useState(false);
   const [pointsUser, setPointsUser] = useState<UserRow | null>(null);
   const [points, setPoints] = useState<ServicePoint[]>([]);
-  const [pointsDraft, setPointsDraft] = useState<Partial<ServicePoint>[]>([]);
-  const [pointsMode, setPointsMode] = useState<'single' | 'batch'>('batch');
+  const [pointsAnchor, setPointsAnchor] = useState<WindowAnchor | null>(null);
+  const [addPointOpen, setAddPointOpen] = useState(false);
+  const [editingPointId, setEditingPointId] = useState<string | null>(null);
+  const [editDeviceType, setEditDeviceType] = useState('');
+  const [editScentType, setEditScentType] = useState('');
 
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [scents, setScents] = useState<ScentRow[]>([]);
@@ -156,6 +160,8 @@ export function UsersScreen() {
     try {
       setPointsUser(customer);
       setPointsOpen(true);
+      setAddPointOpen(false);
+      setEditingPointId(null);
       const { data, error } = await supabase
         .from('service_points')
         .select('id, customer_id, device_type, scent_type, refill_amount, notes, created_at')
@@ -164,48 +170,33 @@ export function UsersScreen() {
       if (error) throw error;
       const list = (data ?? []) as ServicePoint[];
       setPoints(list);
-      setPointsDraft(
-        list.map((p) => ({
-          id: p.id,
-          customer_id: p.customer_id,
-          device_type: p.device_type,
-          scent_type: p.scent_type,
-          refill_amount: p.refill_amount,
-          notes: p.notes ?? '',
-        }))
-      );
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת נקודות שירות נכשלה', text2: e?.message ?? 'Unknown error' });
     }
   };
 
-  const savePointsBatch = async () => {
-    if (!pointsUser) return;
-    const cleaned = pointsDraft
-      .map((p) => ({
-        customer_id: pointsUser.id,
-        device_type: (p.device_type ?? '').trim(),
-        scent_type: (p.scent_type ?? '').trim(),
-        refill_amount: Number(p.refill_amount ?? 0),
-        notes: (p.notes as any)?.trim?.() ? String(p.notes).trim() : null,
-      }))
-      .filter((p) => p.device_type && p.scent_type && p.refill_amount);
+  const startEditPoint = (p: ServicePoint) => {
+    setAddPointOpen(false);
+    setEditingPointId(p.id);
+    setEditDeviceType(p.device_type);
+    setEditScentType(p.scent_type);
+  };
 
-    try {
-      setLoading(true);
-      const del = await supabase.from('service_points').delete().eq('customer_id', pointsUser.id);
-      if (del.error) throw del.error;
-      if (cleaned.length) {
-        const ins = await supabase.from('service_points').insert(cleaned);
-        if (ins.error) throw ins.error;
-      }
-      Toast.show({ type: 'success', text1: 'נשמר (delete + insert)' });
-      await fetchServicePoints(pointsUser);
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'שמירה נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setLoading(false);
-    }
+  const cancelEditPoint = () => {
+    setEditingPointId(null);
+    setEditDeviceType('');
+    setEditScentType('');
+  };
+
+  const saveEditPoint = async (p: ServicePoint) => {
+    await upsertPoint({
+      id: p.id,
+      device_type: editDeviceType,
+      scent_type: editScentType,
+      refill_amount: p.refill_amount,
+      notes: p.notes ?? null,
+    });
+    cancelEditPoint();
   };
 
   const upsertPoint = async (p: Partial<ServicePoint>) => {
@@ -339,6 +330,7 @@ export function UsersScreen() {
               <View style={{ gap: 6 }}>
                 {item.role === 'customer' ? (
                   <Pressable
+                    onPressIn={(e) => setPointsAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     onPress={() => fetchServicePoints(item)}
                     style={{
                       paddingVertical: 6,
@@ -418,105 +410,146 @@ export function UsersScreen() {
         </View>
       </ModalSheet>
 
-      <ModalSheet visible={pointsOpen} onClose={() => setPointsOpen(false)}>
-        <View style={{ gap: 10 }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            נקודות ריח — {pointsUser?.name}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                title={pointsMode === 'batch' ? 'מצב עריכה: Batch' : 'מצב עריכה: Single'}
-                variant="secondary"
-                onPress={() => setPointsMode((p) => (p === 'batch' ? 'single' : 'batch'))}
-              />
+      <AnchoredWindow visible={pointsOpen} anchor={pointsAnchor} onClose={() => setPointsOpen(false)} showCloseEye={false}>
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+            }}
+          >
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <Pressable
+                onPress={() => setAddPointOpen((p) => !p)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                hitSlop={10}
+              >
+                <Plus size={18} color={colors.text} />
+              </Pressable>
+              <Pressable
+                onPress={() => setPointsOpen(false)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                hitSlop={10}
+              >
+                <X size={18} color={colors.text} />
+              </Pressable>
             </View>
-            {pointsMode === 'batch' ? (
-              <View style={{ flex: 1 }}>
-                <Button title="שמור הכל (delete+insert)" onPress={savePointsBatch} />
-              </View>
-            ) : null}
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>נקודות ריח</Text>
+              <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right', fontWeight: '700' }}>
+                {pointsUser?.name}
+              </Text>
+            </View>
           </View>
 
-          {pointsMode === 'single' ? (
-            <PointEditor devices={devices} scents={scents} onSave={(p) => upsertPoint(p)} />
-          ) : (
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>עריכה מרוכזת</Text>
-              <View style={{ gap: 10 }}>
-                {pointsDraft.map((p, idx) => (
-                  <View key={String(p.id ?? idx)} style={{ gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <SelectSheet
-                      label={`מכשיר #${idx + 1}`}
-                      value={String(p.device_type ?? '')}
-                      placeholder="בחר מכשיר…"
-                      options={devices.map((d) => ({ value: d.name, label: d.name }))}
-                      onChange={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, device_type: v } : x)))}
-                    />
-                    <SelectSheet
-                      label="ניחוח"
-                      value={String(p.scent_type ?? '')}
-                      placeholder="בחר ניחוח…"
-                      options={scents.map((s) => ({ value: s.name, label: s.name }))}
-                      onChange={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, scent_type: v } : x)))}
-                    />
-                    <Input
-                      label="כמות מילוי"
-                      value={String(p.refill_amount ?? '')}
-                      keyboardType="numeric"
-                      onChangeText={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, refill_amount: Number(v) } : x)))}
-                    />
-                    <Input
-                      label="הערות"
-                      value={String(p.notes ?? '')}
-                      onChangeText={(v) => setPointsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, notes: v } : x)))}
-                    />
-                    <Pressable
-                      onPress={() => setPointsDraft((prev) => prev.filter((_, i) => i !== idx))}
-                      style={{ paddingVertical: 6 }}
-                    >
-                      <Text style={{ color: colors.danger, fontWeight: '900', textAlign: 'right' }}>הסר שורה</Text>
-                    </Pressable>
-                  </View>
-                ))}
-                <Button
-                  title="הוסף שורה"
-                  variant="secondary"
-                  onPress={() =>
-                    setPointsDraft((prev) => [
-                      ...prev,
-                      { device_type: '', scent_type: '', refill_amount: 0, notes: '' },
-                    ])
-                  }
-                />
-              </View>
-            </Card>
-          )}
-          <FlatList
-            data={points}
-            keyExtractor={(i) => i.id}
-            contentContainerStyle={{ gap: 10, paddingBottom: 10 }}
-            renderItem={({ item }) => (
+          <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 14, paddingTop: 12 }}>
+            {addPointOpen ? (
               <Card>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.device_type}</Text>
-                <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                  ניחוח: {item.scent_type} • מילוי: {item.refill_amount}
-                </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-                  <Pressable onPress={() => upsertPoint(item)} style={{ paddingVertical: 6 }}>
-                    <Text style={{ color: colors.primary, fontWeight: '900' }}>שמור שוב</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <Pressable onPress={() => setAddPointOpen(false)} hitSlop={10}>
+                    <Text style={{ color: colors.muted, fontWeight: '900' }}>ביטול</Text>
                   </Pressable>
-                  <Pressable onPress={() => deletePoint(item.id)} style={{ paddingVertical: 6 }}>
-                    <Text style={{ color: colors.danger, fontWeight: '900' }}>מחק</Text>
-                  </Pressable>
+                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>הוספת נקודה</Text>
                 </View>
+                <PointEditor
+                  devices={devices}
+                  scents={scents}
+                  onSave={(p) => {
+                    upsertPoint(p);
+                    setAddPointOpen(false);
+                  }}
+                />
+              </Card>
+            ) : null}
+
+            {points.length ? (
+              <View style={{ gap: 10 }}>
+                {points.map((item) => (
+                  <Card key={item.id}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <View style={{ gap: 10 }}>
+                        {editingPointId === item.id ? (
+                          <Pressable onPress={cancelEditPoint} style={{ paddingVertical: 6 }} hitSlop={10}>
+                            <Text style={{ color: colors.muted, fontWeight: '900' }}>ביטול</Text>
+                          </Pressable>
+                        ) : (
+                          <Pressable onPress={() => startEditPoint(item)} style={{ paddingVertical: 6 }} hitSlop={10}>
+                            <Text style={{ color: colors.primary, fontWeight: '900' }}>עריכה</Text>
+                          </Pressable>
+                        )}
+                        <Pressable onPress={() => deletePoint(item.id)} style={{ paddingVertical: 6 }} hitSlop={10}>
+                          <Text style={{ color: colors.danger, fontWeight: '900' }}>מחק</Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
+                          מכשיר: {item.device_type}
+                        </Text>
+                        <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
+                          ניחוח: {item.scent_type} • מילוי: {item.refill_amount}
+                        </Text>
+                        {item.notes ? (
+                          <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>{item.notes}</Text>
+                        ) : null}
+
+                        {editingPointId === item.id ? (
+                          <View style={{ gap: 10, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
+                            <SelectSheet
+                              label="מכשיר"
+                              value={editDeviceType}
+                              placeholder="בחר מכשיר…"
+                              options={devices.map((d) => ({ value: d.name, label: d.name }))}
+                              onChange={setEditDeviceType}
+                            />
+                            <SelectSheet
+                              label="ניחוח"
+                              value={editScentType}
+                              placeholder="בחר ניחוח…"
+                              options={scents.map((s) => ({ value: s.name, label: s.name }))}
+                              onChange={setEditScentType}
+                            />
+                            <Button title="שמור שינויים" onPress={() => saveEditPoint(item)} />
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  </Card>
+                ))}
+              </View>
+            ) : (
+              <Card>
+                <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '800' }}>אין נקודות ריח עדיין.</Text>
+                <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 4 }}>
+                  לחץ על כפתור הפלוס כדי להוסיף נקודה.
+                </Text>
               </Card>
             )}
-            ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות שירות.</Text>}
-          />
-          <Button title="סגור" variant="secondary" onPress={() => setPointsOpen(false)} />
+          </ScrollView>
         </View>
-      </ModalSheet>
+      </AnchoredWindow>
     </Screen>
   );
 }
@@ -542,41 +575,43 @@ function PointEditor({
   const scentOptions = useMemo(() => scents.map((s) => ({ value: s.name, label: s.name })), [scents]);
 
   return (
-    <Card>
-      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>הוספת נקודה</Text>
-      <View style={{ gap: 10 }}>
-        <SelectSheet
-          label="מכשיר"
-          value={deviceType}
-          options={deviceOptions.length ? deviceOptions : [{ value: deviceType || 'Unknown', label: deviceType || 'Unknown' }]}
-          onChange={(v) => {
-            setDeviceType(v);
-            const dev = devices.find((d) => d.name === v);
-            if (dev?.refill_amount) setRefillAmount(String(dev.refill_amount));
-          }}
-        />
-        <SelectSheet
-          label="ניחוח"
-          value={scentType}
-          options={scentOptions.length ? scentOptions : [{ value: scentType || 'Unknown', label: scentType || 'Unknown' }]}
-          onChange={setScentType}
-        />
-        <Input label="כמות מילוי" value={refillAmount} onChangeText={setRefillAmount} keyboardType="numeric" />
-        <Input label="הערות" value={notes} onChangeText={setNotes} />
-        <Button
-          title="הוסף"
-          onPress={() => {
-            onSave({
-              device_type: deviceType,
-              scent_type: scentType,
-              refill_amount: Number(refillAmount),
-              notes,
-            });
-            setNotes('');
-          }}
-        />
-      </View>
-    </Card>
+    <View style={{ gap: 10 }}>
+      <SelectSheet
+        label="מכשיר"
+        value={deviceType}
+        placeholder="בחר מכשיר…"
+        options={deviceOptions.length ? deviceOptions : [{ value: deviceType || 'Unknown', label: deviceType || 'Unknown' }]}
+        onChange={(v) => {
+          setDeviceType(v);
+          const dev = devices.find((d) => d.name === v);
+          if (dev?.refill_amount) setRefillAmount(String(dev.refill_amount));
+        }}
+      />
+      <SelectSheet
+        label="ניחוח"
+        value={scentType}
+        placeholder="בחר ניחוח…"
+        options={scentOptions.length ? scentOptions : [{ value: scentType || 'Unknown', label: scentType || 'Unknown' }]}
+        onChange={setScentType}
+      />
+      <Input label="כמות מילוי" value={refillAmount} onChangeText={setRefillAmount} keyboardType="numeric" />
+      <Input label="הערות" value={notes} onChangeText={setNotes} />
+      <Button
+        title="הוסף נקודה"
+        onPress={() => {
+          onSave({
+            device_type: deviceType,
+            scent_type: scentType,
+            refill_amount: Number(refillAmount),
+            notes,
+          });
+          setDeviceType('');
+          setScentType('');
+          setRefillAmount('');
+          setNotes('');
+        }}
+      />
+    </View>
   );
 }
 
