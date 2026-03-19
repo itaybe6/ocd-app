@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { yyyyMmDd } from '../../lib/time';
@@ -29,6 +30,8 @@ type Unified = {
 };
 
 type InstallationDevice = { id: string; installation_job_id: string; device_name?: string | null; image_url?: string | null };
+
+const kindLabel = (k: Kind) => (k === 'installation' ? 'התקנה' : 'מיוחדת');
 
 export function InstallationJobsScreen() {
   const { setIsLoading } = useLoading();
@@ -116,7 +119,7 @@ export function InstallationJobsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen backgroundColor="#FAF9FE">
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchAll} />
@@ -160,14 +163,19 @@ export function InstallationJobsScreen() {
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
-          <Pressable onPress={() => open(item)}>
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                {item.kind} • #{item.order_number ?? '—'} • {item.status}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>{item.date}</Text>
-            </Card>
-          </Pressable>
+          <JobCard
+            title={`#${item.order_number ?? '—'} - ${kindLabel(item.kind)}`}
+            status={item.status}
+            description={item.notes ?? null}
+            onPress={() => open(item)}
+            faded={item.status === 'completed'}
+            chips={
+              <>
+                <JobChip text={kindLabel(item.kind)} />
+                <JobChip text={yyyyMmDd(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />

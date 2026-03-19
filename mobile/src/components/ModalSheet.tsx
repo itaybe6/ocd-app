@@ -11,9 +11,16 @@ type ModalSheetProps = {
 
 export function ModalSheet({ visible, onClose, children, containerStyle }: ModalSheetProps) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
-        <Pressable className="flex-1" onPress={onClose} />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+    >
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' }}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
         <View
           style={[
             {
@@ -27,7 +34,7 @@ export function ModalSheet({ visible, onClose, children, containerStyle }: Modal
             containerStyle,
           ]}
         >
-          <View className="items-center pb-3">
+          <View style={{ alignItems: 'center', paddingBottom: 12 }}>
             <View style={{ width: 44, height: 5, borderRadius: 999, backgroundColor: colors.border }} />
           </View>
           {children}

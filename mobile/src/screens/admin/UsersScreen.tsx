@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
+import { Eye } from 'lucide-react-native';
 import { ModalSheet } from '../../components/ModalSheet';
 import { Screen } from '../../components/Screen';
 import { Button } from '../../components/ui/Button';
@@ -336,6 +337,21 @@ export function UsersScreen() {
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View style={{ gap: 6 }}>
+                {item.role === 'customer' ? (
+                  <Pressable
+                    onPress={() => fetchServicePoints(item)}
+                    style={{
+                      paddingVertical: 6,
+                      paddingHorizontal: 10,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: 10,
+                      alignSelf: 'flex-start',
+                    }}
+                  >
+                    <Eye size={18} color={colors.text} />
+                  </Pressable>
+                ) : null}
                 <Pressable onPress={() => openEdit(item)} style={{ paddingVertical: 6 }}>
                   <Text style={{ color: colors.primary, fontWeight: '900' }}>עריכה</Text>
                 </Pressable>
@@ -349,9 +365,9 @@ export function UsersScreen() {
                   {item.phone} • {item.role}
                 </Text>
                 {item.role === 'customer' ? (
-                  <Pressable onPress={() => fetchServicePoints(item)} style={{ marginTop: 8 }}>
-                    <Text style={{ color: colors.text, textAlign: 'right', fontWeight: '800' }}>נקודות שירות</Text>
-                  </Pressable>
+                  <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6, fontWeight: '700' }}>
+                    נקודות ריח
+                  </Text>
                 ) : null}
               </View>
             </View>
@@ -405,7 +421,7 @@ export function UsersScreen() {
       <ModalSheet visible={pointsOpen} onClose={() => setPointsOpen(false)}>
         <View style={{ gap: 10 }}>
           <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            נקודות שירות — {pointsUser?.name}
+            נקודות ריח — {pointsUser?.name}
           </Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>

@@ -1,13 +1,14 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Screen } from '../../components/Screen';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { yyyyMmDd } from '../../lib/time';
@@ -28,6 +29,15 @@ type Unified = {
 
 type Worker = { id: string; name: string; role: 'worker' };
 
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function formatHm(iso: string) {
+  const d = new Date(iso);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 function parseTimeToMinutes(iso: string): number {
   const d = new Date(iso);
   return d.getHours() * 60 + d.getMinutes();
@@ -43,6 +53,7 @@ function updateIsoTime(iso: string, timeHm: string): string {
 export function DailyScheduleScreen() {
   const { setIsLoading } = useLoading();
   const [day, setDay] = useState(yyyyMmDd(new Date()));
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [workerId, setWorkerId] = useState('');
   const [items, setItems] = useState<Unified[]>([]);
@@ -54,6 +65,25 @@ export function DailyScheduleScreen() {
   const workerOptions = useMemo(
     () => [{ value: '', label: 'הכל' }, ...workers.map((w) => ({ value: w.id, label: w.name }))],
     [workers]
+  );
+
+  const workerMap = useMemo(() => new Map(workers.map((w) => [w.id, w.name])), [workers]);
+
+  const kindLabel = useCallback((k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת'), []);
+
+  const parsedDay = useMemo(() => {
+    const d = new Date(`${day}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }, [day]);
+
+  const onDatePicked = useCallback(
+    (event: DateTimePickerEvent, selected?: Date) => {
+      if (Platform.OS !== 'ios') setShowDatePicker(false);
+      if (event.type !== 'set') return;
+      if (!selected) return;
+      setDay(yyyyMmDd(selected));
+    },
+    []
   );
 
   const fetchWorkers = useCallback(async () => {
@@ -131,13 +161,35 @@ export function DailyScheduleScreen() {
   };
 
   return (
-    <Screen>
+    <Screen backgroundColor="#FAF9FE">
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchDay} />
           <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>לוז יומי</Text>
         </View>
-        <Input label="תאריך (yyyy-MM-dd)" value={day} onChangeText={setDay} />
+        {Platform.OS === 'web' ? (
+          <Input label="תאריך (yyyy-MM-dd)" value={day} onChangeText={setDay} />
+        ) : (
+          <>
+            <Pressable onPress={() => setShowDatePicker(true)}>
+              <Input
+                label="תאריך"
+                value={day}
+                editable={false}
+                onPressIn={() => setShowDatePicker(true)}
+                pointerEvents="none"
+              />
+            </Pressable>
+            {showDatePicker && (
+              <DateTimePicker
+                value={parsedDay}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onDatePicked}
+              />
+            )}
+          </>
+        )}
         <SelectSheet label="עובד" value={workerId} options={workerOptions} onChange={setWorkerId} />
       </View>
 
@@ -147,20 +199,24 @@ export function DailyScheduleScreen() {
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
-          <Pressable
+          <JobCard
+            style={{ borderRadius: 18 }}
+            title={`#${item.order_number ?? '—'} - ${workerMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
+            status={item.status}
+            primaryText={`סוג: ${kindLabel(item.kind)}`}
+            description={item.notes ?? null}
             onPress={() => {
               setEdit(item);
               setNewTime(new Date(item.date).toISOString().slice(11, 16));
             }}
-          >
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                {item.kind} • #{item.order_number ?? '—'} • {item.status}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>{item.date}</Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>worker_id: {item.worker_id}</Text>
-            </Card>
-          </Pressable>
+            faded={item.status === 'completed'}
+            chips={
+              <>
+                <JobChip text={kindLabel(item.kind)} />
+                <JobChip text={formatHm(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות ליום הזה.</Text>}
       />

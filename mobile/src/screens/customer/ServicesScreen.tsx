@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { ModalSheet } from '../../components/ModalSheet';
 import { Input } from '../../components/ui/Input';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -98,7 +99,7 @@ export function CustomerServicesScreen() {
   );
 
   return (
-    <Screen>
+    <Screen backgroundColor="#FAF9FE">
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchJobs} />
         <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>שירותים</Text>
@@ -126,18 +127,18 @@ export function CustomerServicesScreen() {
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
-          <Pressable onPress={() => openJob(item)}>
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>משימה #{item.id.slice(0, 6)}</Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                {item.date}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                עובד: {workers[item.worker_id] ?? item.worker_id}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>סטטוס: {item.status}</Text>
-            </Card>
-          </Pressable>
+          <JobCard
+            title={`#${item.id.slice(0, 6)} - ${workers[item.worker_id] ?? item.worker_id.slice(0, 6)}`}
+            status={item.status}
+            primaryText={workers[item.worker_id] ? `עובד: ${workers[item.worker_id]}` : `עובד: ${item.worker_id.slice(0, 6)}`}
+            onPress={() => openJob(item)}
+            faded={item.status === 'completed'}
+            chips={
+              <>
+                <JobChip text={yyyyMmDd(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין משימות.</Text>}
       />

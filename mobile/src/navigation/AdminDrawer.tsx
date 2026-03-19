@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Text, View, Pressable } from 'react-native';
-import { createDrawerNavigator, DrawerContentScrollView, DrawerItem, type DrawerContentComponentProps } from '@react-navigation/drawer';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
+import { createDrawerNavigator, DrawerContentScrollView, type DrawerContentComponentProps } from '@react-navigation/drawer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ClipboardList,
   LayoutDashboard,
@@ -13,6 +14,7 @@ import {
   Settings,
   Package,
   Wrench,
+  LogOut,
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { colors } from '../theme/colors';
@@ -50,10 +52,55 @@ export type AdminDrawerParamList = {
 
 const Drawer = createDrawerNavigator<AdminDrawerParamList>();
 
-type Item = { key: keyof AdminDrawerParamList; label: string; icon: React.ReactNode };
+type LucideIcon = React.ComponentType<{ size?: number; color?: string }>;
+type Item = { key: keyof AdminDrawerParamList; label: string; icon: LucideIcon; badge?: 'supportNew' };
+type Section = { title: string; items: Item[] };
+
+function DrawerNavItem({
+  label,
+  Icon,
+  active,
+  badgeCount,
+  onPress,
+}: {
+  label: string;
+  Icon: LucideIcon;
+  active: boolean;
+  badgeCount?: number;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.item,
+        active && styles.itemActive,
+        pressed && !active && styles.itemPressed,
+      ]}
+    >
+      <View style={styles.itemLeft}>
+        {!!badgeCount && badgeCount > 0 ? <Badge count={badgeCount} /> : null}
+      </View>
+
+      <View style={styles.itemCenter}>
+        <Text numberOfLines={1} style={[styles.itemLabel, active && styles.itemLabelActive]}>
+          {label}
+        </Text>
+      </View>
+
+      <View style={styles.itemRight}>
+        <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
+          <Icon size={18} color={active ? colors.primary : colors.muted} />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
 
 function AdminDrawerContent(props: DrawerContentComponentProps) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [supportNewCount, setSupportNewCount] = useState(0);
 
   useEffect(() => {
@@ -79,61 +126,103 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
     };
   }, []);
 
-  const items: Item[] = useMemo(
+  const sections: Section[] = useMemo(
     () => [
-      { key: 'Jobs', label: 'משימות ריח', icon: <ClipboardList size={18} color={colors.text} /> },
-      { key: 'InstallationJobs', label: 'משימות מיוחדות', icon: <Wrench size={18} color={colors.text} /> },
-      { key: 'AddJobs', label: 'הוספת משימות', icon: <PlusCircle size={18} color={colors.text} /> },
-      { key: 'JobExecution', label: 'ביצוע משימות', icon: <PlayCircle size={18} color={colors.text} /> },
-      { key: 'Dashboard', label: 'לוח בקרה', icon: <LayoutDashboard size={18} color={colors.text} /> },
-      { key: 'DailySchedule', label: 'לוז יומי', icon: <CalendarDays size={18} color={colors.text} /> },
-      { key: 'Users', label: 'משתמשים', icon: <UsersIcon size={18} color={colors.text} /> },
-      { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: <Package size={18} color={colors.text} /> },
-      { key: 'WorkTemplates', label: 'תבניות עבודה', icon: <Settings size={18} color={colors.text} /> },
-      { key: 'WorkSchedule', label: 'קווי עבודה', icon: <CalendarDays size={18} color={colors.text} /> },
-      { key: 'Support', label: 'שירות לקוחות', icon: <Headset size={18} color={colors.text} /> },
-      { key: 'Reports', label: 'דוחות', icon: <FileBarChart2 size={18} color={colors.text} /> },
+      {
+        title: 'משימות',
+        items: [
+          { key: 'Jobs', label: 'משימות ריח', icon: ClipboardList },
+          { key: 'InstallationJobs', label: 'משימות מיוחדות', icon: Wrench },
+          { key: 'AddJobs', label: 'הוספת משימות', icon: PlusCircle },
+          { key: 'JobExecution', label: 'ביצוע משימות', icon: PlayCircle },
+        ],
+      },
+      {
+        title: 'ניהול',
+        items: [
+          { key: 'Dashboard', label: 'לוח בקרה', icon: LayoutDashboard },
+          { key: 'DailySchedule', label: 'לוז יומי', icon: CalendarDays },
+          { key: 'WorkSchedule', label: 'קווי עבודה', icon: CalendarDays },
+          { key: 'Users', label: 'משתמשים', icon: UsersIcon },
+          { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
+          { key: 'DeviceInstallation', label: 'התקנת מכשירים', icon: Wrench },
+          { key: 'WorkTemplates', label: 'תבניות עבודה', icon: Settings },
+        ],
+      },
+      {
+        title: 'תמיכה ודוחות',
+        items: [
+          { key: 'Support', label: 'שירות לקוחות', icon: Headset, badge: 'supportNew' },
+          { key: 'Reports', label: 'דוחות', icon: FileBarChart2 },
+        ],
+      },
     ],
     []
   );
 
+  const activeKey = props.state.routeNames[props.state.index] as keyof AdminDrawerParamList;
+  const initials = (user?.name || 'Admin').trim().slice(0, 1).toUpperCase();
+
   return (
     <DrawerContentScrollView
       {...props}
-      contentContainerStyle={{ paddingTop: 10 }}
-      style={{ backgroundColor: colors.bg }}
+      contentContainerStyle={[
+        styles.scrollContent,
+        { paddingTop: 12 + insets.top, paddingBottom: 18 + insets.bottom },
+      ]}
+      style={styles.scroll}
     >
-      <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
-        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>Admin</Text>
-        <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>מערכת ניהול</Text>
+      <View style={styles.header}>
+        <View style={styles.headerCard}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerMeta}>
+              <Text numberOfLines={1} style={styles.headerTitle}>
+                מערכת ניהול
+              </Text>
+              <Text numberOfLines={1} style={styles.headerSubtitle}>
+                {user?.name ? user.name : 'Admin'}
+                {user?.phone ? ` · ${user.phone}` : ''}
+              </Text>
+            </View>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+          </View>
+        </View>
       </View>
-      <View style={{ paddingHorizontal: 8 }}>
-        {items.map((it) => (
-          <DrawerItem
-            key={String(it.key)}
-            label={() => (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
-                {it.key === 'Support' ? <Badge count={supportNewCount} /> : <View />}
-                <Text style={{ color: colors.text, textAlign: 'right', fontWeight: '700', flex: 1 }}>{it.label}</Text>
-              </View>
-            )}
-            icon={() => it.icon}
-            focused={props.state.routeNames[props.state.index] === it.key}
-            onPress={() => props.navigation.navigate(it.key as any)}
-            style={{
-              borderRadius: 14,
-              marginHorizontal: 4,
-              backgroundColor: props.state.routeNames[props.state.index] === it.key ? colors.elevated : 'transparent',
-            }}
-          />
+
+      <View style={styles.sections}>
+        {sections.map((section) => (
+          <View key={section.title} style={styles.section}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <View style={styles.sectionCard}>
+              {section.items.map((it) => (
+                <DrawerNavItem
+                  key={String(it.key)}
+                  label={it.label}
+                  Icon={it.icon}
+                  active={activeKey === it.key}
+                  badgeCount={it.badge === 'supportNew' ? supportNewCount : undefined}
+                  onPress={() => props.navigation.navigate(it.key as any)}
+                />
+              ))}
+            </View>
+          </View>
         ))}
       </View>
-      <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
+
+      <View style={styles.footer}>
         <Pressable
           onPress={() => signOut()}
-          style={{ borderRadius: 16, paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated }}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.logout, pressed && styles.logoutPressed]}
         >
-          <Text style={{ color: colors.text, fontWeight: '800', textAlign: 'right' }}>התנתקות</Text>
+          <View style={styles.logoutRow}>
+            <Text style={styles.logoutText}>התנתקות</Text>
+            <View style={styles.logoutIcon}>
+              <LogOut size={18} color={colors.danger} />
+            </View>
+          </View>
         </Pressable>
       </View>
     </DrawerContentScrollView>
@@ -151,6 +240,8 @@ export function AdminDrawer() {
         sceneStyle: { backgroundColor: colors.bg },
         drawerPosition: 'right',
         drawerType: 'front',
+        drawerStyle: { backgroundColor: colors.bg, width: 320 },
+        overlayColor: 'rgba(15, 23, 42, 0.35)',
       }}
     >
       <Drawer.Screen name="Dashboard" options={{ title: 'לוח בקרה' }} component={DashboardScreen} />
@@ -169,4 +260,113 @@ export function AdminDrawer() {
     </Drawer.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  scroll: { backgroundColor: colors.bg },
+  scrollContent: {},
+
+  header: { paddingHorizontal: 16, paddingBottom: 10 },
+  headerCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerMeta: { flex: 1, paddingRight: 12 },
+  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '900', textAlign: 'right' },
+  headerSubtitle: { color: colors.muted, marginTop: 2, textAlign: 'right', fontWeight: '700', fontSize: 12 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: '#2563EB1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#2563EB2A',
+  },
+  avatarText: { color: colors.primary, fontWeight: '900', fontSize: 16 },
+
+  sections: { paddingHorizontal: 16 },
+  section: { marginTop: 10 },
+  sectionTitle: { color: colors.muted, fontWeight: '900', fontSize: 12, textAlign: 'right', marginBottom: 8 },
+  sectionCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: 18,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginVertical: 3,
+  },
+  itemActive: { backgroundColor: '#2563EB12' },
+  itemPressed: { backgroundColor: '#0F172A08' },
+  itemLeft: { width: 46, alignItems: 'flex-start' },
+  itemCenter: { flex: 1, paddingHorizontal: 8, justifyContent: 'center' },
+  itemRight: { width: 42, alignItems: 'flex-end', justifyContent: 'center' },
+  itemLabel: {
+    color: colors.text,
+    textAlign: 'right',
+    fontWeight: '800',
+    fontSize: 14,
+    lineHeight: 20,
+    includeFontPadding: false,
+    transform: [{ translateY: 2 }],
+  },
+  itemLabelActive: { color: colors.primary },
+  iconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F172A08',
+  },
+  iconWrapActive: { backgroundColor: '#2563EB1A' },
+
+  footer: { paddingHorizontal: 16, marginTop: 12 },
+  logout: {
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#DC262633',
+    backgroundColor: colors.elevated,
+  },
+  logoutPressed: { backgroundColor: '#DC26260A' },
+  logoutRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 34,
+  },
+  logoutText: {
+    color: colors.danger,
+    fontWeight: '900',
+    textAlign: 'right',
+    includeFontPadding: false,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2,
+    transform: [{ translateY: 1 }],
+  },
+  logoutIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#DC26260F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 

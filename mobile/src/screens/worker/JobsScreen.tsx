@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -15,6 +16,7 @@ import { useAuth } from '../../state/AuthContext';
 import { useLoading } from '../../state/LoadingContext';
 import { pickImageFromLibrary } from '../../lib/media';
 import { completeUnifiedJob, uploadInstallationDeviceImage, uploadJobServicePointImage, uploadSpecialJobImage } from '../../lib/execution';
+import { yyyyMmDd } from '../../lib/time';
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
@@ -34,6 +36,8 @@ type SpecialJob = { id: string; image_url?: string | null };
 type ExecRegularPoint = JobServicePoint & { localUri?: string | null; uploading?: boolean };
 type ExecInstDevice = InstallationDevice & { localUri?: string | null; uploading?: boolean };
 type ExecSpecial = SpecialJob & { localUri?: string | null; uploading?: boolean };
+
+const kindLabel = (k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת');
 
 export function WorkerJobsScreen() {
   const { user } = useAuth();
@@ -190,7 +194,7 @@ export function WorkerJobsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen backgroundColor="#FAF9FE">
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchAll} />
@@ -234,14 +238,18 @@ export function WorkerJobsScreen() {
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
-          <Pressable onPress={() => open(item)}>
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                {item.kind} • #{item.order_number ?? '—'} • {item.status}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>{item.date}</Text>
-            </Card>
-          </Pressable>
+          <JobCard
+            title={`#${item.order_number ?? '—'} - ${kindLabel(item.kind)}`}
+            status={item.status}
+            onPress={() => open(item)}
+            faded={item.status === 'completed'}
+            chips={
+              <>
+                <JobChip text={kindLabel(item.kind)} />
+                <JobChip text={yyyyMmDd(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />
@@ -249,9 +257,16 @@ export function WorkerJobsScreen() {
       <ModalSheet visible={!!selected} onClose={() => setSelected(null)}>
         {!!selected && (
           <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              {selected.kind} • #{selected.order_number ?? '—'}
-            </Text>
+            <JobCard
+              title={`#${selected.order_number ?? '—'} - ${kindLabel(selected.kind)}`}
+              status={selected.status}
+              chips={
+                <>
+                  <JobChip text={kindLabel(selected.kind)} />
+                  <JobChip text={yyyyMmDd(selected.date)} muted />
+                </>
+              }
+            />
 
             {selected.kind === 'regular' ? (
               <>

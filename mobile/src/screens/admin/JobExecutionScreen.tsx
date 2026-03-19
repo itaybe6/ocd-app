@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
+import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -152,7 +153,7 @@ export function JobExecutionScreen() {
   };
 
   return (
-    <Screen>
+    <Screen backgroundColor="#FAF9FE">
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchJobs} />
@@ -168,14 +169,20 @@ export function JobExecutionScreen() {
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
-          <Pressable onPress={() => openJob(item)}>
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                #{item.order_number ?? '—'} • {item.status}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>{item.date}</Text>
-            </Card>
-          </Pressable>
+          <JobCard
+            title={`#${item.order_number ?? '—'} - משימת ריח`}
+            status={item.status}
+            primaryText={item.customer_id ? `לקוח: ${item.customer_id.slice(0, 6)}` : undefined}
+            description={item.notes ?? null}
+            onPress={() => openJob(item)}
+            faded={item.status === 'completed'}
+            chips={
+              <>
+                <JobChip text="רגילה" />
+                <JobChip text={yyyyMmDd(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />
@@ -183,10 +190,17 @@ export function JobExecutionScreen() {
       <ModalSheet visible={!!selectedJob} onClose={() => setSelectedJob(null)}>
         {!!selectedJob && (
           <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              משימה #{selectedJob.order_number ?? '—'}
-            </Text>
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>{selectedJob.date}</Text>
+            <JobCard
+              title={`#${selectedJob.order_number ?? '—'} - משימת ריח`}
+              status={selectedJob.status}
+              description={selectedJob.notes ?? null}
+              chips={
+                <>
+                  <JobChip text="רגילה" />
+                  <JobChip text={yyyyMmDd(selectedJob.date)} muted />
+                </>
+              }
+            />
 
             <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>נקודות שירות</Text>
             <View style={{ gap: 10 }}>

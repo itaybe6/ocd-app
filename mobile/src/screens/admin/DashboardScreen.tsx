@@ -139,11 +139,6 @@ export function DashboardScreen() {
   return (
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 26 }}>
-        <View style={{ marginBottom: 12, alignItems: 'flex-end' }}>
-          <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900', textAlign: 'right' }}>לוח בקרה</Text>
-          <Text style={{ color: colors.muted, marginTop: 2, fontWeight: '700', textAlign: 'right' }}>סטטוס החודש הנוכחי</Text>
-        </View>
-
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           <Card
             style={{

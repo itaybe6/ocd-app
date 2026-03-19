@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { JobCard, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -33,6 +34,8 @@ type JobServicePoint = { id: string; job_id: string; service_point_id: string; i
 type ServicePoint = { id: string; device_type: string; scent_type: string; refill_amount: number };
 type InstallationDevice = { id: string; installation_job_id: string; device_name?: string | null; image_url?: string | null };
 type SpecialJob = { id: string; battery_type?: 'AA' | 'DC' | null; job_type?: string | null; image_url?: string | null };
+
+const kindLabel = (k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת');
 
 export function WorkerScheduleScreen() {
   const { user } = useAuth();
@@ -317,7 +320,7 @@ export function WorkerScheduleScreen() {
   }, [regularPoints, installationDevices.length, special?.battery_type]);
 
   return (
-    <Screen>
+    <Screen backgroundColor="#FAF9FE">
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchForDay} />
@@ -363,14 +366,18 @@ export function WorkerScheduleScreen() {
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
         renderItem={({ item }) => (
-          <Pressable onPress={() => open(item)}>
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                {item.kind} • #{item.order_number ?? '—'}
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>{item.date}</Text>
-            </Card>
-          </Pressable>
+          <JobCard
+            title={`#${item.order_number ?? '—'} - ${kindLabel(item.kind)}`}
+            status={item.status}
+            description={item.notes ?? null}
+            onPress={() => open(item)}
+            chips={
+              <>
+                <JobChip text={kindLabel(item.kind)} />
+                <JobChip text={yyyyMmDd(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />
@@ -378,9 +385,17 @@ export function WorkerScheduleScreen() {
       <ModalSheet visible={!!selected} onClose={() => setSelected(null)}>
         {!!selected && (
           <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              {selected.kind} • #{selected.order_number ?? '—'}
-            </Text>
+            <JobCard
+              title={`#${selected.order_number ?? '—'} - ${kindLabel(selected.kind)}`}
+              status={selected.status}
+              description={selected.notes ?? null}
+              chips={
+                <>
+                  <JobChip text={kindLabel(selected.kind)} />
+                  <JobChip text={yyyyMmDd(selected.date)} muted />
+                </>
+              }
+            />
 
             {selected.kind === 'regular' ? (
               <>

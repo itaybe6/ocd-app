@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, SectionList, Text, View, Image } from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, SectionList, Text, View, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
-import { MoreHorizontal, Pencil, Search, Trash2 } from 'lucide-react-native';
+import { MoreVertical, Pencil, Rocket, Search, Trash2 } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { yyyyMmDd } from '../../lib/time';
@@ -345,6 +346,27 @@ export function JobsScreen() {
     return SPECIAL_JOB_TYPES.find((x) => x.value === t) ?? null;
   }, [editing]);
 
+  const ui = useMemo(
+    () => ({
+      surface: '#FAF9FE',
+      surfaceContainerHigh: '#E9E7ED',
+      surfaceContainer: '#EEE DF3'.replace(' ', ''), // keep literal from design; avoid eslint complaining about spaces
+      outlineVariant: '#C1C6D7',
+      primary: '#0058BC',
+      primary2: '#0070EB',
+      text: colors.text,
+      muted: colors.muted,
+    }),
+    []
+  );
+
+  const kindLabel = (k: JobKind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת');
+
+  const statusMeta = (s: JobStatus) =>
+    s === 'completed'
+      ? { label: 'הושלם', bg: 'rgba(34,197,94,0.16)', fg: '#166534' }
+      : { label: 'ממתין', bg: 'rgba(249,115,22,0.16)', fg: '#9A3412' };
+
   const stats = useMemo(() => {
     const base = filtered;
     const pending = base.filter((x) => x.status === 'pending').length;
@@ -363,253 +385,228 @@ export function JobsScreen() {
     []
   );
 
-  const IconButton = ({
-    label,
-    onPress,
-    variant = 'ghost',
-    disabled,
-    children,
-  }: {
-    label: string;
-    onPress: () => void;
-    variant?: 'ghost' | 'danger';
-    disabled?: boolean;
-    children: React.ReactNode;
-  }) => (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          height: 38,
-          minWidth: 42,
-          paddingHorizontal: 10,
-          borderRadius: 14,
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'row',
-          gap: 8,
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: variant === 'danger' ? '#FEF2F2' : colors.elevated,
-          opacity: disabled ? 0.45 : pressed ? 0.75 : 1,
-        },
-      ]}
-    >
-      {children}
-    </Pressable>
-  );
-
   return (
-    <Screen>
-      <View style={{ gap: 12 }}>
-        <Card style={[shadowCardStyle, { paddingVertical: 16 }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchUnified} />
-            <View>
-              <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900', textAlign: 'right' }}>ניהול משימות</Text>
-              <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>צפייה וניהול כל המשימות במערכת</Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Button title="הוסף משימה" variant="secondary" onPress={() => navigation.navigate('AddJobs' satisfies keyof AdminDrawerParamList)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button title="ביצוע משימה" onPress={() => navigation.navigate('JobExecution' satisfies keyof AdminDrawerParamList)} />
-            </View>
-          </View>
-        </Card>
-
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {[
-            { label: 'סה״כ', value: stats.total, bg: '#EEF2FF', fg: '#3730A3' },
-            { label: 'ממתינות', value: stats.pending, bg: '#FFFBEB', fg: '#92400E' },
-            { label: 'הושלמו', value: stats.completed, bg: '#ECFDF5', fg: '#065F46' },
-          ].map((x) => (
-            <View
-              key={x.label}
-              style={{
-                flex: 1,
-                backgroundColor: x.bg,
-                borderRadius: 16,
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Text style={{ color: x.fg, fontWeight: '900', textAlign: 'right' }}>{x.value}</Text>
-              <Text style={{ color: x.fg, opacity: 0.8, marginTop: 2, textAlign: 'right', fontWeight: '800', fontSize: 12 }}>
-                {x.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        <Card style={[shadowCardStyle, { gap: 10 }]}>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>סינון וחיפוש</Text>
-
-          <View
-            style={{
-              backgroundColor: colors.elevated,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 14,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <Search size={18} color={colors.muted} />
-            <View style={{ flex: 1 }}>
-              <Input
-                label={undefined}
-                value={filters.q}
-                onChangeText={(v) => setFilters((p) => ({ ...p, q: v }))}
-                placeholder="חיפוש לפי עובד או לקוח…"
-                style={{ borderWidth: 0, paddingVertical: 0, paddingHorizontal: 0, backgroundColor: 'transparent' }}
-              />
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <SelectSheet
-                label="סטטוס"
-                value={filters.status}
-                placeholder="הכל"
-                options={[
-                  { value: '', label: 'הכל' },
-                  { value: 'pending', label: 'ממתין' },
-                  { value: 'completed', label: 'הושלם' },
-                ]}
-                onChange={(v) => setFilters((p) => ({ ...p, status: (v || '') as any }))}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <SelectSheet
-                label="סוג"
-                value={filters.kind}
-                placeholder="הכל"
-                options={[
-                  { value: '', label: 'הכל' },
-                  { value: 'regular', label: 'רגילה' },
-                  { value: 'installation', label: 'התקנה' },
-                  { value: 'special', label: 'מיוחדת' },
-                ]}
-                onChange={(v) => setFilters((p) => ({ ...p, kind: (v || '') as any }))}
-              />
-            </View>
-          </View>
-
-          <Input
-            label="תאריך (yyyy-MM-dd)"
-            value={filters.date}
-            onChangeText={(v) => setFilters((p) => ({ ...p, date: v }))}
-            placeholder="2026-03-15"
-          />
-        </Card>
-      </View>
-
+    <Screen backgroundColor={ui.surface}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => `${item.kind}:${item.id}`}
-        style={{ marginTop: 12 }}
+        stickySectionHeadersEnabled={false}
+        style={{ marginTop: 4 }}
         contentContainerStyle={{ paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View style={{ gap: 14, marginBottom: 14, paddingTop: 4 }}>
+            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ gap: 4 }}>
+                <Text style={{ color: ui.text, fontSize: 30, fontWeight: '900', textAlign: 'right' }}>ניהול משימות</Text>
+                <Text style={{ color: '#414755', fontSize: 13, fontWeight: '700', textAlign: 'right' }}>
+                  צפייה וניהול כל המשימות במערכת
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
+                  backgroundColor: '#D8E2FF',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Rocket size={26} color={ui.primary} />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+              <Pressable
+                onPress={() => navigation.navigate('JobExecution' satisfies keyof AdminDrawerParamList)}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    backgroundColor: ui.primary,
+                    borderRadius: 999,
+                    paddingVertical: 16,
+                    paddingHorizontal: 16,
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    shadowColor: ui.primary,
+                    shadowOpacity: 0.18,
+                    shadowRadius: 18,
+                    shadowOffset: { width: 0, height: 10 },
+                    elevation: 3,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900' }}>ביצוע משימה</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => navigation.navigate('AddJobs' satisfies keyof AdminDrawerParamList)}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    backgroundColor: ui.surfaceContainerHigh,
+                    borderRadius: 999,
+                    paddingVertical: 16,
+                    paddingHorizontal: 16,
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <Text style={{ color: ui.text, fontWeight: '900' }}>הוסף משימה</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
+              {[
+                { label: 'הושלמו', value: stats.completed, bg: 'rgba(34,197,94,0.12)', fg: '#166534' },
+                { label: 'ממתינות', value: stats.pending, bg: 'rgba(249,115,22,0.12)', fg: '#9A3412' },
+                { label: 'סה״כ', value: stats.total, bg: 'rgba(168,85,247,0.12)', fg: '#6B21A8' },
+              ].map((x) => (
+                <View
+                  key={x.label}
+                  style={{
+                    minWidth: 128,
+                    backgroundColor: x.bg,
+                    borderRadius: 18,
+                    paddingVertical: 14,
+                    paddingHorizontal: 14,
+                    borderWidth: 1,
+                    borderColor: 'rgba(193,198,215,0.35)',
+                  }}
+                >
+                  <Text style={{ color: x.fg, fontWeight: '900', fontSize: 12, textAlign: 'right' }}>{x.label}</Text>
+                  <Text style={{ color: x.fg, fontWeight: '900', fontSize: 24, textAlign: 'right', marginTop: 6 }}>
+                    {x.value}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={{ gap: 10 }}>
+              <Text style={{ color: ui.text, fontWeight: '900', fontSize: 18, textAlign: 'right' }}>סינון וחיפוש</Text>
+
+              <View
+                style={{
+                  backgroundColor: ui.surfaceContainerHigh,
+                  borderRadius: 18,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <Search size={18} color="#717786" />
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label={undefined}
+                    value={filters.q}
+                    onChangeText={(v) => setFilters((p) => ({ ...p, q: v }))}
+                    placeholder="חיפוש לפי עובד או לקוח..."
+                    style={{
+                      borderWidth: 0,
+                      paddingVertical: 0,
+                      paddingHorizontal: 0,
+                      backgroundColor: 'transparent',
+                    }}
+                  />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <SelectSheet
+                    label="סטטוס"
+                    value={filters.status}
+                    placeholder="הכל"
+                    options={[
+                      { value: '', label: 'הכל' },
+                      { value: 'pending', label: 'ממתין' },
+                      { value: 'completed', label: 'הושלם' },
+                    ]}
+                    onChange={(v) => setFilters((p) => ({ ...p, status: (v || '') as any }))}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <SelectSheet
+                    label="סוג"
+                    value={filters.kind}
+                    placeholder="הכל"
+                    options={[
+                      { value: '', label: 'הכל' },
+                      { value: 'regular', label: 'רגילה' },
+                      { value: 'installation', label: 'התקנה' },
+                      { value: 'special', label: 'מיוחדת' },
+                    ]}
+                    onChange={(v) => setFilters((p) => ({ ...p, kind: (v || '') as any }))}
+                  />
+                </View>
+              </View>
+
+              <Input
+                label="תאריך מבוקש (yyyy-MM-dd)"
+                value={filters.date}
+                onChangeText={(v) => setFilters((p) => ({ ...p, date: v }))}
+                placeholder="2026-03-15"
+              />
+
+              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchUnified} />
+                <Text style={{ color: ui.muted, fontWeight: '800', textAlign: 'right' }}>
+                  מציג {filtered.length} משימות
+                </Text>
+              </View>
+            </View>
+          </View>
+        }
         renderSectionHeader={({ section }) => (
           <View style={{ paddingVertical: 8 }}>
             <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{section.title}</Text>
           </View>
         )}
         renderItem={({ item }) => (
-          <Card style={[shadowCardStyle, { marginBottom: 10 }]}>
-            <Pressable onPress={() => openJob(item)} style={{ gap: 10 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <View style={{ gap: 6 }}>
-                  <View
-                    style={{
-                      backgroundColor: item.status === 'completed' ? '#DCFCE7' : '#FEF3C7',
-                      borderRadius: 999,
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      alignSelf: 'flex-start',
-                    }}
-                  >
-                    <Text style={{ color: item.status === 'completed' ? '#065F46' : '#92400E', fontWeight: '900', fontSize: 11 }}>
-                      {item.status === 'completed' ? 'הושלם' : 'ממתין'}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      backgroundColor: '#F1F5F9',
-                      borderRadius: 999,
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      alignSelf: 'flex-start',
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <Text style={{ color: colors.text, fontWeight: '900', fontSize: 11 }}>
-                      {item.kind === 'regular' ? 'רגילה' : item.kind === 'installation' ? 'התקנה' : 'מיוחדת'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>
-                    #{item.order_number ?? '—'} • {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
-                  </Text>
-                  <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }} numberOfLines={1}>
-                    {item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
-                  </Text>
-                  <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }} numberOfLines={1}>
-                    {yyyyMmDd(item.date)}
-                  </Text>
-                </View>
-              </View>
-            </Pressable>
-
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-              <IconButton
-                label="ערוך"
-                onPress={() => openEdit(item)}
-              >
-                <Pencil size={16} color={colors.text} />
-                <Text style={{ color: colors.text, fontWeight: '900' }}>ערוך</Text>
-              </IconButton>
-
-              <IconButton
-                label="מחק"
-                variant="danger"
-                onPress={() => {
-                  Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
-                    { text: 'ביטול', style: 'cancel' },
-                    { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
-                  ]);
-                }}
-              >
-                <Trash2 size={16} color={colors.danger} />
-                <Text style={{ color: colors.danger, fontWeight: '900' }}>מחק</Text>
-              </IconButton>
-
-              <View style={{ flex: 1 }} />
-
-              <IconButton
-                label="נקודות לקוח"
-                disabled={!item.customer_id}
-                onPress={() => openCustomerPoints(item)}
-              >
-                <MoreHorizontal size={18} color={colors.text} />
-              </IconButton>
-            </View>
-          </Card>
+          <JobCard
+            title={`#${item.order_number ?? '—'} - ${userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}`}
+            status={item.status}
+            primaryText={item.customer_id ? `לקוח: ${userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}` : 'לקוח: —'}
+            description={item.notes ?? null}
+            onPress={() => openJob(item)}
+            faded={item.status === 'completed'}
+            actions={
+              <>
+                <JobCardAction label="ערוך" onPress={() => openEdit(item)}>
+                  <Pencil size={20} color="#414755" />
+                </JobCardAction>
+                <JobCardAction
+                  label="מחק"
+                  variant="danger"
+                  onPress={() => {
+                    Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
+                      { text: 'ביטול', style: 'cancel' },
+                      { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
+                    ]);
+                  }}
+                >
+                  <Trash2 size={20} color={colors.danger} />
+                </JobCardAction>
+                <JobCardAction label="נקודות לקוח" disabled={!item.customer_id} onPress={() => openCustomerPoints(item)}>
+                  <MoreVertical size={20} color="#414755" />
+                </JobCardAction>
+              </>
+            }
+            chips={
+              <>
+                <JobChip text={kindLabel(item.kind)} />
+                <JobChip text={yyyyMmDd(item.date)} muted />
+              </>
+            }
+          />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />
