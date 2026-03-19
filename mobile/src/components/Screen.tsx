@@ -14,7 +14,7 @@ export function Screen({
   style,
   children,
   backgroundColor = colors.bg,
-  statusBarStyle = 'light-content',
+  statusBarStyle = 'dark-content',
   ...rest
 }: ScreenProps) {
   return (

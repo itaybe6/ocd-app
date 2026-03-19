@@ -68,7 +68,15 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
                   borderColor: colors.border,
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'right' }}>{o.label ?? o.value}</Text>
+                <Text
+                  style={{
+                    color: o.value === value ? '#fff' : colors.text,
+                    fontWeight: '800',
+                    textAlign: 'right',
+                  }}
+                >
+                  {o.label ?? o.value}
+                </Text>
               </Pressable>
             ))}
           </View>

@@ -1,13 +1,13 @@
 export const colors = {
-  bg: '#0B0F14',
-  elevated: '#111827',
-  card: '#0F172A',
-  border: '#1F2937',
-  text: '#E5E7EB',
-  muted: '#94A3B8',
-  primary: '#3B82F6',
-  danger: '#EF4444',
-  success: '#22C55E',
+  bg: '#F6F7FB',
+  elevated: '#FFFFFF',
+  card: '#FFFFFF',
+  border: '#E5E7EB',
+  text: '#0F172A',
+  muted: '#64748B',
+  primary: '#2563EB',
+  danger: '#DC2626',
+  success: '#16A34A',
   warning: '#F59E0B',
 } as const;
 

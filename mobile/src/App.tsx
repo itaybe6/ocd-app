@@ -1,12 +1,14 @@
 import React from 'react';
-import { View } from 'react-native';
-import { StoreHomeScreen } from './screens/store/StoreHomeScreen';
+import Toast from 'react-native-toast-message';
+import { RootNavigator } from './navigation/RootNavigator';
+import { AuthProvider } from './state/AuthContext';
 
 export default function App() {
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <StoreHomeScreen onAdminPress={() => {}} />
-    </View>
+    <AuthProvider>
+      <RootNavigator />
+      <Toast />
+    </AuthProvider>
   );
 }
 

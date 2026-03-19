@@ -559,19 +559,35 @@ export function StoreHomeScreen({ onAdminPress }: { onAdminPress: () => void }) 
                 </Text>
               </View>
 
-              <Pressable
-                onPress={() => setMenuOpen(true)}
-                style={{
-                  minWidth: 34,
-                  height: 34,
-                  borderRadius: 17,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#F8F8F8',
-                }}
-              >
-                <Text style={{ color: '#111827', fontSize: 18, fontWeight: '700' }}>≡</Text>
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Pressable
+                  onPress={onAdminPress}
+                  style={{
+                    borderRadius: 999,
+                    paddingHorizontal: 12,
+                    height: 34,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#EFE3D0',
+                  }}
+                >
+                  <Text style={{ color: '#7C4A03', fontWeight: '900', textAlign: 'right' }}>ניהול</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setMenuOpen(true)}
+                  style={{
+                    minWidth: 34,
+                    height: 34,
+                    borderRadius: 17,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#F8F8F8',
+                  }}
+                >
+                  <Text style={{ color: '#111827', fontSize: 18, fontWeight: '700' }}>≡</Text>
+                </Pressable>
+              </View>
             </View>
 
             <View
