@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, StyleSheet, Text, View, Image } from 'react-native';
+import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, StyleSheet, Text, View, Image, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Pencil, Search, Trash2 } from 'lucide-react-native';
+import { Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -17,7 +18,7 @@ import { getPublicUrl } from '../../lib/storage';
 import { pickImageFromLibrary } from '../../lib/media';
 import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
 import { supabase } from '../../lib/supabase';
-import { yyyyMmDd } from '../../lib/time';
+import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
 import { FabButton } from '../../components/ui/FabButton';
@@ -26,6 +27,7 @@ const { height: screenHeight } = Dimensions.get('window');
 
 type JobStatus = 'pending' | 'completed';
 type JobKind = 'regular' | 'installation' | 'special';
+type JobTag = 'smell' | 'other';
 
 type BaseUnified = {
   kind: JobKind;
@@ -51,6 +53,10 @@ type ServicePoint = { id: string; device_type: string; scent_type: string; refil
 
 type InstallationDevice = { id: string; installation_job_id: string; image_url?: string | null; device_name?: string | null };
 
+type OneTimeCustomerPayload = { name: string; phone?: string; address?: string };
+type CreateSelectedPoint = ServicePoint & { selected: boolean; custom_refill_amount: string }; // empty => none
+type InstallationDeviceDraft = { device_name: string };
+
 type CustomerServicePoint = {
   id: string;
   customer_id: string;
@@ -72,10 +78,17 @@ const BATTERY_TYPES = [
   { value: 'DC', label: 'DC' },
 ];
 
+function combineDateTimeToIso(dateYmd: string, timeHm: string): string {
+  // local time -> ISO (UTC)
+  const d = new Date(`${dateYmd}T${timeHm}:00`);
+  if (Number.isNaN(d.getTime())) throw new Error('תאריך/שעה לא תקינים');
+  return d.toISOString();
+}
+
 type Filters = {
   date: string; // yyyy-MM-dd or empty
   status: '' | JobStatus;
-  kind: '' | JobKind;
+  tag: '' | JobTag;
   q: string;
 };
 
@@ -85,7 +98,7 @@ export function JobsScreen() {
   const [users, setUsers] = useState<UserLite[]>([]);
   const [items, setItems] = useState<UnifiedJob[]>([]);
 
-  const [filters, setFilters] = useState<Filters>({ date: '', status: '', kind: '', q: '' });
+  const [filters, setFilters] = useState<Filters>({ date: '', status: '', tag: '', q: '' });
 
   const [selected, setSelected] = useState<UnifiedJob | null>(null);
   const [regularPoints, setRegularPoints] = useState<(JobServicePoint & { sp?: ServicePoint | null })[]>([]);
@@ -111,6 +124,27 @@ export function JobsScreen() {
   const [customerPoints, setCustomerPoints] = useState<CustomerServicePoint[]>([]);
   const [customerPointsOriginRect, setCustomerPointsOriginRect] = useState<OriginRect | null>(null);
   const customerPointsOriginRectRef = useRef<OriginRect | null>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<JobKind>('regular');
+  const [createStatus, setCreateStatus] = useState<JobStatus>('pending');
+  const [createDateYmd, setCreateDateYmd] = useState('');
+  const [createTimeHm, setCreateTimeHm] = useState('09:00');
+  const [createDatePickerOpen, setCreateDatePickerOpen] = useState(false);
+
+  const [createWorkerId, setCreateWorkerId] = useState('');
+  const [createCustomerId, setCreateCustomerId] = useState('');
+  const [createUseOneTimeCustomer, setCreateUseOneTimeCustomer] = useState(false);
+  const [createOneTimeCustomer, setCreateOneTimeCustomer] = useState<OneTimeCustomerPayload>({ name: '', phone: '', address: '' });
+
+  const [createNotes, setCreateNotes] = useState('');
+  const [createOrderNumber, setCreateOrderNumber] = useState('');
+
+  const [createServicePoints, setCreateServicePoints] = useState<CreateSelectedPoint[]>([]);
+
+  const [createSpecialJobType, setCreateSpecialJobType] = useState<string>(SPECIAL_JOB_TYPES[0].value);
+  const [createBatteryType, setCreateBatteryType] = useState<string>('AA');
+  const [createInstallationDevices, setCreateInstallationDevices] = useState<InstallationDeviceDraft[]>([{ device_name: '' }]);
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
   const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
@@ -183,7 +217,8 @@ export function JobsScreen() {
   const filtered = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
     return items.filter((it) => {
-      if (filters.kind && it.kind !== filters.kind) return false;
+      if (filters.tag === 'smell' && it.kind !== 'regular') return false;
+      if (filters.tag === 'other' && it.kind === 'regular') return false;
       if (filters.status && it.status !== filters.status) return false;
       if (filters.date) {
         const key = yyyyMmDd(it.date);
@@ -366,6 +401,189 @@ export function JobsScreen() {
     }
   };
 
+  const timeOptions = useMemo(
+    () => timeSlots({ startHm: '08:00', endHm: '20:00', stepMinutes: 30 }).map((t) => ({ value: t, label: t })),
+    []
+  );
+  const dateOptions = useMemo(() => {
+    const base = new Date();
+    const list: { value: string; label: string }[] = [];
+    for (let i = 0; i <= 180; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      const ymd = yyyyMmDd(d);
+      list.push({ value: ymd, label: ymd });
+    }
+    return list;
+  }, []);
+  const createDateValue = useMemo(() => {
+    if (!createDateYmd) return new Date();
+    const d = toDate(createDateYmd);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }, [createDateYmd]);
+
+  const createWorkerOptions = useMemo(
+    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
+    [users]
+  );
+  const createCustomerOptions = useMemo(
+    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
+    [users]
+  );
+
+  const createSpecialTypeMeta = useMemo(
+    () => SPECIAL_JOB_TYPES.find((t) => t.value === createSpecialJobType) ?? null,
+    [createSpecialJobType]
+  );
+
+  const fetchCreateServicePoints = useCallback(async (custId: string) => {
+    const { data, error } = await supabase
+      .from('service_points')
+      .select('id, device_type, scent_type, refill_amount')
+      .eq('customer_id', custId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const list = (data ?? []) as ServicePoint[];
+    setCreateServicePoints(
+      list.map((sp) => ({
+        ...sp,
+        selected: true,
+        custom_refill_amount: '',
+      }))
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    if (!createCustomerId || createUseOneTimeCustomer || createKind !== 'regular') {
+      setCreateServicePoints([]);
+      return;
+    }
+    fetchCreateServicePoints(createCustomerId).catch((e: any) => {
+      Toast.show({ type: 'error', text1: 'טעינת נקודות שירות נכשלה', text2: e?.message ?? 'Unknown error' });
+      setCreateServicePoints([]);
+    });
+  }, [createCustomerId, createUseOneTimeCustomer, createKind, createOpen, fetchCreateServicePoints]);
+
+  const resetCreateFormMinimal = () => {
+    setCreateNotes('');
+    setCreateOrderNumber('');
+  };
+
+  const validateCreateCommon = () => {
+    if (!createDateYmd.trim()) throw new Error('חסר תאריך (yyyy-MM-dd)');
+    if (!createTimeHm.trim()) throw new Error('חסרה שעה (HH:mm)');
+    if (!createWorkerId) throw new Error('חסר עובד');
+    if (createKind !== 'special') {
+      if (createUseOneTimeCustomer) {
+        if (!createOneTimeCustomer.name.trim()) throw new Error('חסר שם לקוח חד-פעמי');
+      } else {
+        if (!createCustomerId) throw new Error('חסר לקוח');
+      }
+    }
+  };
+
+  const createOneTimeCustomerIfNeeded = async (): Promise<string | null> => {
+    if (createKind === 'special') return null;
+    if (!createUseOneTimeCustomer) return null;
+    const payload = {
+      name: createOneTimeCustomer.name.trim(),
+      phone: createOneTimeCustomer.phone?.trim() || null,
+      address: createOneTimeCustomer.address?.trim() || null,
+    };
+    const { data, error } = await supabase.from('one_time_customers').insert(payload).select('id').single();
+    if (error) throw error;
+    return (data as any).id as string;
+  };
+
+  const submitCreate = async () => {
+    try {
+      validateCreateCommon();
+      setIsLoading(true);
+
+      const dateIso = combineDateTimeToIso(createDateYmd.trim(), createTimeHm.trim());
+      const oneTimeId = await createOneTimeCustomerIfNeeded();
+
+      const common: any = {
+        worker_id: createWorkerId,
+        date: dateIso,
+        status: createStatus,
+        notes: createNotes.trim() || null,
+        order_number: createOrderNumber ? Number(createOrderNumber) : null,
+      };
+
+      const customerFields =
+        createKind === 'special'
+          ? {}
+          : {
+              customer_id: createUseOneTimeCustomer ? null : createCustomerId,
+              one_time_customer_id: createUseOneTimeCustomer ? oneTimeId : null,
+            };
+
+      if (createKind === 'regular') {
+        const selected = createServicePoints.filter((p) => p.selected);
+        if (!selected.length) throw new Error('בחר לפחות נקודת שירות אחת');
+
+        const { data: job, error: jobErr } = await supabase.from('jobs').insert({ ...common, ...customerFields }).select('id').single();
+        if (jobErr) throw jobErr;
+        const jobId = (job as any).id as string;
+
+        const jspRows = selected.map((p) => {
+          const custom = p.custom_refill_amount ? Number(p.custom_refill_amount) : null;
+          const differs = custom != null && custom !== p.refill_amount;
+          return {
+            job_id: jobId,
+            service_point_id: p.id,
+            custom_refill_amount: differs ? custom : null,
+          };
+        });
+
+        const { error: jspErr } = await supabase.from('job_service_points').insert(jspRows);
+        if (jspErr) throw jspErr;
+
+        Toast.show({ type: 'success', text1: 'נוצרה משימת ריח' });
+      }
+
+      if (createKind === 'installation') {
+        const { data: inst, error: instErr } = await supabase
+          .from('installation_jobs')
+          .insert({ ...common, ...customerFields })
+          .select('id')
+          .single();
+        if (instErr) throw instErr;
+        const instId = (inst as any).id as string;
+
+        const devices = createInstallationDevices.map((d) => d.device_name.trim()).filter(Boolean);
+        if (!devices.length) throw new Error('הוסף לפחות מכשיר אחד');
+        const rows = devices.map((name) => ({ installation_job_id: instId, device_name: name }));
+        const { error: devErr } = await supabase.from('installation_devices').insert(rows);
+        if (devErr) throw devErr;
+
+        Toast.show({ type: 'success', text1: 'נוצרה משימת התקנה' });
+      }
+
+      if (createKind === 'special') {
+        const meta = createSpecialTypeMeta;
+        const payload: any = {
+          ...common,
+          job_type: createSpecialJobType,
+          battery_type: meta?.needsBattery ? createBatteryType : null,
+        };
+        const { error } = await supabase.from('special_jobs').insert(payload);
+        if (error) throw error;
+        Toast.show({ type: 'success', text1: 'נוצרה משימה מיוחדת' });
+      }
+
+      resetCreateFormMinimal();
+      setCreateOpen(false);
+      await fetchUnified();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'יצירה נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const deleteJob = async (job: UnifiedJob) => {
     try {
       if (job.kind === 'regular') {
@@ -454,7 +672,8 @@ export function JobsScreen() {
     []
   );
 
-  const kindLabel = (k: JobKind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת');
+  const tagLabel = (k: JobKind) => (k === 'regular' ? 'משימת ריח' : 'משימה אחרת');
+  const tagChipText = (k: JobKind) => (k === 'regular' ? 'ריח' : 'אחרת');
 
   const statusMeta = (s: JobStatus) =>
     s === 'completed'
@@ -563,15 +782,14 @@ export function JobsScreen() {
                 <View style={{ flex: 1 }}>
                   <SelectSheet
                     label="סוג"
-                    value={filters.kind}
+                    value={filters.tag}
                     placeholder="הכל"
                     options={[
                       { value: '', label: 'הכל' },
-                      { value: 'regular', label: 'רגילה' },
-                      { value: 'installation', label: 'התקנה' },
-                      { value: 'special', label: 'מיוחדת' },
+                      { value: 'smell', label: 'משימות ריח' },
+                      { value: 'other', label: 'משימות אחרות' },
                     ]}
-                    onChange={(v) => setFilters((p) => ({ ...p, kind: (v || '') as any }))}
+                    onChange={(v) => setFilters((p) => ({ ...p, tag: (v || '') as any }))}
                   />
                 </View>
               </View>
@@ -597,7 +815,7 @@ export function JobsScreen() {
         renderItem={({ item }) => (
           <JobCard
             kind={item.kind}
-            title={`#${item.order_number ?? '—'} • ${kindLabel(item.kind)}`}
+            title={`#${item.order_number ?? '—'} • ${tagLabel(item.kind)}`}
             status={item.status}
             primaryNode={
               <View style={{ gap: 4 }}>
@@ -683,8 +901,8 @@ export function JobsScreen() {
             chips={
               <>
                 <JobChip
-                  text={kindLabel(item.kind)}
-                  accent={item.kind === 'installation' ? 'purple' : item.kind === 'special' ? 'orange' : 'blue'}
+                  text={tagChipText(item.kind)}
+                  accent={item.kind === 'regular' ? 'blue' : 'orange'}
                 />
                 <JobChip text={yyyyMmDd(item.date)} muted />
               </>
@@ -693,6 +911,17 @@ export function JobsScreen() {
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
       />
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setCreateOpen(true)}
+        style={({ pressed }) => [
+          stylesCreateFab.fab,
+          { opacity: pressed ? 0.86 : 1, backgroundColor: colors.primary },
+        ]}
+      >
+        <Plus size={22} color="#FFFFFF" />
+      </Pressable>
 
       <ModalSheet visible={!!selected} onClose={() => setSelected(null)}>
         {!!selected && (
@@ -705,7 +934,7 @@ export function JobsScreen() {
             </View>
 
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              {selected.kind} • {selected.status}
+              {tagLabel(selected.kind)} • {statusMeta(selected.status).label}
             </Text>
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
               <Avatar size={28} uri={userAvatarMap.get(selected.worker_id) ?? null} name={userMap.get(selected.worker_id) ?? ''} />
@@ -762,6 +991,289 @@ export function JobsScreen() {
             <Button title="סגור" variant="secondary" onPress={() => setSelected(null)} />
           </View>
         )}
+      </ModalSheet>
+
+      <ModalSheet
+        visible={createOpen}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateDatePickerOpen(false);
+        }}
+      >
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button title="צור" fullWidth={false} onPress={submitCreate} />
+            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>הוספת משימה</Text>
+          </View>
+
+          <Card>
+            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>בסיס</Text>
+            <View style={{ gap: 10 }}>
+              <SelectSheet
+                label="סוג משימה"
+                value={createKind}
+                options={[
+                  { value: 'regular', label: 'ריח' },
+                  { value: 'installation', label: 'התקנה' },
+                  { value: 'special', label: 'מיוחדת' },
+                ]}
+                onChange={(v) => setCreateKind(v as JobKind)}
+              />
+              <SelectSheet
+                label="סטטוס"
+                value={createStatus}
+                options={[
+                  { value: 'pending', label: 'ממתין' },
+                  { value: 'completed', label: 'הושלם' },
+                ]}
+                onChange={(v) => setCreateStatus(v as JobStatus)}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  {Platform.OS === 'web' ? (
+                    <SelectSheet
+                      label="תאריך"
+                      value={createDateYmd}
+                      placeholder="בחר תאריך…"
+                      options={dateOptions}
+                      onChange={setCreateDateYmd}
+                    />
+                  ) : (
+                    <View style={{ gap: 6 }}>
+                      <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך</Text>
+                      <Pressable
+                        onPress={() => {
+                          if (Platform.OS === 'android') {
+                            DateTimePickerAndroid.open({
+                              value: createDateValue,
+                              mode: 'date',
+                              is24Hour: true,
+                              onChange: (_event, selectedDate) => {
+                                if (!selectedDate) return;
+                                setCreateDateYmd(yyyyMmDd(selectedDate));
+                              },
+                            });
+                            return;
+                          }
+                          setCreateDatePickerOpen(true);
+                        }}
+                        style={{
+                          backgroundColor: colors.elevated,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 14,
+                          paddingVertical: 12,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <CalendarDays size={18} color={colors.muted} />
+                        <Text style={{ color: createDateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
+                          {createDateYmd ? createDateYmd : 'בחר תאריך…'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <SelectSheet
+                    label="שעה"
+                    value={createTimeHm}
+                    placeholder="בחר שעה…"
+                    options={timeOptions}
+                    onChange={setCreateTimeHm}
+                  />
+                </View>
+              </View>
+
+              <SelectSheet
+                label="עובד"
+                value={createWorkerId}
+                placeholder="בחר עובד…"
+                options={createWorkerOptions}
+                onChange={setCreateWorkerId}
+              />
+
+              <Pressable
+                onPress={() => setCreateUseOneTimeCustomer((p) => !p)}
+                disabled={createKind === 'special'}
+                style={{
+                  backgroundColor: createKind === 'special' ? colors.border : createUseOneTimeCustomer ? colors.primary : colors.elevated,
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900', textAlign: 'right' }}>
+                  {createKind === 'special'
+                    ? 'לקוח חד-פעמי: לא רלוונטי'
+                    : createUseOneTimeCustomer
+                      ? 'לקוח חד-פעמי: פעיל'
+                      : 'לקוח חד-פעמי: כבוי'}
+                </Text>
+              </Pressable>
+
+              {createKind === 'special' ? null : createUseOneTimeCustomer ? (
+                <View style={{ gap: 10 }}>
+                  <Input label="שם" value={createOneTimeCustomer.name} onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, name: v }))} />
+                  <Input
+                    label="טלפון"
+                    value={createOneTimeCustomer.phone ?? ''}
+                    onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, phone: v }))}
+                    keyboardType="phone-pad"
+                  />
+                  <Input label="כתובת" value={createOneTimeCustomer.address ?? ''} onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, address: v }))} />
+                </View>
+              ) : (
+                <SelectSheet
+                  label="לקוח"
+                  value={createCustomerId}
+                  placeholder="בחר לקוח…"
+                  options={createCustomerOptions}
+                  onChange={setCreateCustomerId}
+                />
+              )}
+
+              <Input label="מספר הזמנה (אופציונלי)" value={createOrderNumber} onChangeText={setCreateOrderNumber} keyboardType="numeric" />
+              <Input label="הערות (אופציונלי)" value={createNotes} onChangeText={setCreateNotes} />
+            </View>
+          </Card>
+
+          {createKind === 'regular' ? (
+            <Card>
+              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>נקודות שירות</Text>
+              {!createCustomerId && !createUseOneTimeCustomer ? (
+                <Text style={{ color: colors.muted, textAlign: 'right' }}>בחר לקוח כדי לטעון נקודות שירות.</Text>
+              ) : createUseOneTimeCustomer ? (
+                <Text style={{ color: colors.muted, textAlign: 'right' }}>לקוח חד-פעמי לא כולל נקודות שירות קבועות.</Text>
+              ) : (
+                <View style={{ gap: 10 }}>
+                  {createServicePoints.map((p) => (
+                    <View key={p.id} style={{ gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                      <Pressable
+                        onPress={() => setCreateServicePoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, selected: !x.selected } : x)))}
+                        style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <Text style={{ color: p.selected ? colors.success : colors.muted, fontWeight: '900' }}>
+                          {p.selected ? 'נבחר' : 'לא נבחר'}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{p.device_type}</Text>
+                          <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>
+                            ניחוח: {p.scent_type} • ברירת מחדל: {p.refill_amount}
+                          </Text>
+                        </View>
+                      </Pressable>
+                      {p.selected ? (
+                        <Input
+                          label="כמות מילוי מותאמת (אופציונלי)"
+                          value={p.custom_refill_amount}
+                          onChangeText={(v) => setCreateServicePoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, custom_refill_amount: v } : x)))}
+                          keyboardType="numeric"
+                          placeholder={String(p.refill_amount)}
+                        />
+                      ) : null}
+                    </View>
+                  ))}
+                  {!createServicePoints.length ? (
+                    <Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות שירות ללקוח.</Text>
+                  ) : null}
+                </View>
+              )}
+            </Card>
+          ) : null}
+
+          {createKind === 'installation' ? (
+            <Card>
+              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>מכשירים להתקנה</Text>
+              <View style={{ gap: 10 }}>
+                {createInstallationDevices.map((d, idx) => (
+                  <View key={idx} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-end' }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label={`מכשיר #${idx + 1}`}
+                        value={d.device_name}
+                        onChangeText={(v) => setCreateInstallationDevices((prev) => prev.map((x, i) => (i === idx ? { ...x, device_name: v } : x)))}
+                        placeholder="Device name"
+                      />
+                    </View>
+                    <Pressable
+                      onPress={() => setCreateInstallationDevices((prev) => prev.filter((_, i) => i !== idx))}
+                      disabled={createInstallationDevices.length <= 1}
+                      style={{
+                        backgroundColor: createInstallationDevices.length <= 1 ? colors.border : colors.danger,
+                        borderRadius: 14,
+                        paddingHorizontal: 12,
+                        paddingVertical: 12,
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '900' }}>מחק</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                <Button
+                  title="הוסף מכשיר"
+                  variant="secondary"
+                  onPress={() => setCreateInstallationDevices((prev) => [...prev, { device_name: '' }])}
+                />
+              </View>
+            </Card>
+          ) : null}
+
+          {createKind === 'special' ? (
+            <Card>
+              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>משימה מיוחדת</Text>
+              <View style={{ gap: 10 }}>
+                <SelectSheet
+                  label="סוג מיוחד"
+                  value={createSpecialJobType}
+                  options={SPECIAL_JOB_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                  onChange={setCreateSpecialJobType}
+                />
+                {createSpecialTypeMeta?.needsBattery ? (
+                  <SelectSheet label="סוג סוללה" value={createBatteryType} options={BATTERY_TYPES} onChange={setCreateBatteryType} />
+                ) : null}
+              </View>
+            </Card>
+          ) : null}
+        </ScrollView>
+      </ModalSheet>
+
+      <ModalSheet visible={createDatePickerOpen} onClose={() => setCreateDatePickerOpen(false)}>
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setCreateDatePickerOpen(false)} />
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
+          </View>
+
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
+            <DateTimePicker
+              value={createDateValue}
+              mode="date"
+              display="inline"
+              themeVariant="light"
+              onChange={(_event, selectedDate) => {
+                if (!selectedDate) return;
+                setCreateDateYmd(yyyyMmDd(selectedDate));
+              }}
+            />
+          </View>
+
+          {!!createDateYmd && (
+            <Button
+              title="אישור"
+              onPress={() => {
+                setCreateDatePickerOpen(false);
+              }}
+            />
+          )}
+        </View>
       </ModalSheet>
 
       <OriginWindow visible={editOpen} originRect={editOriginRect} onClose={() => setEditOpen(false)}>
@@ -984,6 +1496,24 @@ const stylesExecBackdrop = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+});
+
+const stylesCreateFab = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    left: 16,
+    bottom: 18,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
   },
 });
 

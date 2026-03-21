@@ -10,15 +10,12 @@ import {
   ClipboardList,
   LayoutDashboard,
   Users as UsersIcon,
-  PlusCircle,
-  PlayCircle,
   CalendarDays,
   FileBarChart2,
   Headset,
   Settings,
   Package,
   Store,
-  Wrench,
   LogOut,
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -28,13 +25,10 @@ import { DashboardScreen } from '../screens/admin/DashboardScreen';
 import { SupportScreen } from '../screens/admin/SupportScreen';
 import { UsersScreen } from '../screens/admin/UsersScreen';
 import { JobsScreen } from '../screens/admin/JobsScreen';
-import { AddJobsScreen } from '../screens/admin/AddJobsScreen';
-import { JobExecutionScreen } from '../screens/admin/JobExecutionScreen';
 import { WorkTemplatesScreen } from '../screens/admin/WorkTemplatesScreen';
 import { WorkScheduleScreen } from '../screens/admin/WorkScheduleScreen';
 import { DailyScheduleScreen } from '../screens/admin/DailyScheduleScreen';
 import { ReportsScreen } from '../screens/admin/ReportsScreen';
-import { InstallationJobsScreen } from '../screens/admin/InstallationJobsScreen';
 import { DevicesAndScentsScreen } from '../screens/admin/DevicesAndScentsScreen';
 import { StoreManagementScreen } from '../screens/admin/StoreManagementScreen';
 
@@ -42,14 +36,11 @@ export type AdminDrawerParamList = {
   Dashboard: undefined;
   Users: undefined;
   Jobs: undefined;
-  AddJobs: undefined;
-  JobExecution: undefined;
   WorkTemplates: undefined;
   WorkSchedule: undefined;
   DailySchedule: undefined;
   Support: undefined;
   Reports: undefined;
-  InstallationJobs: undefined;
   DevicesAndScents: undefined;
   StoreManagement: undefined;
 };
@@ -187,10 +178,7 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
       {
         title: 'משימות',
         items: [
-          { key: 'Jobs', label: 'משימות ריח', icon: ClipboardList },
-          { key: 'InstallationJobs', label: 'משימות מיוחדות', icon: Wrench },
-          { key: 'AddJobs', label: 'הוספת משימות', icon: PlusCircle },
-          { key: 'JobExecution', label: 'ביצוע משימות', icon: PlayCircle },
+          { key: 'Jobs', label: 'משימות', icon: ClipboardList },
         ],
       },
       {
@@ -316,15 +304,12 @@ export function AdminDrawer() {
     >
       <Drawer.Screen name="Dashboard" options={{ title: 'לוח בקרה' }} component={DashboardScreen} />
       <Drawer.Screen name="Users" options={{ title: 'משתמשים' }} component={UsersScreen} />
-      <Drawer.Screen name="Jobs" options={{ title: 'משימות ריח' }} component={JobsScreen} />
-      <Drawer.Screen name="AddJobs" options={{ title: 'הוספת משימות' }} component={AddJobsScreen} />
-      <Drawer.Screen name="JobExecution" options={{ title: 'ביצוע משימות' }} component={JobExecutionScreen} />
+      <Drawer.Screen name="Jobs" options={{ title: 'משימות' }} component={JobsScreen} />
       <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה' }} component={WorkTemplatesScreen} />
       <Drawer.Screen name="WorkSchedule" options={{ title: 'קווי עבודה' }} component={WorkScheduleScreen} />
       <Drawer.Screen name="DailySchedule" options={{ title: 'לוז יומי' }} component={DailyScheduleScreen} />
       <Drawer.Screen name="Support" options={{ title: 'שירות לקוחות' }} component={SupportScreen} />
       <Drawer.Screen name="Reports" options={{ title: 'דוחות' }} component={ReportsScreen} />
-      <Drawer.Screen name="InstallationJobs" options={{ title: 'משימות מיוחדות' }} component={InstallationJobsScreen} />
       <Drawer.Screen name="DevicesAndScents" options={{ title: 'מכשירים וניחוחות' }} component={DevicesAndScentsScreen} />
       <Drawer.Screen name="StoreManagement" options={{ title: 'ניהול חנות' }} component={StoreManagementScreen} />
     </Drawer.Navigator>
