@@ -10,6 +10,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   isBootstrapping: boolean;
   signInWithPassword: (args: { phone: string; password: string }) => Promise<void>;
+  signUpCustomer: (args: { phone: string; password: string; name: string; address?: string | null }) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: AuthUser | null) => Promise<void>;
   hasRole: (role: UserRole) => boolean;
@@ -35,6 +36,10 @@ async function loadPersistedUser(): Promise<AuthUser | null> {
     await AsyncStorage.removeItem(STORAGE_KEY);
     return null;
   }
+}
+
+function normalizePhone(phone: string) {
+  return phone.trim();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -70,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithPassword = useCallback(
     async ({ phone, password }: { phone: string; password: string }) => {
-      const normalizedPhone = phone.trim();
+      const normalizedPhone = normalizePhone(phone);
       const normalizedPassword = password;
 
       const { data, error } = await supabase
@@ -96,9 +101,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [setUser]
   );
 
+  const signUpCustomer = useCallback(
+    async ({ phone, password, name, address }: { phone: string; password: string; name: string; address?: string | null }) => {
+      const normalizedPhone = normalizePhone(phone);
+      const normalizedPassword = password;
+      const normalizedName = name.trim();
+      const normalizedAddress = address?.trim() || null;
+
+      if (!normalizedName || !normalizedPhone || !normalizedPassword) {
+        Toast.show({ type: 'error', text1: 'נא למלא שם, טלפון וסיסמה' });
+        return;
+      }
+
+      const { data: existingUser, error: existingUserError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .maybeSingle();
+
+      if (existingUserError) throw existingUserError;
+      if (existingUser) {
+        Toast.show({ type: 'error', text1: 'כבר קיים חשבון עם הטלפון הזה' });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .insert({
+          phone: normalizedPhone,
+          password: normalizedPassword,
+          role: 'customer',
+          name: normalizedName,
+          address: normalizedAddress,
+          price: null,
+          avatar_url: null,
+        })
+        .select('id, phone, role, name, address, price, avatar_url, created_at')
+        .single();
+
+      if (error) throw error;
+
+      await setUser(data as AuthUser);
+      Toast.show({ type: 'success', text1: 'נרשמת בהצלחה' });
+    },
+    [setUser]
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isBootstrapping, signInWithPassword, signOut, setUser, hasRole }),
-    [user, isBootstrapping, signInWithPassword, signOut, setUser, hasRole]
+    () => ({ user, isBootstrapping, signInWithPassword, signUpCustomer, signOut, setUser, hasRole }),
+    [user, isBootstrapping, signInWithPassword, signUpCustomer, signOut, setUser, hasRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

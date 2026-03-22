@@ -3,7 +3,6 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, type Theme } from '@react-navigation/native';
 import {
   createNativeStackNavigator,
-  type NativeStackNavigationProp,
   type NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +19,8 @@ import {
   type StoreProduct,
 } from '../screens/store/StoreHomeScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
+import { StoreCheckoutScreen } from '../screens/store/StoreCheckoutScreen';
+import { StoreFavoritesScreen } from '../screens/store/StoreFavoritesScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
@@ -28,9 +29,14 @@ import type { RootStackParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function handleStoreTabNavigation(
-  navigation: NativeStackNavigationProp<RootStackParamList>,
+  navigation: Pick<NativeStackScreenProps<RootStackParamList>['navigation'], 'navigate'>,
   tabId: StoreBottomTabId
 ) {
+  if (tabId === 'favorites') {
+    navigation.navigate('StoreFavorites');
+    return;
+  }
+
   if (tabId === 'ocdPlus') {
     navigation.navigate('StoreOcdPlus');
     return;
@@ -69,10 +75,11 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
     return (
       <StoreHomeScreen
         onProfilePress={() => navigation.navigate('Login')}
+        onFavoritesPress={() => navigation.navigate('StoreFavorites')}
         onOcdPlusPress={() => navigation.navigate('StoreOcdPlus')}
         onProductPress={(handle) => navigation.navigate('Product', { handle })}
         onOpenCart={() => navigation.navigate('StoreCart')}
-        onOpenProduct={(product) => navigation.navigate('StoreProduct', { product })}
+        onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
         onOpenCategory={(category) =>
           navigation.navigate('StoreCategory', {
             categoryId: category.id,
@@ -118,6 +125,16 @@ function StoreOcdPlusRoute({ navigation }: NativeStackScreenProps<RootStackParam
   );
 }
 
+function StoreFavoritesRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreFavorites'>) {
+  return (
+    <StoreFavoritesScreen
+      onOpenProduct={(handle) => navigation.navigate('Product', { handle })}
+      onLoginPress={() => navigation.navigate('Login')}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+    />
+  );
+}
+
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
   const { user } = useAuth();
 
@@ -133,11 +150,20 @@ function StoreCategoryRoute({
   navigation,
   route,
 }: NativeStackScreenProps<RootStackParamList, 'StoreCategory'>) {
+  const params = route.params as RootStackParamList['StoreCategory'] & {
+    id?: string;
+    title?: string;
+    description?: string;
+  };
+  const categoryId = params.categoryId ?? params.id ?? 'all';
+  const categoryTitle = params.categoryTitle ?? params.title ?? 'קטגוריה';
+  const categoryDescription = params.categoryDescription ?? params.description;
+
   return (
     <StoreCategoryScreen
       onBack={() => navigation.goBack()}
       onOpenCart={() => navigation.navigate('StoreCart')}
-      onOpenProduct={(product) => navigation.navigate('StoreProduct', { product })}
+      onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
       onOpenCategory={(category) =>
         navigation.navigate('StoreCategory', {
           categoryId: category.id,
@@ -148,11 +174,11 @@ function StoreCategoryRoute({
         })
       }
       onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
-      categoryId={route.params.categoryId}
-      categoryTitle={route.params.categoryTitle}
-      categoryDescription={route.params.categoryDescription}
-      parentTitle={route.params.parentTitle}
-      subcategories={route.params.subcategories}
+      categoryId={categoryId}
+      categoryTitle={categoryTitle}
+      categoryDescription={categoryDescription}
+      parentTitle={params.parentTitle}
+      subcategories={params.subcategories}
     />
   );
 }
@@ -161,18 +187,34 @@ function StoreProductRoute({
   navigation,
   route,
 }: NativeStackScreenProps<RootStackParamList, 'StoreProduct'>) {
+  useEffect(() => {
+    navigation.replace('Product', { handle: route.params.product.handle });
+  }, [navigation, route.params.product.handle]);
+
   return (
-    <StoreProductScreen
-      onBack={() => navigation.goBack()}
-      onOpenCart={() => navigation.navigate('StoreCart')}
-      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
-      product={route.params.product}
-    />
+    <Screen padded={false}>
+      <View className="flex-1 items-center justify-center">
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    </Screen>
   );
 }
 
 function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreCart'>) {
-  return <StoreCartScreen onBack={() => navigation.goBack()} onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)} />;
+  return (
+    <StoreCartScreen
+      onBack={() => navigation.goBack()}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+      onOpenCheckout={(checkoutUrl) => navigation.navigate('StoreCheckout', { checkoutUrl })}
+    />
+  );
+}
+
+function StoreCheckoutRoute({
+  navigation,
+  route,
+}: NativeStackScreenProps<RootStackParamList, 'StoreCheckout'>) {
+  return <StoreCheckoutScreen checkoutUrl={route.params.checkoutUrl} onBack={() => navigation.goBack()} />;
 }
 
 export function RootNavigator() {
@@ -219,6 +261,14 @@ export function RootNavigator() {
         <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
         <Stack.Screen name="StoreCart" component={StoreCartRoute} />
         <Stack.Screen
+          name="StoreCheckout"
+          component={StoreCheckoutRoute}
+          options={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        />
+        <Stack.Screen
           name="StoreOcdPlus"
           component={StoreOcdPlusRoute}
           options={{
@@ -231,14 +281,18 @@ export function RootNavigator() {
           }}
         />
         <Stack.Screen
+          name="StoreFavorites"
+          component={StoreFavoritesRoute}
+          options={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        />
+        <Stack.Screen
           name="Product"
           component={ProductScreen}
           options={{
-            headerShown: true,
-            headerTitle: 'מוצר',
-            headerTitleStyle: { fontWeight: '900' },
-            headerTintColor: colors.text,
-            headerStyle: { backgroundColor: colors.card },
+            headerShown: false,
             contentStyle: { backgroundColor: colors.bg },
           }}
         />

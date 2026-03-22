@@ -115,5 +115,46 @@ export type SupportTicketRow = {
   created_at?: string;
 };
 
+export type ProductFavoriteRow = {
+  id: string;
+  user_id: string;
+  product_id: string;
+  product_handle: string;
+  product_title: string;
+  product_description?: string | null;
+  product_type?: string | null;
+  image_url?: string | null;
+  image_alt_text?: string | null;
+  price: number;
+  currency_code: string;
+  created_at?: string;
+};
+
+export type CustomerOrderStatus = 'confirmed' | 'processing' | 'cancelled';
+
+export type CustomerOrderRow = {
+  id: string;
+  order_number: number;
+  user_id: string;
+  status: CustomerOrderStatus;
+  total_amount: number;
+  currency_code: string;
+  item_count: number;
+  created_at?: string;
+};
+
+export type CustomerOrderItemRow = {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_handle: string;
+  product_title: string;
+  image_url?: string | null;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+  created_at?: string;
+};
+
 export const BATTERY_TYPES = ['AA', 'DC'] as const;
 
