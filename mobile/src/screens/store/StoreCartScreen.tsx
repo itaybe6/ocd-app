@@ -1,7 +1,13 @@
 import React from 'react';
-import { Image, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../state/CartContext';
+import {
+  getStoreBottomBarMetrics,
+  StoreFloatingTabBar,
+  type StoreBottomTabId,
+} from './StoreHomeScreen';
 
 function formatPrice(price: number) {
   return `₪${price.toLocaleString('he-IL')}.00`;
@@ -53,17 +59,26 @@ function CartProductImage({
   );
 }
 
-export function StoreCartScreen({ onBack }: { onBack: () => void }) {
+export function StoreCartScreen({
+  onBack,
+  onTabPress,
+}: {
+  onBack: () => void;
+  onTabPress: (tabId: StoreBottomTabId) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { items, itemCount, subtotal, updateQuantity, removeItem, clearCart } = useCart();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ gap: 16 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: contentPaddingBottom }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ gap: 16 }}>
           <View
             style={{
               backgroundColor: '#FFFFFF',
@@ -314,8 +329,10 @@ export function StoreCartScreen({ onBack }: { onBack: () => void }) {
               </Pressable>
             </>
           )}
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+        <StoreFloatingTabBar activeTab="home" onTabPress={onTabPress} />
+      </View>
     </SafeAreaView>
   );
 }

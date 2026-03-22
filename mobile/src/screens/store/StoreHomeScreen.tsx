@@ -7,14 +7,16 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { ShoppingCart } from 'lucide-react-native';
-import Svg, { Path } from 'react-native-svg';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import {
   fetchCollectionProducts,
   fetchCollections,
@@ -30,6 +32,7 @@ type StoreCategory = {
   id: string;
   name: string;
   subtitle?: string;
+  imageUrl?: string | null;
 };
 
 type SidebarMenuSection = {
@@ -42,10 +45,19 @@ type SidebarMenuSection = {
     categoryId: string;
     parentTitle?: string;
     categoryDescription?: string;
+    categoryImageUrl?: string | null;
   }>;
 };
 
 type SidebarChildItem = NonNullable<SidebarMenuSection['children']>[number];
+
+export type StoreSubcategory = {
+  id: string;
+  title: string;
+  description?: string;
+  parentTitle?: string;
+  imageUrl?: string | null;
+};
 
 export type StoreProduct = {
   id: string;
@@ -97,10 +109,15 @@ const COLLECTIONS: CollectionCard[] = [
 ];
 
 const BOTTOM_NAV_ITEMS = [
-  { id: 'home', label: 'בית', icon: '⌂' },
-  { id: 'menu', label: 'תפריט', icon: '≡' },
-  { id: 'admin', label: 'ניהול', icon: '⌘' },
+  { id: 'home', label: 'בית' },
+  { id: 'categories', label: 'קטגוריות' },
+  { id: 'ocdPlus', label: 'OCD+' },
+  { id: 'search', label: 'חיפוש' },
+  { id: 'profile', label: 'חשבון' },
 ] as const;
+
+export type StoreBottomTabId = (typeof BOTTOM_NAV_ITEMS)[number]['id'];
+export type StoreMainTabId = 'home' | 'categories' | 'search';
 
 const PROMO_SLIDES: PromoSlide[] = [
   {
@@ -145,6 +162,16 @@ const PROMO_SLIDES: PromoSlide[] = [
   },
 ];
 
+const SHOW_PROMO_CAROUSEL = false;
+
+const CATEGORY_STORY_PRODUCT_OVERRIDES: Record<string, string[]> = {
+  'עיצוב הבית': ['מראה | חצי מעוגלת', 'מראה'],
+};
+
+const FEATURED_BRAND_IMAGE_OVERRIDES: Record<string, number> = {
+  סנו: require('../../../assets/brands/sano.png'),
+};
+
 function formatPrice(price: number) {
   return `₪${price.toLocaleString('he-IL')}.00`;
 }
@@ -161,19 +188,21 @@ function getProductPalette(index: number) {
 }
 
 function getProductBadge(index: number) {
-  if (index === 0) return 'SALE';
-  if (index === 1) return 'NEW';
+  if (index === 0) return 'מבצע';
+  if (index === 1) return 'חדש';
   return undefined;
 }
 
-function toStoreProduct(product: ShopifyProduct, index: number): StoreProduct {
+function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride?: string, categoryIdOverride?: string): StoreProduct {
   const palette = getProductPalette(index);
+  const normalizedProductType = product.productType.trim();
+  const subtitle = subtitleOverride?.trim() || (normalizedProductType && normalizedProductType !== 'מוצרים' ? normalizedProductType : 'כל המוצרים');
 
   return {
     id: product.id,
     name: product.title,
-    subtitle: product.productType || 'מוצר מהקטלוג',
-    categoryId: product.productType || 'all',
+    subtitle,
+    categoryId: categoryIdOverride || normalizedProductType || 'all',
     price: product.price,
     handle: product.handle,
     description: product.description,
@@ -589,6 +618,7 @@ function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenu
               categoryId: item.collectionHandle,
               parentTitle: prefix,
               categoryDescription: item.collectionDescription,
+              categoryImageUrl: item.collectionImageUrl,
             },
           ]
         : [];
@@ -634,6 +664,7 @@ function flattenMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[] {
           id: item.collectionHandle,
           name: item.title,
           subtitle: item.collectionDescription,
+          imageUrl: item.collectionImageUrl,
         });
       }
 
@@ -656,9 +687,146 @@ function getTopLevelMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[
             id: item.collectionHandle,
             name: item.title,
             subtitle: item.collectionDescription,
+            imageUrl: item.collectionImageUrl,
           },
         ]
       : []
+  );
+}
+
+function getTopLevelCategoryChildrenMap(menuItems: ShopifyMenuItem[]): Record<string, StoreSubcategory[]> {
+  const toSubcategories = (items: ShopifyMenuItem[], parentTitle?: string): StoreSubcategory[] =>
+    items.flatMap((item) => {
+      const nestedSubcategories = item.children?.length ? toSubcategories(item.children, item.title) : [];
+      const currentSubcategory: StoreSubcategory[] = item.collectionHandle
+        ? [
+            {
+              id: item.collectionHandle,
+              title: item.title,
+              description: item.collectionDescription,
+              parentTitle,
+              imageUrl: item.collectionImageUrl,
+            },
+          ]
+        : [];
+
+      return currentSubcategory.concat(nestedSubcategories);
+    });
+
+  return menuItems.reduce<Record<string, StoreSubcategory[]>>((acc, item) => {
+    if (!item.collectionHandle) return acc;
+    acc[item.collectionHandle] = item.children?.length ? toSubcategories(item.children, item.title) : [];
+    return acc;
+  }, {});
+}
+
+function getCategoryAvatarLabel(name: string) {
+  const words = normalizeCategoryTitle(name).split(' ').filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]).join('') || name.slice(0, 1);
+}
+
+function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean) {
+  const color = isActive ? '#111111' : '#7B8190';
+  const size = 20;
+  const iconName =
+    itemId === 'home'
+      ? isActive
+        ? 'home'
+        : 'home-outline'
+      : itemId === 'categories'
+        ? isActive
+          ? 'grid'
+          : 'grid-outline'
+        : itemId === 'ocdPlus'
+          ? isActive
+            ? 'sparkles'
+            : 'sparkles-outline'
+          : itemId === 'search'
+            ? isActive
+              ? 'search'
+              : 'search-outline'
+            : isActive
+              ? 'person'
+              : 'person-outline';
+
+  return <Ionicons name={iconName} size={size} color={color} />;
+}
+
+export function getStoreBottomBarMetrics(insetsBottom: number) {
+  const bottomBarInset = Math.max(4, Math.min(insetsBottom, 8));
+  const bottomBarOffset = 4 + insetsBottom;
+  const bottomBarHeight = 58 + bottomBarInset;
+
+  return {
+    bottomBarInset,
+    bottomBarOffset,
+    bottomBarHeight,
+    contentPaddingBottom: bottomBarHeight + bottomBarOffset + 12,
+  };
+}
+
+export function StoreFloatingTabBar({
+  activeTab,
+  onTabPress,
+}: {
+  activeTab: StoreBottomTabId;
+  onTabPress: (tabId: StoreBottomTabId) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { bottomBarInset, bottomBarOffset } = getStoreBottomBarMetrics(insets.bottom);
+
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        left: 20,
+        right: 20,
+        bottom: bottomBarOffset,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 34,
+        padding: 2,
+        shadowColor: '#000000',
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 14 },
+        elevation: 18,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row-reverse',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          minHeight: 48,
+          borderRadius: 32,
+          backgroundColor: '#F3F4F6',
+          paddingHorizontal: 14,
+          paddingTop: 8,
+          paddingBottom: bottomBarInset,
+        }}
+      >
+        {BOTTOM_NAV_ITEMS.map((item) => (
+          <Pressable
+            key={item.id}
+            onPress={() => onTabPress(item.id)}
+            style={{ alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1, minHeight: 46 }}
+          >
+            <View style={{ alignItems: 'center', justifyContent: 'center', height: 20 }}>
+              {renderBottomNavIcon(item.id, activeTab === item.id)}
+            </View>
+            <Text
+              style={{
+                color: activeTab === item.id ? '#111111' : '#7B8190',
+                fontSize: 11,
+                fontWeight: activeTab === item.id ? '800' : '700',
+              }}
+            >
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -717,17 +885,41 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
 }
 
 export function StoreHomeScreen({
-  onAdminPress,
+  onProfilePress,
+  onOcdPlusPress,
   onProductPress,
+  onOpenCart,
+  onOpenProduct,
+  onOpenCategory,
+  initialTab,
+  initialTabRequestId,
 }: {
-  onAdminPress: () => void;
+  onProfilePress: () => void;
+  onOcdPlusPress?: () => void;
   onProductPress?: (handle: string) => void;
+  onOpenCart?: () => void;
+  onOpenProduct?: (product: StoreProduct) => void;
+  onOpenCategory?: (category: {
+    id: string;
+    title: string;
+    description?: string;
+    parentTitle?: string;
+    subcategories?: StoreSubcategory[];
+  }) => void;
+  initialTab?: StoreMainTabId;
+  initialTabRequestId?: number;
 }) {
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
+  const categoryCardWidth = Math.max(150, Math.floor((windowWidth - 40) / 2));
+  const brandCardWidth = Math.max(96, Math.floor((windowWidth - 44) / 3));
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([{ id: 'all', name: 'כל המוצרים' }]);
   const [menuItems, setMenuItems] = useState<ShopifyMenuItem[]>([]);
+  const [categoryStoryImages, setCategoryStoryImages] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -736,7 +928,10 @@ export function StoreHomeScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const categoryTabsRef = useRef<ScrollView | null>(null);
-  const activeBottomTab = menuOpen ? 'menu' : 'home';
+  const searchInputRef = useRef<TextInput | null>(null);
+  const [activePrimaryTab, setActivePrimaryTab] = useState<StoreMainTabId>('home');
+  const activeBottomTab = activePrimaryTab;
+  const lastHandledInitialTabRequestIdRef = useRef<number | undefined>(undefined);
   const { itemCount } = useCart();
 
   useEffect(() => {
@@ -768,6 +963,7 @@ export function StoreHomeScreen({
                 id: collection.handle,
                 name: collection.title,
                 subtitle: collection.description,
+                imageUrl: collection.imageUrl,
               })),
             ];
 
@@ -810,6 +1006,40 @@ export function StoreHomeScreen({
     () => (menuItems.length ? getTopLevelMenuCategories(menuItems) : categories.filter((category) => category.id !== 'all')),
     [categories, menuItems]
   );
+  const topLevelCategoryChildrenMap = useMemo(() => getTopLevelCategoryChildrenMap(menuItems), [menuItems]);
+  const topLevelCategoryRows = useMemo(() => {
+    const rows: StoreCategory[][] = [];
+
+    for (let index = 0; index < topLevelCategories.length; index += 2) {
+      rows.push(topLevelCategories.slice(index, index + 2));
+    }
+
+    return rows;
+  }, [topLevelCategories]);
+  const featuredBrandsSection = useMemo(
+    () => sidebarSections.find((section) => normalizeCategoryTitle(section.title) === 'חברות נבחרות'),
+    [sidebarSections]
+  );
+  const featuredBrands = useMemo(
+    () =>
+      (featuredBrandsSection?.children ?? []).map((child) => ({
+        id: child.categoryId,
+        title: child.title,
+        description: child.categoryDescription,
+        parentTitle: child.parentTitle ?? featuredBrandsSection?.title,
+        imageUrl: child.categoryImageUrl,
+      })),
+    [featuredBrandsSection]
+  );
+  const featuredBrandRows = useMemo(() => {
+    const rows: StoreSubcategory[][] = [];
+
+    for (let index = 0; index < featuredBrands.length; index += 3) {
+      rows.push(featuredBrands.slice(index, index + 3));
+    }
+
+    return rows;
+  }, [featuredBrands]);
   const selectedCategoryInfo = useMemo(
     () => categories.find((category) => category.id === selectedCategory) ?? topLevelCategories.find((category) => category.id === selectedCategory),
     [categories, selectedCategory, topLevelCategories]
@@ -838,6 +1068,94 @@ export function StoreHomeScreen({
   }, [selectedCategory, topLevelCategories]);
 
   useEffect(() => {
+    if (!initialTabRequestId || lastHandledInitialTabRequestIdRef.current === initialTabRequestId) {
+      return;
+    }
+
+    lastHandledInitialTabRequestIdRef.current = initialTabRequestId;
+    setMenuOpen(false);
+
+    if (initialTab === 'categories') {
+      searchInputRef.current?.blur();
+      setActivePrimaryTab('categories');
+      return;
+    }
+
+    if (initialTab === 'search') {
+      setActivePrimaryTab('search');
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
+      return;
+    }
+
+    searchInputRef.current?.blur();
+    setActivePrimaryTab('home');
+    if (topLevelCategories.length) {
+      setSelectedCategory(topLevelCategories[0].id);
+    }
+  }, [initialTab, initialTabRequestId, topLevelCategories]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCategoryStoryImages = async () => {
+      if (!topLevelCategories.length) return;
+
+      try {
+        const imageEntries = await Promise.all(
+          topLevelCategories.map(async (category) => {
+            try {
+              const categoryProducts = await fetchCollectionProducts(category.id, 8);
+              const productsWithImages = categoryProducts.filter((product) => !!product.imageUrl);
+              const preferredTitleFragments = CATEGORY_STORY_PRODUCT_OVERRIDES[category.name] ?? [];
+
+              if (!productsWithImages.length) {
+                return [category.id, category.imageUrl ?? ''] as const;
+              }
+
+              const preferredProduct = preferredTitleFragments.length
+                ? productsWithImages.find((product) =>
+                    preferredTitleFragments.some((fragment) => product.title.includes(fragment))
+                  )
+                : undefined;
+
+              if (preferredProduct?.imageUrl) {
+                return [category.id, preferredProduct.imageUrl] as const;
+              }
+
+              const randomProduct = productsWithImages[Math.floor(Math.random() * productsWithImages.length)];
+              return [category.id, randomProduct.imageUrl ?? category.imageUrl ?? ''] as const;
+            } catch {
+              return [category.id, category.imageUrl ?? ''] as const;
+            }
+          })
+        );
+
+        if (!isMounted) return;
+
+        setCategoryStoryImages(
+          imageEntries.reduce<Record<string, string>>((acc, [categoryId, imageUrl]) => {
+            if (imageUrl) {
+              acc[categoryId] = imageUrl;
+            }
+            return acc;
+          }, {})
+        );
+      } catch {
+        if (!isMounted) return;
+        setCategoryStoryImages({});
+      }
+    };
+
+    loadCategoryStoryImages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [topLevelCategories]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const loadCategoryProducts = async () => {
@@ -862,7 +1180,9 @@ export function StoreHomeScreen({
         const collectionProducts = await fetchCollectionProducts(selectedCategory, 40);
         if (!isMounted) return;
 
-        const mappedProducts = collectionProducts.map((product, index) => toStoreProduct(product, index));
+        const mappedProducts = collectionProducts.map((product, index) =>
+          toStoreProduct(product, index, selectedCategoryName, selectedCategory)
+        );
         const filteredProducts = mappedProducts.filter((product) => {
           return (
             !normalizedQuery ||
@@ -888,10 +1208,47 @@ export function StoreHomeScreen({
     return () => {
       isMounted = false;
     };
-  }, [allProducts, query, selectedCategory]);
+  }, [allProducts, query, selectedCategory, selectedCategoryName]);
+
+  const handleBottomTabPress = (itemId: StoreBottomTabId) => {
+    if (itemId === 'home') {
+      setMenuOpen(false);
+      setActivePrimaryTab('home');
+      searchInputRef.current?.blur();
+      setSelectedCategory(topLevelCategories[0]?.id ?? 'all');
+      return;
+    }
+
+    if (itemId === 'categories') {
+      setMenuOpen(false);
+      setActivePrimaryTab('categories');
+      searchInputRef.current?.blur();
+      return;
+    }
+
+    if (itemId === 'search') {
+      setMenuOpen(false);
+      setActivePrimaryTab('search');
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
+      return;
+    }
+
+    if (itemId === 'ocdPlus') {
+      setMenuOpen(false);
+      searchInputRef.current?.blur();
+      onOcdPlusPress?.();
+      return;
+    }
+
+    setMenuOpen(false);
+    searchInputRef.current?.blur();
+    onProfilePress();
+  };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
       <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
         <Modal
           visible={menuOpen}
@@ -1056,83 +1413,428 @@ export function StoreHomeScreen({
 
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 110 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: contentPaddingBottom }}
           showsVerticalScrollIndicator={false}
         >
           <View style={{ gap: 18 }}>
-            <View
-              style={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingVertical: 4,
-                minHeight: 60,
-              }}
-            >
-              <Pressable
-                onPress={onOpenCart}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  width: 42,
-                  height: 42,
-                  borderRadius: 21,
-                  backgroundColor: '#F8F8FA',
-                  borderWidth: 1,
-                  borderColor: '#ECEFF4',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <ShoppingCart size={18} color="#111827" />
-                {itemCount > 0 && (
-                  <View
+            {activePrimaryTab !== 'categories' && (
+              <>
+                <View
+                  style={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 4,
+                    minHeight: 60,
+                  }}
+                >
+                  <Pressable
+                    onPress={onOpenCart}
                     style={{
                       position: 'absolute',
-                      top: -4,
-                      right: -4,
-                      minWidth: 18,
-                      height: 18,
-                      borderRadius: 9,
-                      paddingHorizontal: 4,
-                      backgroundColor: '#111827',
+                      left: 0,
+                      width: 42,
+                      height: 42,
+                      borderRadius: 21,
+                      backgroundColor: '#F8F8FA',
+                      borderWidth: 1,
+                      borderColor: '#ECEFF4',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '900' }}>{itemCount}</Text>
+                    <ShoppingCart size={18} color="#111827" />
+                    {itemCount > 0 && (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          minWidth: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          paddingHorizontal: 4,
+                          backgroundColor: '#111827',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '900' }}>{itemCount}</Text>
+                      </View>
+                    )}
+                  </Pressable>
+
+                  <View style={{ alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 42 }}>
+                    <HeaderLogo />
+                  </View>
+                </View>
+
+                <View
+                  style={{
+                    backgroundColor: '#F7F8FB',
+                    borderRadius: 20,
+                    borderWidth: 1,
+                    borderColor: '#EEF0F3',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: '#B7BDC8', marginLeft: 8, fontSize: 12 }}>⌕</Text>
+                  <TextInput
+                    ref={searchInputRef}
+                    value={query}
+                    onChangeText={(text) => {
+                      setQuery(text);
+                      if (text.trim()) {
+                        setActivePrimaryTab('search');
+                      }
+                    }}
+                    placeholder="מה אתם רוצים לחפש?"
+                    placeholderTextColor="#B7BDC8"
+                    style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
+                  />
+                </View>
+              </>
+            )}
+
+            {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
+
+            {activePrimaryTab === 'categories' ? (
+              <View style={{ gap: 18 }}>
+                <View
+                  style={{
+                    backgroundColor: '#F8F9FC',
+                    borderRadius: 28,
+                    paddingHorizontal: 20,
+                    paddingVertical: 22,
+                    overflow: 'hidden',
+                    borderWidth: 1,
+                    borderColor: '#EEF2F7',
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: -26,
+                      right: -8,
+                      width: 132,
+                      height: 132,
+                      borderRadius: 66,
+                      backgroundColor: 'rgba(99,102,241,0.08)',
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: -34,
+                      left: -10,
+                      width: 140,
+                      height: 140,
+                      borderRadius: 70,
+                      backgroundColor: 'rgba(15,23,42,0.05)',
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 22,
+                      left: 108,
+                      width: 72,
+                      height: 72,
+                      borderRadius: 36,
+                      backgroundColor: 'rgba(255,255,255,0.58)',
+                    }}
+                  />
+                  <View style={{ alignItems: 'flex-end', gap: 4, flex: 1 }}>
+                    <Text style={{ color: '#98A2B3', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>
+                      SHOP BY CATEGORY
+                    </Text>
+                    <Text style={{ color: '#111827', fontSize: 30, fontWeight: '900' }}>קטגוריות</Text>
+                    <Text style={{ color: '#8F99A8', fontSize: 13, lineHeight: 20, textAlign: 'right' }}>
+                      בחרו קטגוריה כדי לראות את כל המוצרים שלה
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      width: 62,
+                      height: 62,
+                      borderRadius: 31,
+                      backgroundColor: 'rgba(255,255,255,0.86)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.9)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 16,
+                      shadowColor: '#111827',
+                      shadowOpacity: 0.08,
+                      shadowRadius: 10,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 3,
+                    }}
+                  >
+                    <Ionicons name="grid" size={24} color="#111827" />
+                  </View>
+                </View>
+
+                <View style={{ gap: 14 }}>
+                  {topLevelCategoryRows.map((row, rowIndex) => (
+                    <View
+                      key={`category-row-${rowIndex}`}
+                      style={{
+                        flexDirection: 'row-reverse',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      {row.map((category) => {
+                        const storyImageUrl = categoryStoryImages[category.id] || category.imageUrl;
+                        const subcategories = topLevelCategoryChildrenMap[category.id] ?? [];
+                        const gradientId = `categoryGradient-${category.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+
+                        return (
+                          <View
+                            key={`category-grid-${category.id}`}
+                            style={{
+                              width: categoryCardWidth,
+                              borderRadius: 24,
+                              shadowColor: '#0F172A',
+                              shadowOpacity: 0.06,
+                              shadowRadius: 12,
+                              shadowOffset: { width: 0, height: 6 },
+                              elevation: 3,
+                            }}
+                          >
+                            <Pressable
+                              onPress={() =>
+                                onOpenCategory?.({
+                                  id: category.id,
+                                  title: category.name,
+                                  description: category.subtitle,
+                                  subcategories,
+                                })
+                              }
+                              style={({ pressed }) => ({
+                                borderRadius: 24,
+                                backgroundColor: '#FFFFFF',
+                                transform: [{ scale: pressed ? 0.992 : 1 }],
+                              })}
+                            >
+                              <View
+                                style={{
+                                  height: 192,
+                                  borderRadius: 24,
+                                  overflow: 'hidden',
+                                  backgroundColor: '#EEF2F7',
+                                }}
+                              >
+                                {storyImageUrl ? (
+                                  <Image
+                                    source={{ uri: storyImageUrl }}
+                                    resizeMode="cover"
+                                    accessibilityLabel={category.name}
+                                    style={{ width: '100%', height: '100%', borderRadius: 24 }}
+                                  />
+                                ) : (
+                                  <View
+                                    style={{
+                                      flex: 1,
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      backgroundColor: '#F4F6FA',
+                                    }}
+                                  >
+                                    <Text style={{ color: '#6B7280', fontSize: 28, fontWeight: '800' }}>
+                                      {getCategoryAvatarLabel(category.name)}
+                                    </Text>
+                                  </View>
+                                )}
+
+                                <View
+                                  style={{
+                                    position: 'absolute',
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    bottom: 0,
+                                    justifyContent: 'flex-end',
+                                  }}
+                                >
+                                  <Svg
+                                    width="100%"
+                                    height="100%"
+                                    style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+                                  >
+                                    <Defs>
+                                      <SvgLinearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                                        <Stop offset="0%" stopColor="#000000" stopOpacity="0" />
+                                        <Stop offset="35%" stopColor="#000000" stopOpacity="0" />
+                                        <Stop offset="70%" stopColor="#000000" stopOpacity="0.42" />
+                                        <Stop offset="100%" stopColor="#000000" stopOpacity="0.9" />
+                                      </SvgLinearGradient>
+                                    </Defs>
+                                    <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${gradientId})`} />
+                                  </Svg>
+
+                                  <View
+                                    style={{
+                                      paddingHorizontal: 14,
+                                      paddingTop: 26,
+                                      paddingBottom: 14,
+                                    }}
+                                  >
+                                  <View
+                                    style={{
+                                      flexDirection: 'row-reverse',
+                                      alignItems: 'flex-end',
+                                    }}
+                                  >
+                                    <View style={{ alignItems: 'flex-end', flex: 1 }}>
+                                      <Text
+                                        numberOfLines={2}
+                                        style={{
+                                          color: '#FFFFFF',
+                                          fontSize: 17,
+                                          lineHeight: 22,
+                                          fontWeight: '900',
+                                          textAlign: 'right',
+                                        }}
+                                      >
+                                        {category.name}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                </View>
+                                </View>
+                              </View>
+                            </Pressable>
+                          </View>
+                        );
+                      })}
+                      {row.length === 1 && <View style={{ width: categoryCardWidth }} />}
+                    </View>
+                  ))}
+                </View>
+
+                {!!featuredBrands.length && (
+                  <View style={{ gap: 14, marginTop: 8 }}>
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <Text style={{ color: '#111827', fontSize: 22, fontWeight: '900' }}>חברות נבחרות</Text>
+                      <Text style={{ color: '#9CA3AF', fontSize: 12 }}>מותגים נבחרים לרכישה מהירה</Text>
+                    </View>
+
+                    <View style={{ gap: 10 }}>
+                      {featuredBrandRows.map((row, rowIndex) => (
+                        <View
+                          key={`featured-brand-row-${rowIndex}`}
+                          style={{
+                            flexDirection: 'row-reverse',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          {row.map((brand) => (
+                            <View
+                              key={`featured-brand-${brand.id}`}
+                              style={{
+                                width: brandCardWidth,
+                                borderRadius: 20,
+                                shadowColor: '#0F172A',
+                                shadowOpacity: 0.05,
+                                shadowRadius: 10,
+                                shadowOffset: { width: 0, height: 4 },
+                                elevation: 2,
+                              }}
+                            >
+                          {(() => {
+                            const brandImageOverride = FEATURED_BRAND_IMAGE_OVERRIDES[brand.title];
+
+                            return (
+                              <Pressable
+                                onPress={() =>
+                                  onOpenCategory?.({
+                                    id: brand.id,
+                                    title: brand.title,
+                                    description: brand.description,
+                                    parentTitle: brand.parentTitle ?? featuredBrandsSection?.title,
+                                  })
+                                }
+                                style={({ pressed }) => ({
+                                  borderRadius: 20,
+                                  backgroundColor: '#FFFFFF',
+                                  overflow: 'hidden',
+                                  transform: [{ scale: pressed ? 0.985 : 1 }],
+                                })}
+                              >
+                                <View
+                                  style={{
+                                    height: 122,
+                                    backgroundColor: '#F5F7FA',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  {brandImageOverride ? (
+                                    <Image
+                                      source={brandImageOverride}
+                                      resizeMode="cover"
+                                      accessibilityLabel={brand.title}
+                                      style={{ width: '100%', height: '100%' }}
+                                    />
+                                  ) : brand.imageUrl ? (
+                                    <Image
+                                      source={{ uri: brand.imageUrl }}
+                                      resizeMode="cover"
+                                      accessibilityLabel={brand.title}
+                                      style={{ width: '100%', height: '100%' }}
+                                    />
+                                  ) : (
+                                    <Text style={{ color: '#6B7280', fontSize: 24, fontWeight: '800' }}>
+                                      {getCategoryAvatarLabel(brand.title)}
+                                    </Text>
+                                  )}
+                                </View>
+
+                                <View
+                                  style={{
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 10,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    minHeight: 54,
+                                  }}
+                                >
+                                  <Text
+                                    numberOfLines={2}
+                                    style={{
+                                      color: '#111827',
+                                      fontSize: 16,
+                                      fontWeight: '800',
+                                      textAlign: 'center',
+                                    }}
+                                  >
+                                    {brand.title}
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            );
+                          })()}
+                            </View>
+                          ))}
+                          {row.length < 3 &&
+                            Array.from({ length: 3 - row.length }).map((_, spacerIndex) => (
+                              <View key={`featured-brand-spacer-${rowIndex}-${spacerIndex}`} style={{ width: brandCardWidth }} />
+                            ))}
+                        </View>
+                      ))}
+                    </View>
                   </View>
                 )}
-              </Pressable>
-
-              <View style={{ alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 42 }}>
-                <HeaderLogo />
               </View>
-            </View>
-
-            <View
-              style={{
-                backgroundColor: '#F7F8FB',
-                borderRadius: 20,
-                borderWidth: 1,
-                borderColor: '#EEF0F3',
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                flexDirection: 'row-reverse',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#B7BDC8', marginLeft: 8, fontSize: 12 }}>⌕</Text>
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="מה אתם רוצים לחפש?"
-                placeholderTextColor="#B7BDC8"
-                style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
-              />
-            </View>
-
-            <PromoCarousel />
-
+            ) : (
+              <>
             <ScrollView
               ref={categoryTabsRef}
               horizontal
@@ -1152,28 +1854,59 @@ export function StoreHomeScreen({
             >
               {topLevelCategories.map((category) => {
                 const isSelected = selectedCategory === category.id;
+                const storyImageUrl = categoryStoryImages[category.id] || category.imageUrl;
 
                 return (
                   <Pressable key={category.id} onPress={() => setSelectedCategory(category.id)}>
-                    <View style={{ alignItems: 'center', gap: 8 }}>
+                    <View style={{ alignItems: 'center', gap: 8, width: 82 }}>
+                      <View
+                        style={{
+                          width: 70,
+                          height: 70,
+                          borderRadius: 35,
+                          padding: 3,
+                          backgroundColor: isSelected ? '#111827' : '#FFFFFF',
+                          borderWidth: 1,
+                          borderColor: isSelected ? '#111827' : '#E7ECF3',
+                        }}
+                      >
+                        <View
+                          style={{
+                            flex: 1,
+                            borderRadius: 32,
+                            overflow: 'hidden',
+                            backgroundColor: '#F4F6FA',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {storyImageUrl ? (
+                            <Image
+                              source={{ uri: storyImageUrl }}
+                              resizeMode="cover"
+                              accessibilityLabel={category.name}
+                              style={{ width: '100%', height: '100%' }}
+                            />
+                          ) : (
+                            <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
+                              {getCategoryAvatarLabel(category.name)}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
                       <Text
-                        numberOfLines={1}
+                        numberOfLines={2}
                         style={{
                           color: isSelected ? '#111827' : '#9CA3AF',
                           fontWeight: isSelected ? '900' : '600',
                           fontSize: 12,
+                          lineHeight: 16,
+                          textAlign: 'center',
+                          minHeight: 32,
                         }}
                       >
                         {category.name}
                       </Text>
-                      <View
-                        style={{
-                          width: 28,
-                          height: 2,
-                          borderRadius: 999,
-                          backgroundColor: isSelected ? '#111827' : 'transparent',
-                        }}
-                      />
                     </View>
                   </Pressable>
                 );
@@ -1204,35 +1937,43 @@ export function StoreHomeScreen({
                         borderRadius: 18,
                         backgroundColor: '#FFFFFF',
                         borderWidth: 1,
-                        borderColor: '#EEF0F3',
+                        borderColor: '#E7ECF3',
                         overflow: 'hidden',
+                        shadowColor: '#0F172A',
+                        shadowOpacity: 0.04,
+                        shadowRadius: 10,
+                        shadowOffset: { width: 0, height: 4 },
+                        elevation: 2,
                       }}
                     >
                       <View
                         style={{
                           height: 174,
                           borderRadius: 18,
-                          backgroundColor: product.coverColor,
+                          backgroundColor: '#FFFFFF',
                           overflow: 'hidden',
-                          padding: 10,
-                          justifyContent: 'space-between',
                         }}
                       >
-                        <View
-                          style={{
-                            alignSelf: 'flex-start',
-                            backgroundColor: '#111827',
-                            borderRadius: 999,
-                            paddingHorizontal: 8,
-                            paddingVertical: 4,
-                          }}
-                        >
-                          <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                            {product.badge ?? 'ITEM'}
-                          </Text>
-                        </View>
+                        {!!product.badge && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 10,
+                              left: 10,
+                              backgroundColor: '#111827',
+                              borderRadius: 999,
+                              paddingHorizontal: 8,
+                              paddingVertical: 4,
+                              zIndex: 1,
+                            }}
+                          >
+                            <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                              {product.badge}
+                            </Text>
+                          </View>
+                        )}
 
-                        <ProductImage product={product} height={146} />
+                        <ProductImage product={product} height={174} />
 
                         <View
                           style={{
@@ -1243,6 +1984,8 @@ export function StoreHomeScreen({
                             height: 28,
                             borderRadius: 14,
                             backgroundColor: '#FFFFFF',
+                            borderWidth: 1,
+                            borderColor: '#D9E0EA',
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}
@@ -1251,22 +1994,48 @@ export function StoreHomeScreen({
                         </View>
                       </View>
 
-                      <View style={{ paddingHorizontal: 8, paddingTop: 10, paddingBottom: 12, alignItems: 'flex-end' }}>
+                      <View
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingTop: 12,
+                          paddingBottom: 14,
+                          alignItems: 'flex-end',
+                          gap: 4,
+                        }}
+                      >
                         <Text
                           numberOfLines={2}
-                          style={{ color: '#111827', fontSize: 14, fontWeight: '800', textAlign: 'right' }}
+                          style={{
+                            color: '#111827',
+                            fontSize: 15,
+                            lineHeight: 20,
+                            fontWeight: '800',
+                            textAlign: 'right',
+                            alignSelf: 'stretch',
+                            minHeight: 40,
+                          }}
                         >
                           {product.name}
                         </Text>
                         <Text
                           numberOfLines={1}
-                          style={{ color: '#8D94A1', fontSize: 10, marginTop: 3, textAlign: 'right' }}
+                          style={{ color: '#9AA3B2', fontSize: 11, textAlign: 'right' }}
                         >
                           {product.subtitle}
                         </Text>
-                        <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 8 }}>
-                          {formatPrice(product.price)}
-                        </Text>
+                        <View
+                          style={{
+                            alignSelf: 'stretch',
+                            marginTop: 8,
+                            paddingTop: 10,
+                            borderTopWidth: 1,
+                            borderTopColor: '#EEF2F6',
+                          }}
+                        >
+                          <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+                            {formatPrice(product.price)}
+                          </Text>
+                        </View>
                       </View>
                     </Pressable>
                   ))}
@@ -1278,6 +2047,7 @@ export function StoreHomeScreen({
                       id: selectedCategory,
                       title: selectedCategoryName,
                       description: selectedCategoryInfo?.subtitle,
+                      subcategories: topLevelCategoryChildrenMap[selectedCategory] ?? [],
                     })
                   }
                   style={{
@@ -1384,6 +2154,13 @@ export function StoreHomeScreen({
                     width: 156,
                     borderRadius: 18,
                     backgroundColor: '#FFFFFF',
+                    borderWidth: 1,
+                    borderColor: '#E7ECF3',
+                    shadowColor: '#0F172A',
+                    shadowOpacity: 0.04,
+                    shadowRadius: 10,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 2,
                     opacity: pressed ? 0.95 : 1,
                     transform: [{ scale: pressed ? 0.99 : 1 }],
                   })}
@@ -1392,27 +2169,30 @@ export function StoreHomeScreen({
                     style={{
                       height: 166,
                       borderRadius: 18,
-                      backgroundColor: product.coverColor,
+                      backgroundColor: '#FFFFFF',
                       overflow: 'hidden',
-                      padding: 10,
-                      justifyContent: 'space-between',
                     }}
                   >
-                    <View
-                      style={{
-                        alignSelf: 'flex-start',
-                        backgroundColor: '#111827',
-                        borderRadius: 999,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                      }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                        {product.badge ?? 'ITEM'}
-                      </Text>
-                    </View>
+                    {!!product.badge && (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          top: 10,
+                          left: 10,
+                          backgroundColor: '#111827',
+                          borderRadius: 999,
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          zIndex: 1,
+                        }}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                          {product.badge}
+                        </Text>
+                      </View>
+                    )}
 
-                    <ProductImage product={product} height={146} />
+                    <ProductImage product={product} height={166} />
 
                     <View
                       style={{
@@ -1423,6 +2203,8 @@ export function StoreHomeScreen({
                         height: 28,
                         borderRadius: 14,
                         backgroundColor: '#FFFFFF',
+                        borderWidth: 1,
+                        borderColor: '#D9E0EA',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
@@ -1431,12 +2213,45 @@ export function StoreHomeScreen({
                     </View>
                   </View>
 
-                  <View style={{ paddingHorizontal: 4, paddingTop: 10, alignItems: 'flex-end' }}>
-                    <Text style={{ color: '#111827', fontSize: 13, fontWeight: '800' }}>{product.name}</Text>
-                    <Text style={{ color: '#8D94A1', fontSize: 10, marginTop: 3 }}>{product.subtitle}</Text>
-                    <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 8 }}>
-                      {formatPrice(product.price)}
+                  <View
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingTop: 12,
+                      paddingBottom: 14,
+                      alignItems: 'flex-end',
+                      gap: 4,
+                    }}
+                  >
+                    <Text
+                      numberOfLines={2}
+                      style={{
+                        color: '#111827',
+                        fontSize: 14,
+                        lineHeight: 19,
+                        fontWeight: '800',
+                        textAlign: 'right',
+                        alignSelf: 'stretch',
+                        minHeight: 38,
+                      }}
+                    >
+                      {product.name}
                     </Text>
+                    <Text numberOfLines={1} style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right' }}>
+                      {product.subtitle}
+                    </Text>
+                    <View
+                      style={{
+                        alignSelf: 'stretch',
+                        marginTop: 8,
+                        paddingTop: 10,
+                        borderTopWidth: 1,
+                        borderTopColor: '#EEF2F6',
+                      }}
+                    >
+                      <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+                        {formatPrice(product.price)}
+                      </Text>
+                    </View>
                   </View>
                 </Pressable>
               ))}
@@ -1598,6 +2413,8 @@ export function StoreHomeScreen({
                 </View>
               ))}
             </View>
+              </>
+            )}
 
             {selectedCategory === 'all' && !loading && !categoryLoading && !visibleProducts.length && (
               <View
@@ -1611,77 +2428,11 @@ export function StoreHomeScreen({
                 <Text style={{ color: '#111827', fontWeight: '800' }}>לא נמצאו מוצרים לחיפוש הזה</Text>
               </View>
             )}
+              </>
+            )}
           </View>
         </ScrollView>
-
-        <View
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: '#FFFFFF',
-            borderTopWidth: 1,
-            borderTopColor: '#EDF0F4',
-            paddingHorizontal: 16,
-            paddingTop: 10,
-            paddingBottom: 18,
-          }}
-        >
-          <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
-            {BOTTOM_NAV_ITEMS.map((item) => (
-              <Pressable
-                key={item.id}
-                onPress={() => {
-                  if (item.id === 'home') {
-                    setMenuOpen(false);
-                    setSelectedCategory(topLevelCategories[0]?.id ?? 'all');
-                    return;
-                  }
-
-                  if (item.id === 'menu') {
-                    setMenuOpen(true);
-                    return;
-                  }
-
-                  onAdminPress();
-                }}
-                style={{ alignItems: 'center', gap: 6, flex: 1 }}
-              >
-                <View
-                  style={{
-                    minWidth: 38,
-                    height: 30,
-                    borderRadius: 15,
-                    paddingHorizontal: 10,
-                    backgroundColor: activeBottomTab === item.id ? '#111827' : '#F3F4F6',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: activeBottomTab === item.id ? '#FFFFFF' : item.id === 'admin' ? '#7C4A03' : '#111827',
-                      fontSize: 15,
-                      fontWeight: '800',
-                    }}
-                  >
-                    {item.icon}
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    color: activeBottomTab === item.id ? '#111827' : item.id === 'admin' ? '#7C4A03' : '#A0A7B4',
-                    fontSize: 10,
-                    fontWeight: activeBottomTab === item.id ? '800' : '700',
-                  }}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        <StoreFloatingTabBar activeTab={activeBottomTab} onTabPress={handleBottomTabPress} />
       </View>
     </SafeAreaView>
   );
@@ -1695,6 +2446,9 @@ export function StoreCategoryScreen({
   parentTitle,
   onOpenCart,
   onOpenProduct,
+  onOpenCategory,
+  onTabPress,
+  subcategories,
 }: {
   onBack: () => void;
   categoryId: string;
@@ -1703,7 +2457,18 @@ export function StoreCategoryScreen({
   parentTitle?: string;
   onOpenCart?: () => void;
   onOpenProduct?: (product: StoreProduct) => void;
+  onOpenCategory?: (category: {
+    id: string;
+    title: string;
+    description?: string;
+    parentTitle?: string;
+    subcategories?: StoreSubcategory[];
+  }) => void;
+  onTabPress: (tabId: StoreBottomTabId) => void;
+  subcategories?: StoreSubcategory[];
 }) {
+  const insets = useSafeAreaInsets();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1719,7 +2484,7 @@ export function StoreCategoryScreen({
         setError(null);
         const collectionProducts = await fetchCollectionProducts(categoryId, 80);
         if (!isMounted) return;
-        setProducts(collectionProducts.map((product, index) => toStoreProduct(product, index)));
+        setProducts(collectionProducts.map((product, index) => toStoreProduct(product, index, categoryTitle, categoryId)));
       } catch (err) {
         if (!isMounted) return;
         setProducts([]);
@@ -1750,13 +2515,14 @@ export function StoreCategoryScreen({
   }, [normalizedQuery, products]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ gap: 16 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: contentPaddingBottom }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ gap: 16 }}>
           <View
             style={{
               backgroundColor: '#FFFFFF',
@@ -1789,7 +2555,9 @@ export function StoreCategoryScreen({
               </Pressable>
 
               <View style={{ alignItems: 'flex-end', gap: 4, flex: 1, marginRight: 12 }}>
-                <Text style={{ color: '#C18D39', fontSize: 11, fontWeight: '800' }}>SUB CATEGORY</Text>
+                <Text style={{ color: '#C18D39', fontSize: 11, fontWeight: '800' }}>
+                  {parentTitle ? 'SUB CATEGORY' : 'CATEGORY'}
+                </Text>
                 <Text style={{ color: '#111827', fontSize: 28, fontWeight: '900', textAlign: 'right' }}>
                   {categoryTitle}
                 </Text>
@@ -1833,7 +2601,10 @@ export function StoreCategoryScreen({
             </View>
 
             <Text style={{ color: '#6B7280', fontSize: 13, lineHeight: 20, textAlign: 'right' }}>
-              {categoryDescription?.trim() || 'כל המוצרים של תת הקטגוריה מוצגים כאן בצורה נקייה, מהירה ונוחה.'}
+              {categoryDescription?.trim() ||
+                (parentTitle
+                  ? 'כל המוצרים של תת הקטגוריה מוצגים כאן בצורה נקייה, מהירה ונוחה.'
+                  : 'כל המוצרים של הקטגוריה מוצגים כאן בצורה נקייה, מהירה ונוחה.')}
             </Text>
 
             <View
@@ -1870,6 +2641,90 @@ export function StoreCategoryScreen({
               </View>
             </View>
           </View>
+
+          {!!subcategories?.length && (
+            <View style={{ gap: 12 }}>
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900' }}>תתי קטגוריות</Text>
+                <Text style={{ color: '#9CA3AF', fontSize: 11 }}>לחיצה מהירה למעבר בין התתי קטגוריות</Text>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{
+                  flexDirection: 'row-reverse',
+                  gap: 16,
+                  paddingHorizontal: 2,
+                }}
+              >
+                {subcategories.map((subcategory) => (
+                  <Pressable
+                    key={`subcategory-story-${subcategory.id}`}
+                    onPress={() =>
+                      onOpenCategory?.({
+                        id: subcategory.id,
+                        title: subcategory.title,
+                        description: subcategory.description,
+                        parentTitle: subcategory.parentTitle ?? categoryTitle,
+                      })
+                    }
+                  >
+                    <View style={{ alignItems: 'center', gap: 8, width: 82 }}>
+                      <View
+                        style={{
+                          width: 70,
+                          height: 70,
+                          borderRadius: 35,
+                          padding: 3,
+                          backgroundColor: '#FFFFFF',
+                          borderWidth: 1,
+                          borderColor: '#E7ECF3',
+                        }}
+                      >
+                        <View
+                          style={{
+                            flex: 1,
+                            borderRadius: 32,
+                            overflow: 'hidden',
+                            backgroundColor: '#F4F6FA',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {subcategory.imageUrl ? (
+                            <Image
+                              source={{ uri: subcategory.imageUrl }}
+                              resizeMode="cover"
+                              accessibilityLabel={subcategory.title}
+                              style={{ width: '100%', height: '100%' }}
+                            />
+                          ) : (
+                            <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
+                              {getCategoryAvatarLabel(subcategory.title)}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          color: '#111827',
+                          fontWeight: '700',
+                          fontSize: 12,
+                          lineHeight: 16,
+                          textAlign: 'center',
+                          minHeight: 32,
+                        }}
+                      >
+                        {subcategory.title}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           <View
             style={{
@@ -2017,8 +2872,10 @@ export function StoreCategoryScreen({
               <Text style={{ color: '#94A3B8', fontSize: 12 }}>נסה לחפש שם מוצר או מילת מפתח אחרת</Text>
             </View>
           )}
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+        <StoreFloatingTabBar activeTab="categories" onTabPress={onTabPress} />
+      </View>
     </SafeAreaView>
   );
 }
@@ -2027,22 +2884,27 @@ export function StoreProductScreen({
   onBack,
   onOpenCart,
   product,
+  onTabPress,
 }: {
   onBack: () => void;
   onOpenCart?: () => void;
   product: StoreProduct;
+  onTabPress: (tabId: StoreBottomTabId) => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { addItem, itemCount, getQuantity } = useCart();
   const productQuantity = getQuantity(product.id);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ gap: 18 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: contentPaddingBottom }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ gap: 18 }}>
           <View
             style={{
               backgroundColor: '#FFFFFF',
@@ -2121,8 +2983,8 @@ export function StoreProductScreen({
                 marginTop: 8,
                 marginBottom: 16,
                 borderRadius: 26,
-                backgroundColor: product.accentColor,
-                padding: 18,
+                backgroundColor: '#FFFFFF',
+                padding: 0,
               }}
             >
               <ProductImage product={product} height={320} />
@@ -2281,8 +3143,10 @@ export function StoreProductScreen({
               {productQuantity ? `הוסף עוד לעגלה (${productQuantity})` : 'הוסף לעגלה'}
             </Text>
           </Pressable>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+        <StoreFloatingTabBar activeTab="home" onTabPress={onTabPress} />
+      </View>
     </SafeAreaView>
   );
 }

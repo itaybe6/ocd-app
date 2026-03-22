@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { colors } from '../../theme/colors';
 import { fetchProductByHandle, type ShopifyProduct } from '../../lib/shopify';
 import type { RootStackParamList } from '../../navigation/types';
+import {
+  getStoreBottomBarMetrics,
+  StoreFloatingTabBar,
+  type StoreBottomTabId,
+} from './StoreHomeScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
 
@@ -15,12 +21,35 @@ function formatPrice(price: number, currencyCode: string) {
   return `${price.toLocaleString('he-IL')} ${currencyCode}`;
 }
 
-export function ProductScreen({ route }: Props) {
+export function ProductScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const handle = route.params.handle;
   const [reloadSeq, setReloadSeq] = useState(0);
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<ShopifyProduct | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleBottomTabPress = (tabId: StoreBottomTabId) => {
+    const mainParams =
+      tabId === 'categories'
+        ? { initialTab: 'categories' as const, initialTabRequestId: Date.now() }
+        : tabId === 'search'
+          ? { initialTab: 'search' as const, initialTabRequestId: Date.now() }
+          : { initialTab: 'home' as const, initialTabRequestId: Date.now() };
+
+    if (tabId === 'ocdPlus') {
+      navigation.navigate('StoreOcdPlus');
+      return;
+    }
+
+    if (tabId === 'profile') {
+      navigation.navigate('Login');
+      return;
+    }
+
+    navigation.navigate('Main', mainParams);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -87,33 +116,39 @@ export function ProductScreen({ route }: Props) {
   }
 
   return (
-    <Screen padded={false}>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 12 }} showsVerticalScrollIndicator={false}>
-        {!!product.imageUrl && (
-          <Image
-            source={{ uri: product.imageUrl }}
-            resizeMode="cover"
-            accessibilityLabel={product.imageAltText ?? product.title}
-            style={{ width: '100%', height: 280, borderRadius: 24, backgroundColor: 'rgba(15,23,42,0.05)' }}
-          />
-        )}
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, paddingBottom: contentPaddingBottom, gap: 12 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {!!product.imageUrl && (
+            <Image
+              source={{ uri: product.imageUrl }}
+              resizeMode="cover"
+              accessibilityLabel={product.imageAltText ?? product.title}
+              style={{ width: '100%', height: 280, borderRadius: 24, backgroundColor: 'rgba(15,23,42,0.05)' }}
+            />
+          )}
 
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', fontSize: 22 }}>{title}</Text>
-          <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>{product.productType}</Text>
-          <Text style={{ color: colors.text, fontWeight: '900', marginTop: 12, textAlign: 'right', fontSize: 20 }}>
-            {formatPrice(product.price, product.currencyCode)}
-          </Text>
-        </Card>
+          <Card>
+            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', fontSize: 22 }}>{title}</Text>
+            <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>{product.productType}</Text>
+            <Text style={{ color: colors.text, fontWeight: '900', marginTop: 12, textAlign: 'right', fontSize: 20 }}>
+              {formatPrice(product.price, product.currencyCode)}
+            </Text>
+          </Card>
 
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 8 }}>תיאור</Text>
-          <Text style={{ color: colors.text, textAlign: 'right', lineHeight: 20 }}>
-            {product.description?.trim() ? product.description : 'אין תיאור למוצר הזה.'}
-          </Text>
-        </Card>
-      </ScrollView>
-    </Screen>
+          <Card>
+            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 8 }}>תיאור</Text>
+            <Text style={{ color: colors.text, textAlign: 'right', lineHeight: 20 }}>
+              {product.description?.trim() ? product.description : 'אין תיאור למוצר הזה.'}
+            </Text>
+          </Card>
+        </ScrollView>
+        <StoreFloatingTabBar activeTab="home" onTabPress={handleBottomTabPress} />
+      </View>
+    </SafeAreaView>
   );
 }
 

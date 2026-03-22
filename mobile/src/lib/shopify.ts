@@ -21,6 +21,7 @@ export type ShopifyCollection = {
   title: string;
   handle: string;
   description: string;
+  imageUrl: string | null;
 };
 
 export type ShopifyMenuItem = {
@@ -28,6 +29,7 @@ export type ShopifyMenuItem = {
   title: string;
   collectionHandle?: string;
   collectionDescription?: string;
+  collectionImageUrl?: string;
   children?: ShopifyMenuItem[];
 };
 
@@ -71,6 +73,7 @@ type ShopifyCollectionNode = {
   title: string;
   handle: string;
   description: string;
+  image: ShopifyImage | null;
 };
 
 type ShopifyMenuItemNode = {
@@ -84,6 +87,7 @@ type ShopifyMenuItemNode = {
     title: string;
     handle: string;
     description: string;
+    image: ShopifyImage | null;
   } | null;
 };
 
@@ -115,7 +119,6 @@ type ShopifyCollectionProductsQueryResponse = {
   }>;
 };
 
-<<<<<<< HEAD
 type ShopifyMenuQueryResponse = {
   data?: {
     menu: {
@@ -123,11 +126,15 @@ type ShopifyMenuQueryResponse = {
       title: string;
       items: ShopifyMenuItemNode[];
     } | null;
-=======
+  };
+  errors?: Array<{
+    message: string;
+  }>;
+};
+
 type ShopifyProductByHandleQueryResponse = {
   data?: {
     productByHandle: ShopifyProductNode | null;
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
   };
   errors?: Array<{
     message: string;
@@ -162,6 +169,7 @@ function normalizeCollection(node: ShopifyCollectionNode): ShopifyCollection {
     title: node.title,
     handle: node.handle,
     description: node.description,
+    imageUrl: node.image?.url ?? null,
   };
 }
 
@@ -175,6 +183,7 @@ function extractCollectionHandleFromUrl(url: string | null | undefined) {
 function normalizeMenuItem(node: ShopifyMenuItemNode): ShopifyMenuItem | null {
   const collectionHandle = node.resource?.handle ?? extractCollectionHandleFromUrl(node.url);
   const collectionDescription = node.resource?.description || undefined;
+  const collectionImageUrl = node.resource?.image?.url ?? undefined;
   const children = (node.items ?? [])
     .map((child) => normalizeMenuItem(child))
     .filter((child): child is ShopifyMenuItem => !!child);
@@ -188,6 +197,7 @@ function normalizeMenuItem(node: ShopifyMenuItemNode): ShopifyMenuItem | null {
     title: node.title.trim(),
     collectionHandle,
     collectionDescription,
+    collectionImageUrl,
     children: children.length ? children : undefined,
   };
 }
@@ -264,6 +274,10 @@ export async function fetchCollections(first = 50): Promise<ShopifyCollection[]>
             title
             handle
             description
+            image {
+              url
+              altText
+            }
           }
         }
       }
@@ -296,6 +310,10 @@ export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<Shop
               title
               handle
               description
+              image {
+                url
+                altText
+              }
             }
           }
           items {
@@ -309,6 +327,10 @@ export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<Shop
                 title
                 handle
                 description
+                image {
+                  url
+                  altText
+                }
               }
             }
             items {
@@ -322,6 +344,10 @@ export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<Shop
                   title
                   handle
                   description
+                  image {
+                    url
+                    altText
+                  }
                 }
               }
             }

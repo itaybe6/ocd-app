@@ -4,12 +4,8 @@ import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './navigation/RootNavigator';
-<<<<<<< HEAD
-import { AuthProvider } from './state/AuthContext';
-import { CartProvider } from './state/CartContext';
-=======
 import { AuthProvider, useAuth } from './state/AuthContext';
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
+import { CartProvider } from './state/CartContext';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { LoadingProvider, useLoading } from './state/LoadingContext';
 import { registerForPushNotifications } from './lib/pushNotifications';
@@ -51,23 +47,15 @@ function AppShell() {
 
 export default function App() {
   return (
-<<<<<<< HEAD
-    <LoadingProvider>
-      <AuthProvider>
-        <CartProvider>
-          <AppShell />
-        </CartProvider>
-      </AuthProvider>
-    </LoadingProvider>
-=======
     <SafeAreaProvider>
       <LoadingProvider>
         <AuthProvider>
-          <AppShell />
+          <CartProvider>
+            <AppShell />
+          </CartProvider>
         </AuthProvider>
       </LoadingProvider>
     </SafeAreaProvider>
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
   );
 }
 
