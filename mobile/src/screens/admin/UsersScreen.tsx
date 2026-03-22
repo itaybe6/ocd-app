@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react-native';
+import { Eye, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
@@ -92,7 +92,8 @@ export function UsersScreen() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [mutating, setMutating] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<UserRow>>(emptyUser());
@@ -128,6 +129,13 @@ export function UsersScreen() {
     });
   }, [users, roleFilter, query]);
 
+  const stats = useMemo(() => {
+    const admin = users.filter((u) => u.role === 'admin').length;
+    const worker = users.filter((u) => u.role === 'worker').length;
+    const customer = users.filter((u) => u.role === 'customer').length;
+    return { admin, worker, customer, total: users.length };
+  }, [users]);
+
   const fetchLookups = useCallback(async () => {
     const [dRes, sRes] = await Promise.all([
       supabase.from('devices').select('id, name, refill_amount').order('name', { ascending: true }),
@@ -139,7 +147,7 @@ export function UsersScreen() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       const { data, error } = await supabase
         .from('users')
         .select('id, phone, password, role, name, address, price, avatar_url, created_at')
@@ -149,7 +157,7 @@ export function UsersScreen() {
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת משתמשים נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -378,7 +386,7 @@ export function UsersScreen() {
 
   const cascadeDelete = async (u: UserRow) => {
     try {
-      setLoading(true);
+      setMutating(true);
 
       const tryOp = async (op: PromiseLike<{ error: any }>) => {
         const res = await op;
@@ -429,206 +437,148 @@ export function UsersScreen() {
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'מחיקה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
-      setLoading(false);
+      setMutating(false);
     }
   };
 
+  const busy = refreshing || mutating || avatarBusy;
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
-      <View style={{ gap: 10 }}>
-        {/* iOS-like header */}
-        <View
-          style={{
-            backgroundColor: colors.card,
-            borderRadius: 20,
-            padding: 12,
-            borderWidth: 1,
-            borderColor: 'rgba(60,60,67,0.12)',
-            shadowColor: '#000',
-            shadowOpacity: 0.06,
-            shadowRadius: 10,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 2,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Pressable
-              onPress={(e) => openCreate({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="הוסף משתמש"
-              style={({ pressed }) => [
-                {
-                  width: 44,
-                  height: 44,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: 'rgba(60,60,67,0.16)',
-                  shadowColor: colors.primary,
-                  shadowOpacity: 0.14,
-                  shadowRadius: 12,
-                  shadowOffset: { width: 0, height: 8 },
-                  elevation: 2,
-                  transform: [{ scale: pressed ? 0.98 : 1 }],
-                },
-              ]}
-            >
-              <Plus size={20} color={colors.primary} />
-            </Pressable>
-
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>משתמשים</Text>
-              <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right', fontWeight: '700' }}>
-                {filtered.length} {filtered.length === 1 ? 'משתמש' : 'משתמשים'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Search */}
-          <View
-            style={{
-              marginTop: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-              backgroundColor: 'rgba(118,118,128,0.12)',
-              borderRadius: 14,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              borderWidth: 1,
-              borderColor: 'rgba(60,60,67,0.08)',
-            }}
-          >
-            <Search size={18} color="rgba(60,60,67,0.6)" />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="חיפוש לפי שם / טלפון / role"
-              placeholderTextColor="rgba(60,60,67,0.6)"
-              style={{
-                flex: 1,
-                color: colors.text,
-                fontSize: 16,
-                textAlign: 'right',
-                paddingVertical: 0,
-              }}
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
-            {!!query.trim() && (
-              <Pressable
-                onPress={() => setQuery('')}
-                hitSlop={10}
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: 'rgba(60,60,67,0.18)',
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="נקה חיפוש"
-              >
-                <X size={16} color="rgba(60,60,67,0.8)" />
-              </Pressable>
-            )}
-          </View>
-
-          {/* Segmented role filter */}
-          <View style={{ marginTop: 12 }}>
-            <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>פילטר role</Text>
-            <View
-              style={{
-                flexDirection: 'row',
-                backgroundColor: 'rgba(118,118,128,0.12)',
-                borderRadius: 12,
-                padding: 3,
-                borderWidth: 1,
-                borderColor: 'rgba(60,60,67,0.08)',
-              }}
-            >
-              {[
-                { value: 'all' as const, label: 'הכל' },
-                { value: 'admin' as const, label: 'admin' },
-                { value: 'worker' as const, label: 'worker' },
-                { value: 'customer' as const, label: 'customer' },
-              ].map((opt) => {
-                const active = roleFilter === opt.value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => setRoleFilter(opt.value as any)}
-                    style={{
-                      flex: 1,
-                      borderRadius: 10,
-                      paddingVertical: 8,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: active ? '#FFFFFF' : 'transparent',
-                      shadowColor: '#000',
-                      shadowOpacity: active ? 0.08 : 0,
-                      shadowRadius: active ? 6 : 0,
-                      shadowOffset: { width: 0, height: 3 },
-                      elevation: active ? 1 : 0,
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`פילטר ${opt.label}`}
-                  >
-                    <Text style={{ color: active ? colors.text : 'rgba(60,60,67,0.8)', fontWeight: '800' }}>
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </View>
-
+    <View style={styles.screen}>
       <FlatList
-        style={{ marginTop: 12, flex: 1 }}
+        style={styles.list}
         data={filtered}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchUsers} tintColor={colors.primary} />}
+        ListHeaderComponent={
+          <View style={{ gap: 12 }}>
+            <Card style={[styles.headerCard, styles.shadowMd]}>
+              <View style={styles.headerTopRow}>
+                <View style={styles.headerActionsRow}>
+                  <Pressable
+                    onPress={fetchUsers}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="רענון"
+                    style={({ pressed }) => [styles.iconBtn, pressed && { transform: [{ scale: 0.98 }] }, refreshing && { opacity: 0.6 }]}
+                    disabled={refreshing}
+                  >
+                    <RefreshCw size={18} color={colors.text} />
+                  </Pressable>
+                  <Pressable
+                    onPress={(e) => openCreate({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="הוסף משתמש"
+                    style={({ pressed }) => [styles.primaryIconBtn, pressed && { transform: [{ scale: 0.98 }] }]}
+                  >
+                    <Plus size={18} color={colors.primary} />
+                  </Pressable>
+                </View>
+
+                <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                  <Text style={styles.title}>משתמשים</Text>
+                  <Text style={styles.subtitle}>
+                    {filtered.length} {filtered.length === 1 ? 'משתמש' : 'משתמשים'} · סה״כ {stats.total}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.statsRow}>
+                <StatPill label="admin" value={stats.admin} bg="#EEF2FF" border="#C7D2FE" fg="#3730A3" />
+                <StatPill label="worker" value={stats.worker} bg="#ECFDF5" border="#A7F3D0" fg="#047857" />
+                <StatPill label="customer" value={stats.customer} bg="#FFFBEB" border="#FDE68A" fg="#B45309" />
+              </View>
+
+              <View style={styles.searchWrap}>
+                <Search size={18} color="rgba(60,60,67,0.62)" />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="חיפוש לפי שם / טלפון / role"
+                  placeholderTextColor="rgba(60,60,67,0.55)"
+                  style={styles.searchInput}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+                {!!query.trim() && (
+                  <Pressable
+                    onPress={() => setQuery('')}
+                    hitSlop={10}
+                    style={styles.clearBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="נקה חיפוש"
+                  >
+                    <X size={16} color="rgba(60,60,67,0.82)" />
+                  </Pressable>
+                )}
+              </View>
+
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.filterLabel}>פילטר role</Text>
+                <View style={styles.segmented}>
+                  {[
+                    { value: 'all' as const, label: 'הכל' },
+                    { value: 'admin' as const, label: 'admin' },
+                    { value: 'worker' as const, label: 'worker' },
+                    { value: 'customer' as const, label: 'customer' },
+                  ].map((opt) => {
+                    const active = roleFilter === opt.value;
+                    return (
+                      <Pressable
+                        key={opt.value}
+                        onPress={() => setRoleFilter(opt.value as any)}
+                        style={[styles.segmentItem, active && styles.segmentItemActive]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`פילטר ${opt.label}`}
+                      >
+                        <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{opt.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </Card>
+
+            {refreshing && !users.length ? (
+              <Card style={[styles.loadingCard, styles.shadowSm]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <ActivityIndicator color={colors.primary} />
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>טוען משתמשים…</Text>
+                    <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 4 }}>זה אמור לקחת כמה שניות</Text>
+                  </View>
+                </View>
+              </Card>
+            ) : null}
+          </View>
+        }
         renderItem={({ item }) => (
-          <Card>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ gap: 6 }}>
+          <Card style={[styles.userCard, styles.shadowSm]}>
+            <View style={styles.userRow}>
+              <View style={styles.actionsCol}>
                 {item.role === 'customer' ? (
                   <Pressable
                     onPressIn={(e) => setPointsAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     onPress={() => fetchServicePoints(item)}
-                    style={{
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      borderRadius: 10,
-                      alignSelf: 'flex-start',
-                    }}
+                    style={styles.actionChip}
+                    accessibilityRole="button"
+                    accessibilityLabel="נקודות שירות"
                   >
-                    <Eye size={18} color={colors.text} />
+                    <Eye size={16} color={colors.text} />
+                    <Text style={styles.actionChipText}>נקודות</Text>
                   </Pressable>
-                ) : null}
+                ) : (
+                  <View />
+                )}
+
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                   <Pressable
                     onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     hitSlop={10}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      backgroundColor: 'rgba(255,255,255,0.06)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
+                    style={styles.smallIconBtn}
                     accessibilityRole="button"
                     accessibilityLabel="עריכה"
                   >
@@ -638,18 +588,8 @@ export function UsersScreen() {
                   <Pressable
                     onPress={() => cascadeDelete(item)}
                     hitSlop={10}
-                    disabled={loading}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      backgroundColor: 'rgba(255,255,255,0.06)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: loading ? 0.6 : 1,
-                    }}
+                    disabled={mutating}
+                    style={[styles.smallIconBtn, mutating && { opacity: 0.55 }]}
                     accessibilityRole="button"
                     accessibilityLabel="מחיקה"
                   >
@@ -657,16 +597,27 @@ export function UsersScreen() {
                   </Pressable>
                 </View>
               </View>
-              <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                <Avatar size={42} uri={item.avatar_url ?? null} name={item.name} />
+
+              <View style={styles.userMain}>
+                <Avatar size={44} uri={item.avatar_url ?? null} name={item.name} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
-                  <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>
-                    {item.phone} • {item.role}
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <Text style={styles.userName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <RoleBadge role={item.role} />
+                  </View>
+                  <Text style={styles.userMeta} numberOfLines={1}>
+                    {item.phone}
                   </Text>
                   {item.role === 'customer' ? (
-                    <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6, fontWeight: '700' }}>
-                      נקודות ריח
+                    <Text style={styles.userMeta} numberOfLines={1}>
+                      {formatIls(item.price ?? 0, item.price == null)}
+                    </Text>
+                  ) : null}
+                  {!!item.address?.trim() ? (
+                    <Text style={[styles.userMeta, { marginTop: 4 }]} numberOfLines={1}>
+                      {item.address}
                     </Text>
                   ) : null}
                 </View>
@@ -674,7 +625,27 @@ export function UsersScreen() {
             </View>
           </Card>
         )}
-        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין משתמשים.</Text>}
+        ListEmptyComponent={
+          !refreshing ? (
+            <Card style={[styles.emptyCard, styles.shadowSm]}>
+              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>לא מצאנו משתמשים</Text>
+              <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6 }}>
+                נסה לשנות פילטר/חיפוש או לרענן את הרשימה.
+              </Text>
+              <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
+                <Button title="רענון" fullWidth={false} style={{ flex: 1 }} onPress={fetchUsers} disabled={refreshing} />
+                <Button
+                  title="משתמש חדש"
+                  variant="secondary"
+                  fullWidth={false}
+                  style={{ flex: 1 }}
+                  onPress={() => openCreate(null)}
+                  disabled={busy}
+                />
+              </View>
+            </Card>
+          ) : null
+        }
       />
 
       <AnchoredWindow visible={editOpen} anchor={editAnchor} onClose={closeEdit} showCloseEye={false} durationMs={EDIT_WINDOW_DURATION_MS}>
@@ -928,6 +899,41 @@ export function UsersScreen() {
   );
 }
 
+function formatIls(amount: number, missing?: boolean) {
+  if (missing) return 'מחיר: —';
+  const safe = Number.isFinite(amount) ? amount : 0;
+  try {
+    const fmt = new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(safe);
+    return `מחיר: ${fmt}`;
+  } catch {
+    return `מחיר: ₪${Math.round(safe).toLocaleString('he-IL')}`;
+  }
+}
+
+function RoleBadge({ role }: { role: UserRole }) {
+  const cfg = roleBadge(role);
+  return (
+    <View style={[styles.roleBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+      <Text style={[styles.roleBadgeText, { color: cfg.fg }]}>{role}</Text>
+    </View>
+  );
+}
+
+function roleBadge(role: UserRole) {
+  if (role === 'admin') return { bg: '#EEF2FF', border: '#C7D2FE', fg: '#3730A3' };
+  if (role === 'worker') return { bg: '#ECFDF5', border: '#A7F3D0', fg: '#047857' };
+  return { bg: '#F1F5F9', border: '#CBD5E1', fg: '#0F172A' };
+}
+
+function StatPill({ label, value, bg, border, fg }: { label: string; value: number; bg: string; border: string; fg: string }) {
+  return (
+    <View style={[styles.statPill, { backgroundColor: bg, borderColor: border }]}>
+      <Text style={[styles.statValue, { color: fg }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
 function PointEditor({
   devices,
   scents,
@@ -988,4 +994,157 @@ function PointEditor({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 },
+  list: { flex: 1 },
+  listContent: { gap: 10, paddingBottom: 24 },
+
+  shadowSm: {
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  shadowMd: {
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+
+  headerCard: { borderRadius: 22, padding: 14, borderColor: 'rgba(60,60,67,0.12)' },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  headerActionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  title: { color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' },
+  subtitle: { color: colors.muted, marginTop: 3, textAlign: 'right', fontWeight: '800' },
+
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.elevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  primaryIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+  },
+
+  statsRow: { marginTop: 12, flexDirection: 'row', gap: 10 },
+  statPill: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statValue: { fontWeight: '900', fontSize: 20 },
+  statLabel: { fontWeight: '900' },
+
+  searchWrap: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(118,118,128,0.12)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(60,60,67,0.10)',
+  },
+  searchInput: { flex: 1, color: colors.text, fontSize: 16, textAlign: 'right', paddingVertical: 0 },
+  clearBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(60,60,67,0.18)',
+  },
+
+  filterLabel: { color: colors.muted, fontWeight: '800', textAlign: 'right', marginBottom: 6 },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(118,118,128,0.12)',
+    borderRadius: 14,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(60,60,67,0.10)',
+  },
+  segmentItem: { flex: 1, borderRadius: 12, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
+  segmentItemActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  segmentText: { color: 'rgba(60,60,67,0.78)', fontWeight: '900' },
+  segmentTextActive: { color: colors.text },
+
+  loadingCard: { borderRadius: 20 },
+  emptyCard: { borderRadius: 20, marginTop: 8 },
+
+  userCard: { borderRadius: 20 },
+  userRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  userMain: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  userName: { color: colors.text, fontWeight: '900', textAlign: 'right', flexShrink: 1 },
+  userMeta: { color: colors.muted, marginTop: 4, textAlign: 'right' },
+
+  actionsCol: { alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.bg,
+    alignSelf: 'flex-start',
+  },
+  actionChipText: { color: colors.text, fontWeight: '900' },
+  smallIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  roleBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  roleBadgeText: { fontWeight: '900', fontSize: 12 },
+});
 

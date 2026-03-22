@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, ChevronRight, Clock, Trash2, User, Users } from 'lucide-react-native';
+import { ChevronLeft, Clock, Trash2, User, Users } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Avatar } from '../../components/ui/Avatar';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
 import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import type { WorkTemplatesStackParamList } from '../../navigation/workTemplatesTypes';
@@ -138,59 +141,33 @@ export function WorkTemplateStationEditScreen({
   return (
     <Screen padded={false}>
       {/* ─── Header ─── */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16 }}>
-        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text, fontSize: 26, fontWeight: '900', textAlign: 'right', letterSpacing: -0.5 }}>
-              {stationTitle}
-            </Text>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 5 }}>
-              <View style={{
-                backgroundColor: 'rgba(37,99,235,0.10)',
-                borderRadius: 20,
-                paddingHorizontal: 11,
-                paddingVertical: 4,
-              }}>
-                <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 12 }}>יום {day}</Text>
-              </View>
-            </View>
+      <View style={s.headerWrap}>
+        <Text style={s.title}>{stationTitle}</Text>
+        <View style={s.headerMetaRow}>
+          <View style={s.metaPill}>
+            <Text style={s.metaPillText}>יום {day}</Text>
           </View>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={({ pressed }) => ({
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: pressed ? colors.border : colors.elevated,
-              borderWidth: 1,
-              borderColor: colors.border,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginTop: 4,
-            })}
-          >
-            <ChevronRight size={20} color={colors.text} />
-          </Pressable>
+          {station?.order ? (
+            <View style={[s.metaPill, s.metaPillNeutral]}>
+              <Text style={[s.metaPillText, s.metaPillTextNeutral]}>תחנה #{station.order}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, gap: 14 }}
+        contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
       >
+        {!station ? (
+          <Card style={s.loadingCard}>
+            <ActivityIndicator />
+            <Text style={s.loadingText}>טוען תחנה…</Text>
+          </Card>
+        ) : null}
+
         {/* ─── Pickers Card ─── */}
-        <View style={{
-          backgroundColor: colors.card,
-          borderRadius: 20,
-          borderWidth: 1.5,
-          borderColor: '#D1D5DB',
-          overflow: 'hidden',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.10,
-          shadowRadius: 8,
-          elevation: 4,
-        }}>
+        <Card style={s.cardNoPad}>
           {/* Customer picker */}
           <Pressable
             onPress={() =>
@@ -203,53 +180,28 @@ export function WorkTemplateStationEditScreen({
                 currentId: customerId,
               })
             }
-            style={({ pressed }) => ({
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              gap: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              backgroundColor: pressed ? 'rgba(0,0,0,0.03)' : 'transparent',
-            })}
+            style={({ pressed }) => [s.pickerRow, pressed && s.pickerRowPressed]}
           >
-            <View style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: 'rgba(37,99,235,0.10)',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              {customer ? (
-                <Avatar size={38} uri={customer.avatar_url ?? null} name={customer.name} />
-              ) : (
-                <User size={18} color={colors.primary} />
-              )}
-            </View>
+            {customer ? (
+              <Avatar size={38} uri={customer.avatar_url ?? null} name={customer.name} />
+            ) : (
+              <View style={s.pickerIconCircle}>
+                <User size={18} color={colors.muted} />
+              </View>
+            )}
 
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'right' }}>לקוח</Text>
-              <Text style={{
-                color: customer ? colors.text : colors.muted,
-                fontWeight: customer ? '700' : '500',
-                textAlign: 'right',
-                marginTop: 2,
-                fontSize: 15,
-              }}>
-                {customer?.name ?? 'בחר לקוח...'}
+              <Text style={s.pickerLabel}>לקוח</Text>
+              <Text style={[s.pickerValue, !customer && s.pickerValuePlaceholder]} numberOfLines={1}>
+                {customer?.name ?? 'בחר לקוח…'}
               </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {customer && (
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
-              )}
-              <ChevronLeft size={18} color={colors.muted} />
-            </View>
+            <ChevronLeft size={18} color={colors.muted} />
           </Pressable>
 
           {/* Divider */}
-          <View style={{ height: 1, backgroundColor: '#E5E7EB', marginHorizontal: 16 }} />
+          <View style={s.inlineDivider} />
 
           {/* Worker picker */}
           <Pressable
@@ -263,164 +215,243 @@ export function WorkTemplateStationEditScreen({
                 currentId: workerId,
               })
             }
-            style={({ pressed }) => ({
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              gap: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              backgroundColor: pressed ? 'rgba(0,0,0,0.03)' : 'transparent',
-            })}
+            style={({ pressed }) => [s.pickerRow, pressed && s.pickerRowPressed]}
           >
-            <View style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: 'rgba(139,92,246,0.10)',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              {worker ? (
-                <Avatar size={38} uri={worker.avatar_url ?? null} name={worker.name} />
-              ) : (
-                <Users size={18} color="#8B5CF6" />
-              )}
-            </View>
+            {worker ? (
+              <Avatar size={38} uri={worker.avatar_url ?? null} name={worker.name} />
+            ) : (
+              <View style={s.pickerIconCircle}>
+                <Users size={18} color={colors.muted} />
+              </View>
+            )}
 
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'right' }}>עובד</Text>
-              <Text style={{
-                color: worker ? colors.text : colors.muted,
-                fontWeight: worker ? '700' : '500',
-                textAlign: 'right',
-                marginTop: 2,
-                fontSize: 15,
-              }}>
-                {worker?.name ?? 'בחר עובד...'}
+              <Text style={s.pickerLabel}>עובד</Text>
+              <Text style={[s.pickerValue, !worker && s.pickerValuePlaceholder]} numberOfLines={1}>
+                {worker?.name ?? 'בחר עובד…'}
               </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {worker && (
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#8B5CF6' }} />
-              )}
-              <ChevronLeft size={18} color={colors.muted} />
-            </View>
+            <ChevronLeft size={18} color={colors.muted} />
           </Pressable>
-        </View>
+        </Card>
 
         {/* ─── Time Card ─── */}
-        <View style={{
-          backgroundColor: colors.card,
-          borderRadius: 20,
-          borderWidth: 1.5,
-          borderColor: '#D1D5DB',
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.10,
-          shadowRadius: 8,
-          elevation: 4,
-        }}>
-          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-            <View style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: 'rgba(245,158,11,0.12)',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <Clock size={18} color="#F59E0B" />
+        <Card>
+          <View style={s.timeRow}>
+            <View style={s.timeIconCircle}>
+              <Clock size={18} color={colors.muted} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>
-                שעה מתוזמנת
-              </Text>
-              <TextInput
+              <Input
+                label="שעה מתוזמנת"
                 value={scheduledTime}
-                onChangeText={(v) => { setScheduledTime(v); setError(''); }}
-                placeholder="09:00"
-                placeholderTextColor={colors.muted}
-                inputMode="numeric"
-                style={{
-                  backgroundColor: colors.bg,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                  color: colors.text,
-                  textAlign: 'right',
-                  fontSize: 16,
-                  fontWeight: '700',
+                onChangeText={(v) => {
+                  setScheduledTime(v);
+                  setError('');
                 }}
+                placeholder="09:00"
+                inputMode="numeric"
+                style={s.timeInput}
               />
+              <Text style={s.helperText}>פורמט: HH:mm (למשל 09:00)</Text>
             </View>
           </View>
-        </View>
+        </Card>
 
         {/* ─── Error ─── */}
         {!!error && (
-          <View style={{
-            backgroundColor: 'rgba(220,38,38,0.08)',
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: 'rgba(220,38,38,0.20)',
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-          }}>
-            <Text style={{ color: colors.danger, fontSize: 13, fontWeight: '700', textAlign: 'right' }}>{error}</Text>
+          <View style={s.errorBox}>
+            <Text style={s.errorText}>{error}</Text>
           </View>
         )}
 
-        {/* ─── Save Button ─── */}
-        <Pressable
-          onPress={save}
-          disabled={saving || deleting}
-          style={({ pressed }) => ({
-            backgroundColor: saving ? '#94A3B8' : colors.primary,
-            borderRadius: 18,
-            paddingVertical: 16,
-            alignItems: 'center',
-            opacity: pressed ? 0.9 : 1,
-            transform: [{ scale: pressed ? 0.99 : 1 }],
-            shadowColor: colors.primary,
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.3,
-            shadowRadius: 12,
-            elevation: 4,
-          })}
-        >
-          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>
-            {saving ? 'שומר...' : 'שמור שינויים'}
-          </Text>
-        </Pressable>
+        {/* ─── Actions ─── */}
+        <View style={s.actionsWrap}>
+          <Button
+            title={saving ? 'שומר…' : 'שמור שינויים'}
+            onPress={save}
+            disabled={saving || deleting}
+          />
 
-        {/* ─── Delete Button ─── */}
-        <Pressable
-          onPress={confirmDelete}
-          disabled={saving || deleting}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            paddingVertical: 14,
-            borderRadius: 18,
-            borderWidth: 1,
-            borderColor: 'rgba(220,38,38,0.25)',
-            backgroundColor: pressed ? 'rgba(220,38,38,0.06)' : 'rgba(220,38,38,0.04)',
-            opacity: (saving || deleting) ? 0.5 : 1,
-          })}
-        >
-          <Trash2 size={17} color={colors.danger} />
-          <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 15 }}>
-            {deleting ? 'מוחק...' : 'מחק תחנה'}
-          </Text>
-        </Pressable>
+          <Pressable
+            onPress={confirmDelete}
+            disabled={saving || deleting}
+            style={({ pressed }) => ({ opacity: saving || deleting ? 0.55 : pressed ? 0.88 : 1 })}
+          >
+            <View style={s.deleteOutlineBtn}>
+              <Trash2 size={17} color={colors.danger} />
+              <Text style={s.deleteOutlineText}>{deleting ? 'מוחק…' : 'מחק תחנה'}</Text>
+            </View>
+          </Pressable>
+        </View>
       </ScrollView>
     </Screen>
   );
 }
+
+const s = StyleSheet.create({
+  headerWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+    backgroundColor: colors.elevated,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: '900',
+    textAlign: 'right',
+    letterSpacing: -0.5,
+  },
+  headerMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  metaPill: {
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  metaPillNeutral: {
+    backgroundColor: '#0F172A08',
+    borderWidth: 1,
+    borderColor: '#0F172A12',
+  },
+  metaPillText: {
+    color: colors.primary,
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  metaPillTextNeutral: {
+    color: colors.text,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    gap: 14,
+  },
+  loadingCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    color: colors.muted,
+    fontWeight: '800',
+  },
+  cardNoPad: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  pickerRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  pickerRowPressed: {
+    backgroundColor: '#0F172A06',
+  },
+  pickerIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#0F172A08',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0F172A10',
+  },
+  pickerLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  pickerValue: {
+    color: colors.text,
+    fontWeight: '800',
+    textAlign: 'right',
+    marginTop: 2,
+    fontSize: 15,
+  },
+  pickerValuePlaceholder: {
+    color: colors.muted,
+    fontWeight: '700',
+  },
+  inlineDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: 16,
+  },
+  timeRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  timeIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#0F172A08',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0F172A10',
+    marginTop: 18,
+  },
+  timeInput: {
+    backgroundColor: colors.bg,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  helperText: {
+    marginTop: 8,
+    color: colors.muted,
+    fontWeight: '700',
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  actionsWrap: {
+    gap: 10,
+    paddingTop: 4,
+  },
+  deleteOutlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    backgroundColor: '#FFFFFF',
+  },
+  deleteOutlineText: {
+    color: colors.danger,
+    fontWeight: '900',
+    fontSize: 15,
+  },
+});

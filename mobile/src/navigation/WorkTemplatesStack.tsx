@@ -1,5 +1,7 @@
 import React from 'react';
+import { Pressable } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Menu } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { WorkTemplatesScreen } from '../screens/admin/WorkTemplatesScreen';
 import { WorkTemplateStationsScreen } from '../screens/admin/WorkTemplateStationsScreen';
@@ -20,7 +22,28 @@ export function WorkTemplatesStack() {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Stack.Screen name="WorkTemplatesHome" component={WorkTemplatesScreen} options={{ title: 'תבניות עבודה' }} />
+      <Stack.Screen
+        name="WorkTemplatesHome"
+        component={WorkTemplatesScreen}
+        options={({ navigation }) => ({
+          title: 'תבניות עבודה',
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="פתח תפריט"
+              hitSlop={12}
+              onPress={() => (navigation.getParent() as any)?.openDrawer?.()}
+              style={({ pressed }) => ({
+                padding: 6,
+                borderRadius: 12,
+                backgroundColor: pressed ? '#0F172A06' : 'transparent',
+              })}
+            >
+              <Menu size={22} color={colors.text} />
+            </Pressable>
+          ),
+        })}
+      />
       <Stack.Screen
         name="WorkTemplateStations"
         component={WorkTemplateStationsScreen}

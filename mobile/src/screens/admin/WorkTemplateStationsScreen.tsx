@@ -235,18 +235,22 @@ export function WorkTemplateStationsScreen({
                 <View style={s.cardFooter}>
                   <Pressable
                     onPress={() => deleteStation(item.id, item.order)}
-                    style={({ pressed }) => [s.actionBtn, s.deleteBtn, pressed && s.deleteBtnPressed]}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
                   >
-                    <Trash2 size={15} color={colors.danger} />
-                    <Text style={s.deleteBtnText}>מחק</Text>
+                    <View style={s.deleteBtn}>
+                      <Trash2 size={15} color={colors.danger} />
+                      <Text style={s.deleteBtnText}>מחק</Text>
+                    </View>
                   </Pressable>
 
                   <Pressable
                     onPress={() => navigation.navigate('WorkTemplateStationEdit', { templateId, day, stationId: item.id })}
-                    style={({ pressed }) => [s.actionBtn, s.editBtn, pressed && s.editBtnPressed]}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
                   >
-                    <Pencil size={15} color={colors.primary} />
-                    <Text style={s.editBtnText}>עריכה</Text>
+                    <View style={s.editBtn}>
+                      <Pencil size={15} color={colors.primary} />
+                      <Text style={s.editBtnText}>עריכה</Text>
+                    </View>
                   </Pressable>
                 </View>
               </View>
@@ -501,21 +505,16 @@ const s = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
   },
-  actionBtn: {
+  editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-  },
-  editBtn: {
-    backgroundColor: 'rgba(37,99,235,0.06)',
-    borderColor: 'rgba(37,99,235,0.18)',
-  },
-  editBtnPressed: {
-    backgroundColor: 'rgba(37,99,235,0.14)',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
   },
   editBtnText: {
     color: colors.primary,
@@ -523,11 +522,15 @@ const s = StyleSheet.create({
     fontSize: 13,
   },
   deleteBtn: {
-    backgroundColor: 'rgba(220,38,38,0.05)',
-    borderColor: 'rgba(220,38,38,0.18)',
-  },
-  deleteBtnPressed: {
-    backgroundColor: 'rgba(220,38,38,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
   },
   deleteBtnText: {
     color: colors.danger,
