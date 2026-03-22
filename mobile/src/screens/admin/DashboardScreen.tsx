@@ -206,6 +206,11 @@ export function DashboardScreen() {
     return stats.monthByWorker[selectedWorkerId] ?? { total: 0, pending: 0, completed: 0 };
   }, [selectedWorkerId, stats.monthByWorker]);
 
+  const selectedWorkerCompletionPct = useMemo(() => {
+    if (!selectedWorkerMonth.total) return 0;
+    return Math.round((selectedWorkerMonth.completed / selectedWorkerMonth.total) * 100);
+  }, [selectedWorkerMonth.completed, selectedWorkerMonth.total]);
+
   return (
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 26 }}>
@@ -560,20 +565,31 @@ export function DashboardScreen() {
           style={{
             flex: 1,
             backgroundColor: 'rgba(15,23,42,0.45)',
-            padding: 16,
-            justifyContent: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 18,
+            justifyContent: 'flex-end',
           }}
         >
           <Pressable
             onPress={() => {}}
             style={{
               backgroundColor: colors.elevated,
-              borderRadius: 22,
+              borderRadius: 26,
               borderWidth: 1,
               borderColor: colors.border,
-              padding: 14,
+              padding: 16,
+              shadowColor: '#000',
+              shadowOpacity: 0.12,
+              shadowRadius: 22,
+              shadowOffset: { width: 0, height: 12 },
+              elevation: 6,
+              maxHeight: '78%',
             }}
           >
+            <View style={{ alignItems: 'center', paddingBottom: 10 }}>
+              <View style={{ width: 44, height: 5, borderRadius: 999, backgroundColor: colors.border }} />
+            </View>
+
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <Pressable
                 onPress={() => {
@@ -581,49 +597,120 @@ export function DashboardScreen() {
                   setSelectedWorkerId(null);
                 }}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 8,
-                  borderRadius: 12,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 14,
                   backgroundColor: colors.bg,
                   borderWidth: 1,
                   borderColor: colors.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: colors.text, fontWeight: '900' }}>סגור</Text>
+                <Text style={{ color: colors.text, fontWeight: '900', fontSize: 18 }}>×</Text>
               </Pressable>
 
               <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right' }}>סיכום חודשי</Text>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  <View
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: '#C7D2FE',
+                      backgroundColor: '#EEF2FF',
+                    }}
+                  >
+                    <Text style={{ color: '#3730A3', fontWeight: '900' }}>{format(new Date(), 'M.yyyy')}</Text>
+                  </View>
+                  <Text style={{ color: colors.muted, fontWeight: '900' }}>סיכום חודשי</Text>
+                </View>
+
+                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginTop: 6, fontSize: 18 }} numberOfLines={1}>
                   {selectedWorker?.name ?? 'עובד'}
                 </Text>
               </View>
 
-              <Avatar size={44} uri={selectedWorker?.avatar_url ?? null} name={selectedWorker?.name ?? ''} />
+              <Avatar size={52} uri={selectedWorker?.avatar_url ?? null} name={selectedWorker?.name ?? ''} />
             </View>
 
-            <View style={{ marginTop: 12, gap: 10 }}>
+            <View style={{ marginTop: 14 }}>
               <View
                 style={{
-                  backgroundColor: colors.bg,
-                  borderRadius: 18,
+                  borderRadius: 22,
                   borderWidth: 1,
                   borderColor: colors.border,
-                  paddingVertical: 12,
-                  paddingHorizontal: 12,
+                  backgroundColor: colors.bg,
+                  paddingVertical: 14,
+                  paddingHorizontal: 14,
                 }}
               >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: colors.muted, fontWeight: '800' }}>הושלמו החודש</Text>
-                  <Text style={{ color: colors.success, fontWeight: '900', fontSize: 18 }}>{selectedWorkerMonth.completed}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <Text style={{ color: colors.muted, fontWeight: '900' }}>הושלמו החודש</Text>
+                  <Text style={{ color: colors.success, fontWeight: '900', fontSize: 28 }}>{selectedWorkerMonth.completed}</Text>
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
-                  <Text style={{ color: colors.muted, fontWeight: '800' }}>פתוחות</Text>
-                  <Text style={{ color: colors.text, fontWeight: '900' }}>{selectedWorkerMonth.pending}</Text>
+
+                <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right', marginTop: 6 }}>
+                  {selectedWorkerMonth.total ? `${selectedWorkerCompletionPct}% מתוך ${selectedWorkerMonth.total}` : 'אין משימות החודש'}
+                </Text>
+
+                <View
+                  style={{
+                    marginTop: 10,
+                    height: 12,
+                    borderRadius: 999,
+                    backgroundColor: '#E2E8F0',
+                    overflow: 'hidden',
+                    borderWidth: 1,
+                    borderColor: '#CBD5E1',
+                  }}
+                >
+                  <View
+                    style={{
+                      height: '100%',
+                      width: `${selectedWorkerCompletionPct}%`,
+                      backgroundColor: selectedWorkerCompletionPct === 100 ? colors.success : '#3B82F6',
+                    }}
+                  />
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
-                  <Text style={{ color: colors.muted, fontWeight: '800' }}>סה״כ</Text>
-                  <Text style={{ color: colors.text, fontWeight: '900' }}>{selectedWorkerMonth.total}</Text>
+
+                <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                  <View
+                    style={{
+                      flexBasis: '48%',
+                      flexGrow: 1,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.elevated,
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                    }}
+                  >
+                    <Text style={{ color: colors.muted, fontWeight: '900', textAlign: 'right' }}>פתוחות</Text>
+                    <Text style={{ color: colors.text, fontWeight: '900', fontSize: 20, textAlign: 'right', marginTop: 6 }}>
+                      {selectedWorkerMonth.pending}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      flexBasis: '48%',
+                      flexGrow: 1,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.elevated,
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                    }}
+                  >
+                    <Text style={{ color: colors.muted, fontWeight: '900', textAlign: 'right' }}>סה״כ</Text>
+                    <Text style={{ color: colors.text, fontWeight: '900', fontSize: 20, textAlign: 'right', marginTop: 6 }}>
+                      {selectedWorkerMonth.total}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>

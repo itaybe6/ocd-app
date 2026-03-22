@@ -541,40 +541,38 @@ export function StoreManagementScreen() {
       <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
 
         {/* ─── Push launch hero card ─── */}
-        <Pressable onPress={openWizard} style={({ pressed }) => [s.heroCard, pressed && s.heroCardPressed]}>
-          {/* Accent strip */}
-          <View style={s.heroAccentStrip} />
+        <Pressable onPress={openWizard} style={({ pressed }) => [s.pushLauncher, pressed && s.pushLauncherPressed]}>
+          {/* Decorative glow */}
+          <View style={s.pushLauncherGlowA} />
+          <View style={s.pushLauncherGlowB} />
 
-          {/* Top row */}
-          <View style={s.heroTopRow}>
-            <View style={s.heroIconWrap}>
-              <Text style={s.heroIconText}>📣</Text>
+          <View style={s.pushLauncherRow}>
+            <View style={s.pushLauncherIconWrap}>
+              <Text style={s.pushLauncherIcon}>📣</Text>
             </View>
-            <View style={s.heroBadge}>
-              <Text style={s.heroBadgeText}>PUSH</Text>
-            </View>
-          </View>
 
-          <Text style={s.heroTitle}>שיגור פושים</Text>
-          <Text style={s.heroSub}>שגר התראה ישירות לכל המשתמשים</Text>
-
-          {/* Step pills */}
-          <View style={s.heroSteps}>
-            {['כותרת', 'סוג', 'מוצרים', 'תוכן', 'תזמון'].map((step, i) => (
-              <View key={step} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
-                <View style={s.heroStep}>
-                  <Text style={s.heroStepNum}>{i + 1}</Text>
-                  <Text style={s.heroStepLabel}>{step}</Text>
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Text style={s.pushLauncherTitle}>שיגור פושים</Text>
+                <View style={s.pushLauncherTag}>
+                  <Text style={s.pushLauncherTagText}>Wizard</Text>
                 </View>
-                {i < 4 ? <Text style={s.heroStepArrow}>›</Text> : null}
               </View>
-            ))}
-          </View>
+              <Text style={s.pushLauncherSub}>פוש כללי או מוצר • עכשיו או מתוזמן</Text>
 
-          {/* CTA */}
-          <View style={s.heroCta}>
-            <Text style={s.heroCtaText}>התחל שיגור</Text>
-            <Text style={s.heroCtaArrow}>←</Text>
+              <View style={s.pushLauncherMetaRow}>
+                <View style={s.metaPill}>
+                  <Text style={s.metaPillText}>5 שלבים</Text>
+                </View>
+                <View style={s.metaPillMuted}>
+                  <Text style={s.metaPillMutedText}>כותרת • סוג • מוצרים • תוכן • תזמון</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={s.pushLauncherChevronWrap}>
+              <Text style={s.pushLauncherChevron}>‹</Text>
+            </View>
           </View>
         </Pressable>
 
@@ -877,7 +875,7 @@ export function StoreManagementScreen() {
                         <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 8, borderWidth: 1, borderColor: colors.border }}>
                           <DateTimePicker
                             value={scheduledAt} mode={iosPickerMode} display="inline"
-                            themeVariant="light" is24Hour
+                            themeVariant="light"
                             onChange={(_e, d) => {
                               if (!d) return;
                               const n = new Date(scheduledAt);
@@ -963,107 +961,90 @@ const s = StyleSheet.create({
     fontSize: 15,
   },
 
-  /* ── Hero card ── */
-  heroCard: {
-    borderRadius: 22,
-    backgroundColor: '#101828',
-    padding: 20,
-    paddingBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+  /* ── Push launcher (simple beautiful button card) ── */
+  pushLauncher: {
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+    overflow: 'hidden',
   },
-  heroCardPressed: { transform: [{ scale: 0.985 }], opacity: 0.9 },
-
-  heroAccentStrip: {
+  pushLauncherPressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
+  pushLauncherGlowA: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    backgroundColor: '#3B82F6',
+    width: 180,
+    height: 180,
+    borderRadius: 999,
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    top: -90,
+    right: -80,
   },
-
-  heroTopRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    marginTop: 6,
+  pushLauncherGlowB: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 999,
+    backgroundColor: 'rgba(99,102,241,0.08)',
+    bottom: -70,
+    left: -70,
   },
-  heroBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: 'rgba(59,130,246,0.20)',
+  pushLauncherRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  pushLauncherIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: 'rgba(37,99,235,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.35)',
-  },
-  heroBadgeText: { color: '#93C5FD', fontWeight: '900', fontSize: 10, letterSpacing: 1.5 },
-  heroIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(59,130,246,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.25)',
+    borderColor: 'rgba(37,99,235,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroIconText: { fontSize: 20 },
-
-  heroTitle: {
-    color: '#F1F5F9',
-    fontWeight: '900',
-    fontSize: 22,
-    textAlign: 'right',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  heroSub: {
-    color: '#64748B',
-    fontWeight: '700',
-    fontSize: 13,
-    textAlign: 'right',
-    marginBottom: 18,
-    lineHeight: 18,
-  },
-
-  heroSteps: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 18,
-  },
-  heroStep: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 5,
+  pushLauncherIcon: { fontSize: 22 },
+  pushLauncherTitle: { color: '#0F172A', fontSize: 16, fontWeight: '900', textAlign: 'right' },
+  pushLauncherSub: { color: '#475569', fontSize: 13, fontWeight: '700', textAlign: 'right', marginTop: 4 },
+  pushLauncherTag: {
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: 'rgba(34,197,94,0.18)',
   },
-  heroStepNum: { color: '#60A5FA', fontWeight: '900', fontSize: 10 },
-  heroStepLabel: { color: '#94A3B8', fontWeight: '800', fontSize: 11 },
-  heroStepArrow: { color: '#334155', fontSize: 13, fontWeight: '600' },
-
-  heroCta: {
-    flexDirection: 'row-reverse',
+  pushLauncherTagText: { color: '#166534', fontWeight: '900', fontSize: 11 },
+  pushLauncherMetaRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  metaPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.18)',
+  },
+  metaPillText: { color: '#1D4ED8', fontWeight: '900', fontSize: 12 },
+  metaPillMuted: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(100,116,139,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(100,116,139,0.14)',
+  },
+  metaPillMutedText: { color: '#64748B', fontWeight: '800', fontSize: 11 },
+  pushLauncherChevronWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(15,23,42,0.05)',
     alignItems: 'center',
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.07)',
-    paddingTop: 14,
+    justifyContent: 'center',
   },
-  heroCtaText: { color: '#E2E8F0', fontWeight: '900', fontSize: 14 },
-  heroCtaArrow: { color: '#3B82F6', fontSize: 18, fontWeight: '900' },
+  pushLauncherChevron: { color: '#64748B', fontSize: 22, fontWeight: '600' },
 
   statusRow: {
     flexDirection: 'row-reverse',

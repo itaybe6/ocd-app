@@ -913,9 +913,9 @@ export function JobsScreen() {
                 {!!item.customer_id && (
                   <Text
                     style={{
-                      color: ui.muted,
-                      fontWeight: '500',
-                      fontSize: 13,
+                      color: ui.text,
+                      fontWeight: '600',
+                      fontSize: 15,
                       textAlign: 'right',
                     }}
                     numberOfLines={1}

@@ -191,7 +191,7 @@ export function JobCard({
             style={{
               color: colors.text,
               fontWeight: '800',
-              fontSize: 15,
+              fontSize: 16,
               textAlign: 'right',
               flex: 1,
               letterSpacing: -0.3,
