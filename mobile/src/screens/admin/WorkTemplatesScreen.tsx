@@ -37,17 +37,18 @@ export function WorkTemplatesScreen() {
     scheduledTime: '09:00',
   });
   const [editError, setEditError] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<{ customerId: string | null; workerId: string | null; scheduledTime: string }>({
+    customerId: null,
+    workerId: null,
+    scheduledTime: '09:00',
+  });
+  const [createError, setCreateError] = useState('');
   const [pickerKind, setPickerKind] = useState<DropdownKind | null>(null);
   const [pickerQuery, setPickerQuery] = useState('');
+  const [pickerTarget, setPickerTarget] = useState<'edit' | 'create'>('edit');
 
-  const customerOptions = useMemo(
-    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
-    [users]
-  );
-  const workerOptions = useMemo(
-    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })),
-    [users]
-  );
+  const timeRegex = useMemo(() => /^([01]\d|2[0-3]):([0-5]\d)$/, []);
 
   const ensureTemplates = async () => {
     const { templates: raw } = await ensureWorkTemplates28();
@@ -92,6 +93,8 @@ export function WorkTemplatesScreen() {
     setPickerKind(null);
     setPickerQuery('');
     setEditError('');
+    setCreateOpen(false);
+    setCreateError('');
   };
 
   const refresh = useCallback(async () => {
@@ -179,21 +182,60 @@ export function WorkTemplatesScreen() {
     }
   };
 
-  const addStation = async () => {
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setEditingStationId(null);
+    setCreateOpen(false);
+    setPickerKind(null);
+    setPickerQuery('');
+    setEditError('');
+    setCreateError('');
+  };
+
+  const openCreateStation = () => {
     if (!selectedTemplateId) return;
+    setCreateOpen(true);
+    setCreateForm({ customerId: null, workerId: null, scheduledTime: '09:00' });
+    setCreateError('');
+    setEditingStationId(null);
+    setEditError('');
+    setPickerKind(null);
+    setPickerQuery('');
+  };
+
+  const saveCreateStation = async () => {
+    if (!selectedTemplateId) return;
+    const time = createForm.scheduledTime.trim();
+    if (!createForm.customerId) {
+      setCreateError('בחר לקוח לפני שמוסיפים תחנה');
+      return;
+    }
+    if (!createForm.workerId) {
+      setCreateError('בחר עובד לפני שמוסיפים תחנה');
+      return;
+    }
+    if (!timeRegex.test(time)) {
+      setCreateError('יש להזין שעה בפורמט HH:mm (למשל 09:00)');
+      return;
+    }
+
     try {
       setIsLoading(true);
       const nextOrder = (stations[stations.length - 1]?.order ?? 0) + 1;
       const { error } = await supabase.from('template_stations').insert({
         template_id: selectedTemplateId,
         order: nextOrder,
-        scheduled_time: '09:00',
-        customer_id: null,
-        worker_id: null,
+        scheduled_time: time,
+        customer_id: createForm.customerId,
+        worker_id: createForm.workerId,
       });
       if (error) throw error;
       await fetchStations(selectedTemplateId);
       setTemplateCounts((prev) => ({ ...prev, [selectedTemplateId]: (prev[selectedTemplateId] ?? 0) + 1 }));
+      setCreateOpen(false);
+      setPickerKind(null);
+      setPickerQuery('');
+      setCreateError('');
       Toast.show({ type: 'success', text1: 'נוספה תחנה' });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'הוספה נכשלה', text2: e?.message ?? 'Unknown error' });
@@ -250,7 +292,7 @@ export function WorkTemplatesScreen() {
   const saveEditingStation = async () => {
     if (!editingStation) return;
     const value = editForm.scheduledTime.trim();
-    const isValid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+    const isValid = timeRegex.test(value);
     if (!isValid) {
       setEditError('יש להזין שעה בפורמט HH:mm (למשל 09:00)');
       return;
@@ -330,13 +372,7 @@ export function WorkTemplatesScreen() {
 
       <ModalDialog
         visible={detailOpen}
-        onClose={() => {
-          setDetailOpen(false);
-          setEditingStationId(null);
-          setPickerKind(null);
-          setPickerQuery('');
-          setEditError('');
-        }}
+        onClose={closeDetail}
         containerStyle={{ height: '88%' }}
       >
         <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -346,13 +382,113 @@ export function WorkTemplatesScreen() {
             </Text>
             <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>הקצה לקוח+עובד לכל תחנה</Text>
           </View>
-          <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setDetailOpen(false)} />
+          <Button title="סגור" variant="secondary" fullWidth={false} onPress={closeDetail} />
         </View>
 
         <View style={{ marginTop: 12, gap: 10 }}>
           <Input label="חיפוש לפי לקוח או עובד" value={searchQuery} onChangeText={setSearchQuery} placeholder="חפש..." />
-          <Button title="הוסף תחנה" variant="primary" onPress={addStation} />
+          <Button title={createOpen ? 'הוספה פתוחה' : 'הוסף תחנה'} variant={createOpen ? 'secondary' : 'primary'} onPress={openCreateStation} />
         </View>
+
+        {!!createOpen && (
+          <View style={{ marginTop: 10 }}>
+            <Card>
+              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900', textAlign: 'right' }}>הוספת תחנה</Text>
+                <Pressable
+                  accessibilityLabel="סגור הוספה"
+                  onPress={() => {
+                    setCreateOpen(false);
+                    setPickerKind(null);
+                    setPickerQuery('');
+                    setCreateError('');
+                  }}
+                  style={({ pressed }) => ({
+                    width: 38,
+                    height: 38,
+                    borderRadius: 19,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: pressed ? 'rgba(100,116,139,0.18)' : 'rgba(100,116,139,0.10)',
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  })}
+                >
+                  <X size={18} color={colors.text} />
+                </Pressable>
+              </View>
+
+              <View style={{ marginTop: 12, gap: 10 }}>
+                <Pressable
+                  onPress={() => {
+                    setPickerTarget('create');
+                    setPickerKind('customer');
+                    setPickerQuery('');
+                  }}
+                  style={{
+                    backgroundColor: colors.elevated,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: 14,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+                  <Text style={{ color: createForm.customerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
+                    {createForm.customerId ? userNameById.get(createForm.customerId) ?? '—' : 'בחר לקוח…'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    setPickerTarget('create');
+                    setPickerKind('worker');
+                    setPickerQuery('');
+                  }}
+                  style={{
+                    backgroundColor: colors.elevated,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: 14,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
+                  <Text style={{ color: createForm.workerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
+                    {createForm.workerId ? userNameById.get(createForm.workerId) ?? '—' : 'בחר עובד…'}
+                  </Text>
+                </Pressable>
+
+                <Input
+                  label="שעה (HH:mm)"
+                  value={createForm.scheduledTime}
+                  onChangeText={(v) => {
+                    setCreateForm((prev) => ({ ...prev, scheduledTime: v }));
+                    setCreateError('');
+                  }}
+                  placeholder="09:00"
+                  inputMode="numeric"
+                />
+
+                {!!createError && <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>{createError}</Text>}
+
+                <Button title="הוסף תחנה" variant="primary" onPress={saveCreateStation} />
+                <Button
+                  title="ביטול"
+                  variant="secondary"
+                  onPress={() => {
+                    setCreateOpen(false);
+                    setPickerKind(null);
+                    setPickerQuery('');
+                    setCreateError('');
+                  }}
+                />
+              </View>
+            </Card>
+          </View>
+        )}
 
         <View style={{ marginTop: 12, flex: 1 }}>
           <FlatList
@@ -492,6 +628,7 @@ export function WorkTemplatesScreen() {
         <View style={{ marginTop: 12, gap: 10 }}>
           <Pressable
             onPress={() => {
+              setPickerTarget('edit');
               setPickerKind('customer');
               setPickerQuery('');
             }}
@@ -512,6 +649,7 @@ export function WorkTemplatesScreen() {
 
           <Pressable
             onPress={() => {
+              setPickerTarget('edit');
               setPickerKind('worker');
               setPickerQuery('');
             }}
@@ -601,7 +739,14 @@ export function WorkTemplatesScreen() {
 
           <Pressable
             onPress={() => {
-              setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: null } as any));
+              if (!pickerKind) return;
+              if (pickerTarget === 'edit') {
+                setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: null } as any));
+                setEditError('');
+              } else {
+                setCreateForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: null } as any));
+                setCreateError('');
+              }
               setPickerKind(null);
               setPickerQuery('');
             }}
@@ -624,12 +769,20 @@ export function WorkTemplatesScreen() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
               renderItem={({ item: u }) => {
-                const selectedId = pickerKind === 'worker' ? editForm.workerId : editForm.customerId;
+                const activeForm = pickerTarget === 'edit' ? editForm : createForm;
+                const selectedId = pickerKind === 'worker' ? activeForm.workerId : activeForm.customerId;
                 const selected = selectedId === u.id;
                 return (
                   <Pressable
                     onPress={() => {
-                      setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: u.id } as any));
+                      if (!pickerKind) return;
+                      if (pickerTarget === 'edit') {
+                        setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: u.id } as any));
+                        setEditError('');
+                      } else {
+                        setCreateForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: u.id } as any));
+                        setCreateError('');
+                      }
                       setPickerKind(null);
                       setPickerQuery('');
                     }}

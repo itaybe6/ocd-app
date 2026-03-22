@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, StyleSheet, Text, View, Image, Platform } from 'react-native';
+import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, Text, View, Image, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays, Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react-native';
@@ -21,7 +21,6 @@ import { supabase } from '../../lib/supabase';
 import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
-import { FabButton } from '../../components/ui/FabButton';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -883,13 +882,12 @@ export function JobsScreen() {
           <JobCard
             kind={item.kind}
             title=""
-            status={item.status}
             primaryNode={
-              <View style={{ gap: 8, paddingTop: 2 }}>
-                {/* Worker row — large avatar + bold name */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <View style={{ gap: 12 }}>
+                {/* Row 1: avatar · worker name · status badge (left) */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 11 }}>
                   <Avatar
-                    size={38}
+                    size={42}
                     uri={userAvatarMap.get(item.worker_id) ?? null}
                     name={userMap.get(item.worker_id) ?? ''}
                     style={{ backgroundColor: ui.surfaceContainerHigh }}
@@ -901,15 +899,35 @@ export function JobsScreen() {
                       fontSize: 16,
                       textAlign: 'right',
                       flex: 1,
-                      letterSpacing: -0.3,
+                      letterSpacing: -0.4,
                     }}
                     numberOfLines={1}
                   >
                     {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
                   </Text>
+                  {/* Status pill — floats to the left */}
+                  <View
+                    style={{
+                      backgroundColor: item.status === 'completed' ? 'rgba(34,197,94,0.12)' : 'rgba(249,115,22,0.11)',
+                      borderColor: item.status === 'completed' ? 'rgba(34,197,94,0.32)' : 'rgba(249,115,22,0.32)',
+                      borderWidth: 1,
+                      borderRadius: 20,
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                    }}
+                  >
+                    <Text style={{
+                      color: item.status === 'completed' ? '#15803D' : '#C2410C',
+                      fontWeight: '800',
+                      fontSize: 11,
+                      letterSpacing: 0.1,
+                    }}>
+                      {item.status === 'completed' ? 'הושלם' : 'ממתין'}
+                    </Text>
+                  </View>
                 </View>
 
-                {/* Customer name — no prefix */}
+                {/* Row 2: customer name */}
                 {!!item.customer_id && (
                   <Text
                     style={{
@@ -917,6 +935,7 @@ export function JobsScreen() {
                       fontWeight: '600',
                       fontSize: 15,
                       textAlign: 'right',
+                      letterSpacing: -0.2,
                     }}
                     numberOfLines={1}
                   >
@@ -1796,103 +1815,102 @@ export function JobsScreen() {
         </View>
       </OriginWindow>
 
-      {!!execJob ? (
-        <>
-          {execOpen ? (
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={closeExec}>
-              <View style={stylesExecBackdrop.backdrop} />
-            </Pressable>
-          ) : null}
-
-          <FabButton
-            isOpen={execOpen}
-            onPress={() => (execOpen ? closeExec() : setExecOpen(true))}
-            openedSize={Math.min(420, Math.max(320, Dimensions.get('window').width * 0.92))}
-            panelStyle={{
-              right: 12,
-              maxHeight: screenHeight * 0.84,
-              backgroundColor: colors.card,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-            fabStyle={{ backgroundColor: colors.primary }}
-            openIconName="controller-play"
+      <ModalSheet visible={execOpen} onClose={closeExec}>
+        {!!execJob && (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
           >
-            <View style={{ gap: 10 }}>
-              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
-                ביצוע משימה
-              </Text>
-              <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right' }}>
-                #{execJob.order_number ?? '—'} • סטטוס: {execJob.status}
-              </Text>
+            {/* Header */}
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ gap: 3 }}>
+                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right', letterSpacing: -0.4 }}>
+                  ביצוע משימה
+                </Text>
+                <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
+                  #{execJob.order_number ?? '—'} • {execJob.status === 'completed' ? 'הושלם' : 'ממתין'}
+                </Text>
+              </View>
+              <Pressable onPress={closeExec} hitSlop={12}>
+                {({ pressed }) => (
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 12,
+                    backgroundColor: pressed ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.06)',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Text style={{ fontSize: 16, color: colors.muted, fontWeight: '800' }}>✕</Text>
+                  </View>
+                )}
+              </Pressable>
             </View>
 
-            <FlatList
-              data={execPoints}
-              keyExtractor={(i) => i.id}
-              style={{ maxHeight: screenHeight * 0.52 }}
-              contentContainerStyle={{ gap: 10, paddingBottom: 6, paddingTop: 2 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => {
-                const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
-                const previewUri = item.localImageUri ?? currentImageUrl ?? null;
-                const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
-                return (
-                  <Card style={{ gap: 10 }}>
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }} numberOfLines={2}>
-                      {item.sp?.device_type ?? `נקודה ${item.service_point_id.slice(0, 6)}`}
-                    </Text>
-                    <Text style={{ color: colors.muted, textAlign: 'right' }}>
-                      ניחוח: {item.sp?.scent_type ?? '-'} • מילוי: {refill ?? '-'}
-                    </Text>
+            {/* Service points */}
+            {execPoints.length === 0 ? (
+              <Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות שירות.</Text>
+            ) : (
+              <View style={{ gap: 10 }}>
+                {execPoints.map((item) => {
+                  const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
+                  const previewUri = item.localImageUri ?? currentImageUrl ?? null;
+                  const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
+                  return (
+                    <View
+                      key={item.id}
+                      style={{
+                        backgroundColor: colors.card,
+                        borderRadius: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        padding: 14,
+                        gap: 10,
+                      }}
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={2}>
+                        {item.sp?.device_type ?? `נקודה ${item.service_point_id.slice(0, 6)}`}
+                      </Text>
+                      <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>
+                        ניחוח: {item.sp?.scent_type ?? '—'} • מילוי: {refill ?? '—'}
+                      </Text>
 
-                    {previewUri ? (
-                      <Image
-                        source={{ uri: previewUri }}
-                        style={{ width: '100%', height: 150, borderRadius: 14 }}
-                        resizeMode="cover"
-                      />
-                    ) : null}
-
-                    <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                      <View style={{ flex: 1 }}>
-                        <Button title="בחר תמונה" variant="secondary" onPress={() => pickExecImage(item.id)} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Button
-                          title={item.uploading ? 'מעלה…' : 'העלה'}
-                          disabled={!!item.uploading}
-                          onPress={() => uploadExecPoint(item)}
+                      {!!previewUri && (
+                        <Image
+                          source={{ uri: previewUri }}
+                          style={{ width: '100%', height: 160, borderRadius: 12 }}
+                          resizeMode="cover"
                         />
+                      )}
+
+                      <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button title="בחר תמונה" variant="secondary" onPress={() => pickExecImage(item.id)} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            title={item.uploading ? 'מעלה…' : 'העלה'}
+                            disabled={!!item.uploading}
+                            onPress={() => uploadExecPoint(item)}
+                          />
+                        </View>
                       </View>
                     </View>
-                  </Card>
-                );
-              }}
-              ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות.</Text>}
-            />
+                  );
+                })}
+              </View>
+            )}
 
-            <View style={{ gap: 10 }}>
-              <Button
-                title={execJob.status === 'completed' ? 'כבר הושלם' : 'סיים משימה'}
-                disabled={execJob.status === 'completed'}
-                onPress={completeExecJob}
-              />
-              <Button title="סגור" variant="secondary" onPress={closeExec} />
-            </View>
-          </FabButton>
-        </>
-      ) : null}
+            {/* Complete button */}
+            <Button
+              title={execJob.status === 'completed' ? 'כבר הושלם ✓' : 'סיים משימה'}
+              disabled={execJob.status === 'completed'}
+              onPress={completeExecJob}
+            />
+          </ScrollView>
+        )}
+      </ModalSheet>
     </Screen>
   );
 }
 
-const stylesExecBackdrop = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-});
 
 

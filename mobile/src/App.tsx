@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './navigation/RootNavigator';
 import { AuthProvider, useAuth } from './state/AuthContext';
 import { LoadingOverlay } from './components/LoadingOverlay';
@@ -45,11 +46,13 @@ function AppShell() {
 
 export default function App() {
   return (
-    <LoadingProvider>
-      <AuthProvider>
-        <AppShell />
-      </AuthProvider>
-    </LoadingProvider>
+    <SafeAreaProvider>
+      <LoadingProvider>
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
+      </LoadingProvider>
+    </SafeAreaProvider>
   );
 }
 

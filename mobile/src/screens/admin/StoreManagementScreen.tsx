@@ -22,6 +22,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import { endOfWeek, startOfWeek } from 'date-fns';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -426,6 +427,9 @@ export function StoreManagementScreen() {
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [customersCount, setCustomersCount] = useState<number | null>(null);
+  const [ordersThisWeek, setOrdersThisWeek] = useState<number | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
@@ -462,6 +466,40 @@ export function StoreManagementScreen() {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  const refreshStoreStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const now = new Date();
+      const start = startOfWeek(now, { weekStartsOn: 0 }).toISOString(); // Sunday
+      const end = endOfWeek(now, { weekStartsOn: 0 }).toISOString();
+
+      const [custRes, jobsRes, instRes, specRes] = await Promise.all([
+        supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'customer'),
+        supabase.from('jobs').select('id', { count: 'exact', head: true }).gte('date', start).lte('date', end),
+        supabase.from('installation_jobs').select('id', { count: 'exact', head: true }).gte('date', start).lte('date', end),
+        supabase.from('special_jobs').select('id', { count: 'exact', head: true }).gte('date', start).lte('date', end),
+      ]);
+
+      if (custRes.error) throw custRes.error;
+      if (jobsRes.error) throw jobsRes.error;
+      if (instRes.error) throw instRes.error;
+      if (specRes.error) throw specRes.error;
+
+      setCustomersCount(custRes.count ?? 0);
+      setOrdersThisWeek((jobsRes.count ?? 0) + (instRes.count ?? 0) + (specRes.count ?? 0));
+    } catch (e: any) {
+      setCustomersCount(null);
+      setOrdersThisWeek(null);
+      Toast.show({ type: 'error', text1: 'טעינת נתוני חנות נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshStoreStats();
+  }, [refreshStoreStats]);
 
   const openWizard = () => {
     setWizardStep(0);
@@ -537,41 +575,75 @@ export function StoreManagementScreen() {
   }, [wizardStep]);
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+    <Screen padded={false}>
+      <ScrollView
+        contentContainerStyle={{ gap: 14, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 36 }}
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* ─── Store stats ─── */}
+        <View style={s.statsGrid}>
+          <View style={s.statTile}>
+            <Text style={s.statLabel}>פריטים בחנות</Text>
+            <Text style={s.statValue}>{loadingProducts ? '—' : String(products.length)}</Text>
+            <Text style={s.statHint}>מוצרים שנטענו</Text>
+          </View>
+
+          <View style={s.statTile}>
+            <Text style={s.statLabel}>הזמנות השבוע</Text>
+            <Text style={s.statValue}>{statsLoading ? '—' : String(ordersThisWeek ?? 0)}</Text>
+            <Text style={s.statHint}>משימות (כל הסוגים)</Text>
+          </View>
+
+          <View style={s.statTile}>
+            <Text style={s.statLabel}>לקוחות</Text>
+            <Text style={s.statValue}>{statsLoading ? '—' : String(customersCount ?? 0)}</Text>
+            <Text style={s.statHint}>במערכת</Text>
+          </View>
+        </View>
 
         {/* ─── Push launch hero card ─── */}
-        <Pressable onPress={openWizard} style={({ pressed }) => [s.pushLauncher, pressed && s.pushLauncherPressed]}>
-          {/* Decorative glow */}
-          <View style={s.pushLauncherGlowA} />
-          <View style={s.pushLauncherGlowB} />
+        <Pressable
+          onPress={openWizard}
+          accessibilityRole="button"
+          android_ripple={{ color: 'rgba(37,99,235,0.10)' }}
+          style={({ pressed }) => [s.pushLauncher, pressed && s.pushLauncherPressed]}
+        >
+          <View style={s.pushLauncherInner}>
+            {/* Rounded frame (makes it feel like a window/button) */}
+            <View style={s.pushLauncherFrame} />
 
-          <View style={s.pushLauncherRow}>
-            <View style={s.pushLauncherIconWrap}>
-              <Text style={s.pushLauncherIcon}>📣</Text>
-            </View>
+            {/* Decorative glow */}
+            <View style={s.pushLauncherGlowA} />
+            <View style={s.pushLauncherGlowB} />
 
-            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                <Text style={s.pushLauncherTitle}>שיגור פושים</Text>
-                <View style={s.pushLauncherTag}>
-                  <Text style={s.pushLauncherTagText}>Wizard</Text>
+            <View style={s.pushLauncherRow}>
+              <View style={s.pushLauncherIconWrap}>
+                <Text style={s.pushLauncherIcon}>📣</Text>
+              </View>
+
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  <Text style={s.pushLauncherTitle}>שיגור פושים</Text>
+                  <View style={s.pushLauncherTag}>
+                    <Text style={s.pushLauncherTagText}>Wizard</Text>
+                  </View>
+                </View>
+                <Text style={s.pushLauncherSub}>פוש כללי או מוצר • עכשיו או מתוזמן</Text>
+
+                <View style={s.pushLauncherMetaRow}>
+                  <View style={s.metaPill}>
+                    <Text style={s.metaPillText}>5 שלבים</Text>
+                  </View>
+                  <View style={s.metaPillMuted}>
+                    <Text style={s.metaPillMutedText}>כותרת • סוג • מוצרים • תוכן • תזמון</Text>
+                  </View>
                 </View>
               </View>
-              <Text style={s.pushLauncherSub}>פוש כללי או מוצר • עכשיו או מתוזמן</Text>
 
-              <View style={s.pushLauncherMetaRow}>
-                <View style={s.metaPill}>
-                  <Text style={s.metaPillText}>5 שלבים</Text>
-                </View>
-                <View style={s.metaPillMuted}>
-                  <Text style={s.metaPillMutedText}>כותרת • סוג • מוצרים • תוכן • תזמון</Text>
-                </View>
+              <View style={s.pushLauncherChevronWrap}>
+                <Text style={s.pushLauncherChevron}>‹</Text>
               </View>
-            </View>
-
-            <View style={s.pushLauncherChevronWrap}>
-              <Text style={s.pushLauncherChevron}>‹</Text>
             </View>
           </View>
         </Pressable>
@@ -961,27 +1033,63 @@ const s = StyleSheet.create({
     fontSize: 15,
   },
 
-  /* ── Push launcher (simple beautiful button card) ── */
-  pushLauncher: {
-    borderRadius: 20,
-    padding: 14,
+  /* ── Store stats ── */
+  statsGrid: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  statTile: {
+    flexBasis: '31%',
+    flexGrow: 1,
+    minWidth: 110,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.08)',
     shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 1,
+  },
+  statLabel: { color: '#64748B', fontWeight: '800', fontSize: 12, textAlign: 'right' },
+  statValue: { color: '#0F172A', fontWeight: '900', fontSize: 24, textAlign: 'right', marginTop: 6, letterSpacing: -0.4 },
+  statHint: { color: '#94A3B8', fontWeight: '700', fontSize: 11, textAlign: 'right', marginTop: 6 },
+
+  /* ── Push launcher (simple beautiful button card) ── */
+  pushLauncher: {
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 2,
+  },
+  pushLauncherPressed: { opacity: 0.92, transform: [{ scale: 0.992 }] },
+  pushLauncherInner: {
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(37,99,235,0.20)',
     overflow: 'hidden',
   },
-  pushLauncherPressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
+  pushLauncherFrame: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+  },
   pushLauncherGlowA: {
     position: 'absolute',
     width: 180,
     height: 180,
     borderRadius: 999,
-    backgroundColor: 'rgba(37,99,235,0.10)',
+    backgroundColor: 'rgba(37,99,235,0.12)',
     top: -90,
     right: -80,
   },
@@ -990,7 +1098,7 @@ const s = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 999,
-    backgroundColor: 'rgba(99,102,241,0.08)',
+    backgroundColor: 'rgba(99,102,241,0.10)',
     bottom: -70,
     left: -70,
   },
@@ -1040,7 +1148,9 @@ const s = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: 'rgba(15,23,42,0.05)',
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { endOfDay, endOfMonth, format, startOfDay, startOfMonth } from 'date-fns';
 import { useFocusEffect } from '@react-navigation/native';
@@ -63,6 +63,8 @@ export function DashboardScreen() {
   const [servicePoints, setServicePoints] = useState<ServicePoint[]>([]);
   const [workerDetailsOpen, setWorkerDetailsOpen] = useState(false);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [allTimeCompleted, setAllTimeCompleted] = useState<number | null>(null);
+  const [loadingAllTimeCompleted, setLoadingAllTimeCompleted] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -210,6 +212,34 @@ export function DashboardScreen() {
     if (!selectedWorkerMonth.total) return 0;
     return Math.round((selectedWorkerMonth.completed / selectedWorkerMonth.total) * 100);
   }, [selectedWorkerMonth.completed, selectedWorkerMonth.total]);
+
+  useEffect(() => {
+    if (!workerDetailsOpen || !selectedWorkerId) return;
+    let alive = true;
+    setAllTimeCompleted(null);
+    setLoadingAllTimeCompleted(true);
+    (async () => {
+      try {
+        const { count, error } = await supabase
+          .from('jobs')
+          .select('id', { count: 'exact', head: true })
+          .eq('worker_id', selectedWorkerId)
+          .eq('status', 'completed');
+        if (error) throw error;
+        if (!alive) return;
+        setAllTimeCompleted(count ?? 0);
+      } catch {
+        if (!alive) return;
+        setAllTimeCompleted(null);
+      } finally {
+        if (!alive) return;
+        setLoadingAllTimeCompleted(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [workerDetailsOpen, selectedWorkerId]);
 
   return (
     <Screen>
@@ -565,9 +595,9 @@ export function DashboardScreen() {
           style={{
             flex: 1,
             backgroundColor: 'rgba(15,23,42,0.45)',
-            paddingHorizontal: 16,
-            paddingVertical: 18,
-            justifyContent: 'flex-end',
+            padding: 16,
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
           <Pressable
@@ -583,13 +613,11 @@ export function DashboardScreen() {
               shadowRadius: 22,
               shadowOffset: { width: 0, height: 12 },
               elevation: 6,
-              maxHeight: '78%',
+              width: '100%',
+              maxWidth: 480,
+              maxHeight: '80%',
             }}
           >
-            <View style={{ alignItems: 'center', paddingBottom: 10 }}>
-              <View style={{ width: 44, height: 5, borderRadius: 999, backgroundColor: colors.border }} />
-            </View>
-
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <Pressable
                 onPress={() => {
@@ -710,6 +738,37 @@ export function DashboardScreen() {
                     <Text style={{ color: colors.text, fontWeight: '900', fontSize: 20, textAlign: 'right', marginTop: 6 }}>
                       {selectedWorkerMonth.total}
                     </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      flexBasis: '100%',
+                      flexGrow: 1,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.elevated,
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{ minWidth: 44, alignItems: 'flex-start' }}>
+                        {loadingAllTimeCompleted ? (
+                          <ActivityIndicator color={colors.primary} />
+                        ) : (
+                          <Text style={{ color: colors.text, fontWeight: '900', fontSize: 20 }}>
+                            {allTimeCompleted == null ? '—' : allTimeCompleted}
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={{ color: colors.muted, fontWeight: '900', textAlign: 'right' }}>הושלמו בכל הזמנים</Text>
+                    </View>
+                    {allTimeCompleted == null && !loadingAllTimeCompleted ? (
+                      <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right', marginTop: 6 }}>
+                        לא הצלחנו לטעון כרגע
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               </View>

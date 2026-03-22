@@ -178,49 +178,52 @@ export function JobCard({
 
   const inner = (
     <View>
-      <View
-        style={{
-          flexDirection: 'row-reverse',
-          justifyContent: hasTitle ? 'space-between' : 'flex-start',
-          alignItems: 'flex-start',
-          gap: 8,
-        }}
-      >
-        {hasTitle ? (
-          <Text
-            style={{
-              color: colors.text,
-              fontWeight: '800',
-              fontSize: 16,
-              textAlign: 'right',
-              flex: 1,
-              letterSpacing: -0.3,
-            }}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-        ) : null}
-        {status ? (
-          <View
-            style={{
-              backgroundColor: statusMeta(status).bg,
-              borderColor: statusMeta(status).border,
-              borderWidth: 1,
-              borderRadius: 20,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <Text style={{ color: statusMeta(status).fg, fontWeight: '700', fontSize: 11 }}>
-              {statusMeta(status).label}
+      {(hasTitle || !!status) && (
+        <View
+          style={{
+            flexDirection: 'row-reverse',
+            justifyContent: hasTitle ? 'space-between' : 'flex-end',
+            alignItems: 'flex-start',
+            gap: 8,
+            marginBottom: (!!primaryNode || !!primaryText || !!description) ? 10 : 0,
+          }}
+        >
+          {hasTitle ? (
+            <Text
+              style={{
+                color: colors.text,
+                fontWeight: '800',
+                fontSize: 16,
+                textAlign: 'right',
+                flex: 1,
+                letterSpacing: -0.3,
+              }}
+              numberOfLines={1}
+            >
+              {title}
             </Text>
-          </View>
-        ) : null}
-      </View>
+          ) : null}
+          {status ? (
+            <View
+              style={{
+                backgroundColor: statusMeta(status).bg,
+                borderColor: statusMeta(status).border,
+                borderWidth: 1,
+                borderRadius: 20,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ color: statusMeta(status).fg, fontWeight: '700', fontSize: 11 }}>
+                {statusMeta(status).label}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
 
       {(!!primaryNode || !!primaryText || !!description) && (
-        <View style={{ gap: 4, marginTop: 8 }}>
+        <View style={{ gap: 4 }}>
           {!!primaryNode
             ? primaryNode
             : !!primaryText && (

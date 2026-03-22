@@ -1,5 +1,17 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Dimensions, FlatList, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View, type ViewStyle } from 'react-native';
+import {
+  Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { Entypo } from '@expo/vector-icons';
@@ -17,6 +29,7 @@ import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalDialog } from '../../components/ModalDialog';
 import { ModalSheet } from '../../components/ModalSheet';
 import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
@@ -97,7 +110,7 @@ export function FabButton({
               key="close"
               name="cross"
               size={closeIconSize}
-              color="white"
+              color={colors.text}
               entering={FadeIn.duration(duration)}
               exiting={FadeOut.duration(duration)}
             />
@@ -106,7 +119,7 @@ export function FabButton({
               key="open"
               name="pencil"
               size={openIconSize}
-              color="white"
+              color={colors.text}
               entering={FadeIn.duration(duration)}
               exiting={FadeOut.duration(duration)}
             />
@@ -132,8 +145,8 @@ export function FabButton({
 const fabStyles = StyleSheet.create({
   heading: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: '900',
+    color: colors.text,
     textAlign: 'right',
   },
   panel: {
@@ -141,9 +154,15 @@ const fabStyles = StyleSheet.create({
     overflow: 'hidden',
     bottom: 18,
     right: 18,
-    backgroundColor: '#111',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
     zIndex: 9999,
-    elevation: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
   content: { flex: 1, paddingTop: 0 },
   header: { justifyContent: 'center' },
@@ -537,8 +556,17 @@ export function DevicesAndScentsScreen() {
         }
       />
 
-      <ModalSheet visible={createOpen} onClose={() => setCreateOpen(false)} containerStyle={styles.createSheet}>
-        <View style={{ gap: 12 }}>
+      <ModalDialog visible={createOpen} onClose={() => setCreateOpen(false)} containerStyle={styles.createDialog}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.createScrollContent}
+          >
+            <View style={{ gap: 12 }}>
           <View style={styles.createHeaderRow}>
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
               <View style={styles.createIconBubble}>
@@ -563,24 +591,38 @@ export function DevicesAndScentsScreen() {
             <Pressable
               accessibilityRole="button"
               onPress={() => setCreateType('device')}
-              style={({ pressed }) => [
-                styles.segmentedItem,
-                createType === 'device' && styles.segmentedItemActive,
-                pressed && { opacity: 0.92 },
-              ]}
+              style={styles.segmentedItemWrap}
             >
-              <Text style={[styles.segmentedText, createType === 'device' && styles.segmentedTextActive]}>מכשיר</Text>
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.segmentedItem,
+                    createType === 'device' ? styles.segmentedItemActive : styles.segmentedItemInactive,
+                    pressed && styles.segmentedItemPressed,
+                  ]}
+                >
+                  <Text style={[styles.segmentedText, createType === 'device' && styles.segmentedTextActive]}>
+                    מכשיר
+                  </Text>
+                </View>
+              )}
             </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={() => setCreateType('scent')}
-              style={({ pressed }) => [
-                styles.segmentedItem,
-                createType === 'scent' && styles.segmentedItemActive,
-                pressed && { opacity: 0.92 },
-              ]}
+              style={styles.segmentedItemWrap}
             >
-              <Text style={[styles.segmentedText, createType === 'scent' && styles.segmentedTextActive]}>ניחוח</Text>
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.segmentedItem,
+                    createType === 'scent' ? styles.segmentedItemActive : styles.segmentedItemInactive,
+                    pressed && styles.segmentedItemPressed,
+                  ]}
+                >
+                  <Text style={[styles.segmentedText, createType === 'scent' && styles.segmentedTextActive]}>ניחוח</Text>
+                </View>
+              )}
             </Pressable>
           </View>
 
@@ -610,8 +652,10 @@ export function DevicesAndScentsScreen() {
               </View>
             )}
           </View>
-        </View>
-      </ModalSheet>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </ModalDialog>
 
       <ModalSheet visible={!!deleteDevice} onClose={() => setDeleteDevice(null)}>
         {!!deleteDevice && (
@@ -653,7 +697,7 @@ export function DevicesAndScentsScreen() {
           openedSize={width - 36}
           panelStyle={{ right: 18, bottom: 18 }}
         >
-          <Text style={{ color: 'white', fontWeight: '900', textAlign: 'right' }}>{editDevice.name}</Text>
+          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{editDevice.name}</Text>
           <Input label="שם סוג חדש" value={editDeviceName} onChangeText={setEditDeviceName} placeholder="לדוגמה: A100" />
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
@@ -762,6 +806,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 18,
   },
+  createDialog: {
+    padding: 0,
+    borderRadius: 22,
+    overflow: 'hidden',
+    maxHeight: '86%',
+    width: '100%',
+    maxWidth: 520,
+  },
+  createScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
+  },
   createHeaderRow: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
@@ -789,29 +846,43 @@ const styles = StyleSheet.create({
   },
   segmented: {
     flexDirection: 'row-reverse',
-    backgroundColor: 'rgba(15,23,42,0.06)',
-    borderRadius: 18,
+    gap: 10,
     padding: 4,
+    backgroundColor: 'rgba(15,23,42,0.06)',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  segmentedItem: {
+  segmentedItemWrap: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 14,
+  },
+  segmentedItem: {
+    minHeight: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
   segmentedItemActive: {
-    backgroundColor: colors.elevated,
+    backgroundColor: colors.text,
+    borderColor: colors.text,
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  segmentedText: { color: colors.muted, fontWeight: '900' },
-  segmentedTextActive: { color: colors.text },
+  segmentedItemInactive: {
+    backgroundColor: '#F8FAFC',
+    borderColor: 'rgba(15,23,42,0.12)',
+  },
+  segmentedItemPressed: {
+    opacity: 0.85,
+  },
+  segmentedText: { color: colors.text, fontWeight: '900' },
+  segmentedTextActive: { color: '#FFFFFF' },
   createFormWrap: {
     borderWidth: 1,
     borderColor: colors.border,
