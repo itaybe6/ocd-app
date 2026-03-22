@@ -1,11 +1,23 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, Platform, Pressable, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { addDays, format } from 'date-fns';
 import { he } from 'date-fns/locale';
-import { CalendarDays, ChevronLeft, ChevronRight, Eye } from 'lucide-react-native';
+import {
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ClipboardList,
+  Droplets,
+  Eye,
+  Layers,
+  User,
+  X,
+} from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { ModalSheet } from '../../components/ModalSheet';
@@ -23,18 +35,8 @@ type Status = 'pending' | 'completed';
 
 LocaleConfig.locales.he = {
   monthNames: [
-    'ינואר',
-    'פברואר',
-    'מרץ',
-    'אפריל',
-    'מאי',
-    'יוני',
-    'יולי',
-    'אוגוסט',
-    'ספטמבר',
-    'אוקטובר',
-    'נובמבר',
-    'דצמבר',
+    'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+    'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
   ],
   monthNamesShort: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יונ׳', 'יול׳', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'],
   dayNames: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
@@ -93,6 +95,12 @@ function updateIsoTime(iso: string, timeHm: string): string {
   return d.toISOString();
 }
 
+const KIND_CONFIG = {
+  regular: { label: 'רגילה', accent: 'blue' as const, color: '#0058BC' },
+  installation: { label: 'התקנה', accent: 'purple' as const, color: '#7C3AED' },
+  special: { label: 'מיוחדת', accent: 'orange' as const, color: '#EA580C' },
+} as const;
+
 export function DailyScheduleScreen() {
   const { setIsLoading } = useLoading();
   const [day, setDay] = useState(yyyyMmDd(new Date()));
@@ -119,14 +127,12 @@ export function DailyScheduleScreen() {
       { value: '', label: 'הכל' },
       ...users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
     ],
-    [users]
+    [users],
   );
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
   const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
-
-  const kindLabel = useCallback((k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת'), []);
 
   const parsedDay = useMemo(() => {
     const d = new Date(`${day}T00:00:00`);
@@ -142,6 +148,13 @@ export function DailyScheduleScreen() {
     const d = toDate(day);
     return format(d, 'EEEE, dd/MM/yyyy', { locale: he });
   }, [day]);
+
+  const stats = useMemo(() => {
+    const total = items.length;
+    const completed = items.filter((i) => i.status === 'completed').length;
+    const pending = total - completed;
+    return { total, completed, pending };
+  }, [items]);
 
   const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').order('name');
@@ -173,7 +186,7 @@ export function DailyScheduleScreen() {
       const [regRes, instRes, specRes] = await Promise.all([
         baseFilter(supabase.from('jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')),
         baseFilter(
-          supabase.from('installation_jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')
+          supabase.from('installation_jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes'),
         ),
         baseFilter(supabase.from('special_jobs').select('id, date, status, worker_id, order_number, notes')),
       ]);
@@ -208,7 +221,7 @@ export function DailyScheduleScreen() {
     useCallback(() => {
       fetchUsers();
       fetchDay();
-    }, [fetchDay, fetchUsers])
+    }, [fetchDay, fetchUsers]),
   );
 
   const customerLabel = useCallback(
@@ -217,7 +230,7 @@ export function DailyScheduleScreen() {
       if (x.one_time_customer_id) return oneTimeMap.get(x.one_time_customer_id) ?? x.one_time_customer_id.slice(0, 6);
       return '—';
     },
-    [oneTimeMap, userMap]
+    [oneTimeMap, userMap],
   );
 
   const openJobPoints = useCallback(async (job: Unified) => {
@@ -259,7 +272,7 @@ export function DailyScheduleScreen() {
     } finally {
       setPointsLoading(false);
     }
-  }, [userMap]);
+  }, []);
 
   const saveTime = async () => {
     if (!edit) return;
@@ -282,141 +295,108 @@ export function DailyScheduleScreen() {
     }
   };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: '#FAF9FE', paddingHorizontal: 16, paddingTop: 12 }}>
-      <View style={{ gap: 10 }}>
-        <>
-          <View style={{ gap: 6 }}>
-            <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right' }}>תאריך</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Pressable
-                onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -1)))}
-                style={{
-                  width: 44,
-                  height: 52,
-                  borderRadius: 16,
-                  backgroundColor: colors.elevated,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <ChevronLeft size={20} color={colors.text} />
-              </Pressable>
+  const closePoints = useCallback(() => {
+    setPointsOpen(false);
+    setPointsLoading(false);
+    setPointsJob(null);
+    setJobPoints([]);
+  }, []);
 
-              <Pressable
-                onPress={openDatePicker}
-                style={{
-                  flex: 1,
-                  minHeight: 52,
-                  borderRadius: 16,
-                  backgroundColor: colors.elevated,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingHorizontal: 14,
-                  justifyContent: 'center',
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <CalendarDays size={20} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{prettyDay}</Text>
-                    <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right' }}>{day}</Text>
-                  </View>
-                </View>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 1)))}
-                style={{
-                  width: 44,
-                  height: 52,
-                  borderRadius: 16,
-                  backgroundColor: colors.elevated,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <ChevronRight size={20} color={colors.text} />
-              </Pressable>
+  const listHeader = useMemo(
+    () => (
+      <View style={{ gap: 14 }}>
+        {/* ── Date Navigation ───────────────────────────── */}
+        <View style={st.dateCard}>
+          <View style={st.dateCardHeader}>
+            <View style={st.dateIconBubble}>
+              <CalendarDays size={16} color="#fff" strokeWidth={2.5} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={st.dateCardTitle}>תאריך</Text>
+              <Text style={st.dateCardSubtitle}>בחר יום לצפייה במשימות</Text>
             </View>
           </View>
 
-          <ModalSheet visible={dateSheetOpen} onClose={() => setDateSheetOpen(false)} containerStyle={{ paddingBottom: 18 }}>
-            <View style={{ gap: 12 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
-                <Pressable
-                  onPress={() => setTempDay(yyyyMmDd(new Date()))}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 999,
-                    backgroundColor: colors.elevated,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text style={{ color: colors.text, fontWeight: '900' }}>היום</Text>
-                </Pressable>
-              </View>
+          <View style={st.dateDivider} />
 
-              <Calendar
-                current={tempDay}
-                onDayPress={(d) => setTempDay(d.dateString)}
-                markedDates={{
-                  [tempDay]: { selected: true, selectedColor: colors.primary, selectedTextColor: '#fff' },
-                }}
-                enableSwipeMonths
-                firstDay={0}
-                style={{ borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}
-                theme={{
-                  calendarBackground: colors.card,
-                  textSectionTitleColor: colors.muted,
-                  todayTextColor: colors.primary,
-                  dayTextColor: colors.text,
-                  monthTextColor: colors.text,
-                  textMonthFontWeight: '900',
-                  textDayFontWeight: '700',
-                  textDayHeaderFontWeight: '800',
-                  arrowColor: colors.text,
-                  selectedDayBackgroundColor: colors.primary,
-                  selectedDayTextColor: '#fff',
-                }}
-              />
+          <View style={st.dateNavRow}>
+            <Pressable
+              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -1)))}
+              style={({ pressed }) => [st.dateNavBtn, pressed && { opacity: 0.6 }]}
+            >
+              <ChevronLeft size={18} color={colors.text} strokeWidth={2.5} />
+            </Pressable>
 
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <Button
-                  title="ביטול"
-                  variant="secondary"
-                  fullWidth={false}
-                  style={{ flex: 1 }}
-                  onPress={() => setDateSheetOpen(false)}
-                />
-                <Button
-                  title="אישור"
-                  fullWidth={false}
-                  style={{ flex: 1 }}
-                  onPress={() => {
-                    setDay(tempDay);
-                    setDateSheetOpen(false);
-                  }}
-                />
+            <Pressable onPress={openDatePicker} style={({ pressed }) => [st.dateDisplay, pressed && { opacity: 0.85 }]}>
+              <CalendarDays size={18} color={colors.primary} strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={st.dateMainText}>{prettyDay}</Text>
+                <Text style={st.dateSub}>{day}</Text>
               </View>
-            </View>
-          </ModalSheet>
-        </>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 1)))}
+              style={({ pressed }) => [st.dateNavBtn, pressed && { opacity: 0.6 }]}
+            >
+              <ChevronRight size={18} color={colors.text} strokeWidth={2.5} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* ── Worker Filter ─────────────────────────────── */}
         <SelectSheet label="עובד" value={workerId} options={workerOptions} onChange={setWorkerId} />
-      </View>
 
+        {/* ── Stats Bar ─────────────────────────────────── */}
+        {items.length > 0 && (
+          <View style={st.statsRow}>
+            <View style={st.statItem}>
+              <View style={[st.statDot, { backgroundColor: colors.primary }]} />
+              <Text style={st.statValue}>{stats.total}</Text>
+              <Text style={st.statLabel}>סה״כ</Text>
+            </View>
+            <View style={st.statSeparator} />
+            <View style={st.statItem}>
+              <View style={[st.statDot, { backgroundColor: '#F59E0B' }]} />
+              <Text style={st.statValue}>{stats.pending}</Text>
+              <Text style={st.statLabel}>ממתינות</Text>
+            </View>
+            <View style={st.statSeparator} />
+            <View style={st.statItem}>
+              <View style={[st.statDot, { backgroundColor: colors.success }]} />
+              <Text style={st.statValue}>{stats.completed}</Text>
+              <Text style={st.statLabel}>הושלמו</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Section Header ───────────────────────────── */}
+        <View style={st.sectionHeader}>
+          <View style={st.sectionIconWrap}>
+            <ClipboardList size={14} color={colors.primary} strokeWidth={2.2} />
+          </View>
+          <Text style={st.sectionLabel}>משימות</Text>
+          <View style={st.countBadge}>
+            <Text style={st.countText}>{items.length}</Text>
+          </View>
+        </View>
+      </View>
+    ),
+    [day, items.length, openDatePicker, parsedDay, prettyDay, stats, workerId, workerOptions],
+  );
+
+  return (
+    <View style={st.screen}>
       <FlatList
-        style={{ marginTop: 12 }}
         data={items}
         keyExtractor={(i) => `${i.kind}:${i.id}`}
-        contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
+        contentContainerStyle={st.listContent}
+        refreshing={loading}
+        onRefresh={() => {
+          fetchUsers();
+          fetchDay();
+        }}
+        ListHeaderComponent={listHeader}
         renderItem={({ item }) => (
           <JobCard
             style={{ borderRadius: 18 }}
@@ -426,14 +406,14 @@ export function DailyScheduleScreen() {
             primaryNode={
               <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
                 <Avatar
-                  size={22}
+                  size={24}
                   uri={userAvatarMap.get(item.worker_id) ?? null}
                   name={userMap.get(item.worker_id) ?? ''}
                   style={{ backgroundColor: '#fff' }}
                 />
                 <Text
                   style={{
-                    color: item.kind === 'installation' ? '#7C3AED' : item.kind === 'special' ? '#EA580C' : '#0058BC',
+                    color: KIND_CONFIG[item.kind].color,
                     fontWeight: '700',
                     fontSize: 13,
                     textAlign: 'right',
@@ -464,24 +444,133 @@ export function DailyScheduleScreen() {
             }
             chips={
               <>
-                <JobChip text={kindLabel(item.kind)} />
+                <JobChip text={KIND_CONFIG[item.kind].label} accent={KIND_CONFIG[item.kind].accent} />
                 <JobChip text={formatHm(item.date)} muted />
               </>
             }
           />
         )}
-        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות ליום הזה.</Text>}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ListEmptyComponent={
+          <View style={st.emptyWrap}>
+            <View style={st.emptyIcon}>
+              <CalendarDays size={28} color={colors.muted} strokeWidth={1.5} />
+            </View>
+            <Text style={st.emptyTitle}>אין משימות ליום הזה</Text>
+            <Text style={st.emptySubtitle}>שייך תבנית לתאריך ליצירת משימות</Text>
+          </View>
+        }
+        ListFooterComponent={<View style={{ height: 40 }} />}
       />
 
+      {/* ── Calendar Sheet ──────────────────────────────── */}
+      <ModalSheet visible={dateSheetOpen} onClose={() => setDateSheetOpen(false)} containerStyle={{ paddingBottom: 18 }}>
+        <View style={{ gap: 12 }}>
+          <View style={st.calendarHeader}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flex: 1 }}>
+              <View style={st.calendarIconBubble}>
+                <CalendarDays size={16} color="#fff" strokeWidth={2.5} />
+              </View>
+              <Text style={st.calendarTitle}>בחירת תאריך</Text>
+            </View>
+            <Pressable
+              onPress={() => setTempDay(yyyyMmDd(new Date()))}
+              style={({ pressed }) => [st.todayBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={st.todayBtnText}>היום</Text>
+            </Pressable>
+          </View>
+
+          <Calendar
+            current={tempDay}
+            onDayPress={(d) => setTempDay(d.dateString)}
+            markedDates={{
+              [tempDay]: { selected: true, selectedColor: colors.primary, selectedTextColor: '#fff' },
+            }}
+            enableSwipeMonths
+            firstDay={0}
+            style={st.calendar}
+            theme={{
+              calendarBackground: colors.card,
+              textSectionTitleColor: colors.muted,
+              todayTextColor: colors.primary,
+              dayTextColor: colors.text,
+              monthTextColor: colors.text,
+              textMonthFontWeight: '900',
+              textDayFontWeight: '700',
+              textDayHeaderFontWeight: '800',
+              arrowColor: colors.text,
+              selectedDayBackgroundColor: colors.primary,
+              selectedDayTextColor: '#fff',
+            }}
+          />
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button
+              title="ביטול"
+              variant="secondary"
+              fullWidth={false}
+              style={{ flex: 1, borderRadius: 14 }}
+              onPress={() => setDateSheetOpen(false)}
+            />
+            <Button
+              title="אישור"
+              fullWidth={false}
+              style={{ flex: 1, borderRadius: 14 }}
+              onPress={() => {
+                setDay(tempDay);
+                setDateSheetOpen(false);
+              }}
+            />
+          </View>
+        </View>
+      </ModalSheet>
+
+      {/* ── Edit Time Sheet ─────────────────────────────── */}
       <ModalSheet visible={!!edit} onClose={() => setEdit(null)}>
         {!!edit && (
-          <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              עריכת שעה
-            </Text>
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>
-              סוג: {edit.kind} • #{edit.order_number ?? '—'}
-            </Text>
+          <View style={{ gap: 16 }}>
+            <View style={st.editHeader}>
+              <View style={st.editIconBubble}>
+                <Clock size={16} color="#fff" strokeWidth={2.5} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={st.editTitle}>עריכת שעה</Text>
+                <Text style={st.editSubtitle}>
+                  {KIND_CONFIG[edit.kind].label} • #{edit.order_number ?? '—'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={st.editDetailsCard}>
+              <View style={st.editDetailRow}>
+                <Text style={st.editDetailLabel}>לקוח</Text>
+                <Text style={st.editDetailValue}>{customerLabel(edit)}</Text>
+              </View>
+              <View style={st.editDetailDivider} />
+              <View style={st.editDetailRow}>
+                <Text style={st.editDetailLabel}>עובד</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Avatar
+                    size={20}
+                    uri={userAvatarMap.get(edit.worker_id) ?? null}
+                    name={userMap.get(edit.worker_id) ?? ''}
+                  />
+                  <Text style={st.editDetailValue}>
+                    {userMap.get(edit.worker_id) ?? edit.worker_id.slice(0, 6)}
+                  </Text>
+                </View>
+              </View>
+              <View style={st.editDetailDivider} />
+              <View style={st.editDetailRow}>
+                <Text style={st.editDetailLabel}>שעה נוכחית</Text>
+                <View style={st.currentTimeBadge}>
+                  <Clock size={12} color={colors.primary} strokeWidth={2} />
+                  <Text style={st.currentTimeText}>{formatHm(edit.date)}</Text>
+                </View>
+              </View>
+            </View>
+
             <SelectSheet
               label="שעה חדשה"
               value={newTime}
@@ -504,71 +593,120 @@ export function DailyScheduleScreen() {
               ]}
               onChange={setNewTime}
             />
-            <Button title="שמור" onPress={saveTime} />
-            <Button title="סגור" variant="secondary" onPress={() => setEdit(null)} />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button
+                title="ביטול"
+                variant="secondary"
+                fullWidth={false}
+                style={{ flex: 1, borderRadius: 14 }}
+                onPress={() => setEdit(null)}
+              />
+              <Button
+                title="שמור"
+                fullWidth={false}
+                style={{ flex: 1, borderRadius: 14 }}
+                onPress={saveTime}
+              />
+            </View>
           </View>
         )}
       </ModalSheet>
 
+      {/* ── Service Points Window ───────────────────────── */}
       <OriginWindow
         visible={pointsOpen}
         originRect={pointsOriginRect}
-        onClose={() => {
-          setPointsOpen(false);
-          setPointsLoading(false);
-          setPointsJob(null);
-          setJobPoints([]);
-        }}
+        onClose={closePoints}
       >
-        <View style={{ flex: 1, padding: 14, gap: 12 }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            נקודות שירות למשימה
-          </Text>
-
-          {!!pointsJob && (
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>
-              לקוח: {customerLabel(pointsJob)}, עובד: {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id}
-            </Text>
-          )}
+        <View style={{ flex: 1, padding: 16, gap: 14 }}>
+          <View style={st.pointsHeader}>
+            <View style={st.pointsIconBubble}>
+              <Layers size={16} color="#fff" strokeWidth={2.5} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={st.pointsTitle}>נקודות שירות</Text>
+              {!!pointsJob && (
+                <Text style={st.pointsSubtitle} numberOfLines={1}>
+                  {customerLabel(pointsJob)} • {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id.slice(0, 6)}
+                </Text>
+              )}
+            </View>
+            <Pressable
+              onPress={closePoints}
+              hitSlop={8}
+              style={({ pressed }) => [st.pointsCloseBtn, pressed && { opacity: 0.6 }]}
+            >
+              <X size={16} color={colors.muted} strokeWidth={2.5} />
+            </Pressable>
+          </View>
 
           {pointsLoading ? (
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>טוען…</Text>
+            <View style={st.pointsLoadingWrap}>
+              <Text style={st.pointsLoadingText}>טוען נקודות שירות…</Text>
+            </View>
           ) : pointsJob?.kind !== 'regular' ? (
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות למשימה זו.</Text>
+            <View style={st.pointsEmptyWrap}>
+              <View style={st.pointsEmptyIcon}>
+                <Layers size={22} color={colors.muted} strokeWidth={1.5} />
+              </View>
+              <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
+            </View>
           ) : (
             <FlatList
               data={jobPoints}
               keyExtractor={(i) => i.id}
-              contentContainerStyle={{ gap: 10, paddingBottom: 6 }}
+              contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
               style={{ flex: 1 }}
               renderItem={({ item }) => (
-                <Card>
-                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                    {item.sp?.device_type ?? item.service_point_id}
-                  </Text>
-                  <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                    ניחוח: {item.sp?.scent_type ?? '-'} • מילוי: {item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}
-                  </Text>
-                  {!!item.sp?.notes && (
-                    <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }} numberOfLines={2}>
-                      הערה: {item.sp.notes}
+                <View style={st.pointCard}>
+                  <View style={st.pointCardHeader}>
+                    <View style={st.pointDeviceIcon}>
+                      <Droplets size={14} color={colors.primary} strokeWidth={2} />
+                    </View>
+                    <Text style={st.pointDeviceText}>
+                      {item.sp?.device_type ?? item.service_point_id}
                     </Text>
+                  </View>
+                  <View style={st.pointCardDivider} />
+                  <View style={st.pointMetaRow}>
+                    <View style={st.pointMetaItem}>
+                      <Text style={st.pointMetaLabel}>ניחוח</Text>
+                      <Text style={st.pointMetaValue}>{item.sp?.scent_type ?? '-'}</Text>
+                    </View>
+                    <View style={st.pointMetaSeparator} />
+                    <View style={st.pointMetaItem}>
+                      <Text style={st.pointMetaLabel}>מילוי</Text>
+                      <Text style={st.pointMetaValue}>
+                        {item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}
+                      </Text>
+                    </View>
+                  </View>
+                  {!!item.sp?.notes && (
+                    <>
+                      <View style={st.pointCardDivider} />
+                      <Text style={st.pointNotes} numberOfLines={2}>
+                        {item.sp.notes}
+                      </Text>
+                    </>
                   )}
-                </Card>
+                </View>
               )}
-              ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות למשימה זו.</Text>}
+              ListEmptyComponent={
+                <View style={st.pointsEmptyWrap}>
+                  <View style={st.pointsEmptyIcon}>
+                    <Layers size={22} color={colors.muted} strokeWidth={1.5} />
+                  </View>
+                  <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
+                </View>
+              }
             />
           )}
 
           <Button
             title="סגור"
             variant="secondary"
-            onPress={() => {
-              setPointsOpen(false);
-              setPointsLoading(false);
-              setPointsJob(null);
-              setJobPoints([]);
-            }}
+            onPress={closePoints}
+            style={{ borderRadius: 14 }}
           />
         </View>
       </OriginWindow>
@@ -576,3 +714,449 @@ export function DailyScheduleScreen() {
   );
 }
 
+const st = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+
+  // ── Date Card ──────────────────────────────────────
+  dateCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+      android: { elevation: 2 },
+    }),
+  },
+  dateCardHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dateIconBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  dateCardTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  dateCardSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+    marginTop: 1,
+  },
+  dateDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 14,
+  },
+  dateNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateNavBtn: {
+    width: 42,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateDisplay: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateMainText: {
+    color: colors.text,
+    fontWeight: '900',
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  dateSub: {
+    color: colors.muted,
+    fontWeight: '600',
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: 1,
+  },
+
+  // ── Stats Bar ──────────────────────────────────────
+  statsRow: {
+    flexDirection: 'row-reverse',
+    backgroundColor: colors.elevated,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 1 },
+    }),
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  statSeparator: {
+    width: 1,
+    height: '70%' as any,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+  },
+
+  // ── Section Header ─────────────────────────────────
+  sectionHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 2,
+    marginTop: 2,
+  },
+  sectionIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(37,99,235,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.muted,
+    letterSpacing: 0.4,
+    textAlign: 'right',
+  },
+  countBadge: {
+    backgroundColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  countText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.muted,
+  },
+
+  // ── Empty State ────────────────────────────────────
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  emptySubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // ── Calendar Sheet ─────────────────────────────────
+  calendarHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  calendarIconBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  calendarTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  todayBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(37,99,235,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.15)',
+  },
+  todayBtnText: {
+    color: colors.primary,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  calendar: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  // ── Edit Time Sheet ────────────────────────────────
+  editHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  editIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  editTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  editSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+    marginTop: 1,
+  },
+  editDetailsCard: {
+    backgroundColor: colors.bg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+  },
+  editDetailRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  editDetailLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+  editDetailValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'left',
+  },
+  editDetailDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  currentTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(37,99,235,0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  currentTimeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+
+  // ── Service Points Window ──────────────────────────
+  pointsHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pointsIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  pointsTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  pointsSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+    marginTop: 1,
+  },
+  pointsCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pointsLoadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointsLoadingText: {
+    color: colors.muted,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  pointsEmptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  pointsEmptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  pointsEmptyText: {
+    color: colors.muted,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // ── Service Point Card ─────────────────────────────
+  pointCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+  },
+  pointCardHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pointDeviceIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: 'rgba(37,99,235,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointDeviceText: {
+    color: colors.text,
+    fontWeight: '800',
+    fontSize: 14,
+    textAlign: 'right',
+    flex: 1,
+  },
+  pointCardDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 10,
+  },
+  pointMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  pointMetaItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  pointMetaLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  pointMetaValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  pointMetaSeparator: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+  },
+  pointNotes: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+});
