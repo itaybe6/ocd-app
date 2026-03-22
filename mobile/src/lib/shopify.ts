@@ -2,6 +2,7 @@ const SHOPIFY_API_VERSION = '2025-01';
 
 const SHOPIFY_DOMAIN = process.env.EXPO_PUBLIC_SHOPIFY_DOMAIN?.trim();
 const SHOPIFY_STOREFRONT_TOKEN = process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN?.trim();
+const SHOPIFY_MENU_HANDLE = process.env.EXPO_PUBLIC_SHOPIFY_MENU_HANDLE?.trim() || 'main-menu';
 
 export type ShopifyProduct = {
   id: string;
@@ -20,6 +21,14 @@ export type ShopifyCollection = {
   title: string;
   handle: string;
   description: string;
+};
+
+export type ShopifyMenuItem = {
+  id: string;
+  title: string;
+  collectionHandle?: string;
+  collectionDescription?: string;
+  children?: ShopifyMenuItem[];
 };
 
 type ShopifyMoneyV2 = {
@@ -64,6 +73,20 @@ type ShopifyCollectionNode = {
   description: string;
 };
 
+type ShopifyMenuItemNode = {
+  id: string;
+  title: string;
+  url: string | null;
+  items?: ShopifyMenuItemNode[];
+  resource?: {
+    __typename: 'Collection';
+    id: string;
+    title: string;
+    handle: string;
+    description: string;
+  } | null;
+};
+
 type ShopifyCollectionsQueryResponse = {
   data?: {
     collections: {
@@ -85,6 +108,19 @@ type ShopifyCollectionProductsQueryResponse = {
           node: ShopifyProductNode;
         }>;
       };
+    } | null;
+  };
+  errors?: Array<{
+    message: string;
+  }>;
+};
+
+type ShopifyMenuQueryResponse = {
+  data?: {
+    menu: {
+      id: string;
+      title: string;
+      items: ShopifyMenuItemNode[];
     } | null;
   };
   errors?: Array<{
@@ -120,6 +156,33 @@ function normalizeCollection(node: ShopifyCollectionNode): ShopifyCollection {
     title: node.title,
     handle: node.handle,
     description: node.description,
+  };
+}
+
+function extractCollectionHandleFromUrl(url: string | null | undefined) {
+  if (!url) return undefined;
+
+  const match = url.match(/\/collections\/([^/?#]+)/i);
+  return match?.[1];
+}
+
+function normalizeMenuItem(node: ShopifyMenuItemNode): ShopifyMenuItem | null {
+  const collectionHandle = node.resource?.handle ?? extractCollectionHandleFromUrl(node.url);
+  const collectionDescription = node.resource?.description || undefined;
+  const children = (node.items ?? [])
+    .map((child) => normalizeMenuItem(child))
+    .filter((child): child is ShopifyMenuItem => !!child);
+
+  if (!collectionHandle && !children.length) {
+    return null;
+  }
+
+  return {
+    id: node.id,
+    title: node.title.trim(),
+    collectionHandle,
+    collectionDescription,
+    children: children.length ? children : undefined,
   };
 }
 
@@ -208,6 +271,67 @@ export async function fetchCollections(first = 50): Promise<ShopifyCollection[]>
   }
 
   return payload.data?.collections.edges.map((edge) => normalizeCollection(edge.node)) ?? [];
+}
+
+export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<ShopifyMenuItem[]> {
+  const query = `
+    query GetMenu($handle: String!) {
+      menu(handle: $handle) {
+        id
+        title
+        items {
+          id
+          title
+          url
+          resource {
+            __typename
+            ... on Collection {
+              id
+              title
+              handle
+              description
+            }
+          }
+          items {
+            id
+            title
+            url
+            resource {
+              __typename
+              ... on Collection {
+                id
+                title
+                handle
+                description
+              }
+            }
+            items {
+              id
+              title
+              url
+              resource {
+                __typename
+                ... on Collection {
+                  id
+                  title
+                  handle
+                  description
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyMenuQueryResponse>(query, { handle });
+
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((item) => item.message).join(', '));
+  }
+
+  return payload.data?.menu?.items.map((item) => normalizeMenuItem(item)).filter((item): item is ShopifyMenuItem => !!item) ?? [];
 }
 
 export async function fetchCollectionProducts(handle: string, first = 40): Promise<ShopifyProduct[]> {

@@ -8,11 +8,27 @@ import {
 import { colors } from '../theme/colors';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../state/AuthContext';
-import { StoreHomeScreen } from '../screens/store/StoreHomeScreen';
+import {
+  StoreCategoryScreen,
+  StoreHomeScreen,
+  StoreProductScreen,
+  type StoreProduct,
+} from '../screens/store/StoreHomeScreen';
+import { StoreCartScreen } from '../screens/store/StoreCartScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 
 type RootStackParamList = {
   Store: undefined;
+  StoreCategory: {
+    categoryId: string;
+    categoryTitle: string;
+    categoryDescription?: string;
+    parentTitle?: string;
+  };
+  StoreProduct: {
+    product: StoreProduct;
+  };
+  StoreCart: undefined;
   Login: undefined;
   Admin: undefined;
   Worker: undefined;
@@ -39,11 +55,59 @@ function CustomerEntryScreen() {
 function PublicStoreScreen({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'Store'>) {
-  return <StoreHomeScreen onAdminPress={() => navigation.navigate('Login')} />;
+  return (
+    <StoreHomeScreen
+      onAdminPress={() => navigation.navigate('Login')}
+      onOpenCart={() => navigation.navigate('StoreCart')}
+      onOpenProduct={(product) => navigation.navigate('StoreProduct', { product })}
+      onOpenCategory={(category) =>
+        navigation.navigate('StoreCategory', {
+          categoryId: category.id,
+          categoryTitle: category.title,
+          categoryDescription: category.description,
+          parentTitle: category.parentTitle,
+        })
+      }
+    />
+  );
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
   return <LoginScreen onBackToStore={() => navigation.navigate('Store')} />;
+}
+
+function StoreCategoryRoute({
+  navigation,
+  route,
+}: NativeStackScreenProps<RootStackParamList, 'StoreCategory'>) {
+  return (
+    <StoreCategoryScreen
+      onBack={() => navigation.goBack()}
+      onOpenCart={() => navigation.navigate('StoreCart')}
+      onOpenProduct={(product) => navigation.navigate('StoreProduct', { product })}
+      categoryId={route.params.categoryId}
+      categoryTitle={route.params.categoryTitle}
+      categoryDescription={route.params.categoryDescription}
+      parentTitle={route.params.parentTitle}
+    />
+  );
+}
+
+function StoreProductRoute({
+  navigation,
+  route,
+}: NativeStackScreenProps<RootStackParamList, 'StoreProduct'>) {
+  return (
+    <StoreProductScreen
+      onBack={() => navigation.goBack()}
+      onOpenCart={() => navigation.navigate('StoreCart')}
+      product={route.params.product}
+    />
+  );
+}
+
+function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreCart'>) {
+  return <StoreCartScreen onBack={() => navigation.goBack()} />;
 }
 
 export function RootNavigator() {
@@ -83,6 +147,9 @@ export function RootNavigator() {
         {!user ? (
           <>
             <Stack.Screen name="Store" component={PublicStoreScreen} />
+            <Stack.Screen name="StoreCategory" component={StoreCategoryRoute} />
+            <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
+            <Stack.Screen name="StoreCart" component={StoreCartRoute} />
             <Stack.Screen name="Login" component={LoginRoute} />
           </>
         ) : user.role === 'admin' ? (
