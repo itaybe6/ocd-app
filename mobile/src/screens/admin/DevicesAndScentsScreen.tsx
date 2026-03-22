@@ -155,6 +155,10 @@ export function DevicesAndScentsScreen() {
   const [scents, setScents] = useState<Scent[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [query, setQuery] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createType, setCreateType] = useState<'device' | 'scent'>('device');
+
   const [deviceName, setDeviceName] = useState('');
   const [deviceRefill, setDeviceRefill] = useState('');
   const [scentName, setScentName] = useState('');
@@ -194,6 +198,18 @@ export function DevicesAndScentsScreen() {
     }, [fetchAll])
   );
 
+  const filteredDevices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return devices;
+    return devices.filter((d) => d.name?.toLowerCase().includes(q));
+  }, [devices, query]);
+
+  const filteredScents = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return scents;
+    return scents.filter((s) => s.name?.toLowerCase().includes(q));
+  }, [scents, query]);
+
   const addDevice = async () => {
     const name = deviceName.trim();
     const refill_amount = Number(deviceRefill);
@@ -208,6 +224,7 @@ export function DevicesAndScentsScreen() {
       setDeviceName('');
       setDeviceRefill('');
       Toast.show({ type: 'success', text1: 'נוסף מכשיר' });
+      setCreateOpen(false);
       await fetchAll();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'הוספה נכשלה', text2: e?.message ?? 'Unknown error' });
@@ -228,6 +245,7 @@ export function DevicesAndScentsScreen() {
       if (error) throw error;
       setScentName('');
       Toast.show({ type: 'success', text1: 'נוסף ניחוח' });
+      setCreateOpen(false);
       await fetchAll();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'הוספה נכשלה', text2: e?.message ?? 'Unknown error' });
@@ -389,42 +407,65 @@ export function DevicesAndScentsScreen() {
     }
   };
 
-  const devicesHeader = useMemo(
-    () => (
-      <Card>
-        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>מכשירים</Text>
-        <View style={{ gap: 10 }}>
-          <Input label="שם מכשיר" value={deviceName} onChangeText={setDeviceName} placeholder="Device name" />
-          <Input label="כמות מילוי" value={deviceRefill} onChangeText={setDeviceRefill} keyboardType="numeric" placeholder="100" />
-          <Button title="הוסף מכשיר" onPress={addDevice} />
-        </View>
-      </Card>
-    ),
-    [deviceName, deviceRefill]
-  );
+  const listHeader = useMemo(() => {
+    const isSearching = !!query.trim();
+    return (
+      <View style={{ gap: 10, marginTop: 4 }}>
+        <View style={styles.actionRow}>
+          <View style={styles.searchWrap}>
+            <Entypo name="magnifying-glass" size={16} color="rgba(100,116,139,0.8)" />
+            <Input
+              label={undefined}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="חיפוש…"
+              style={styles.searchInput}
+            />
+            {isSearching ? (
+              <Pressable
+                hitSlop={10}
+                onPress={() => setQuery('')}
+                style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Entypo name="cross" size={16} color={colors.muted} />
+              </Pressable>
+            ) : null}
+          </View>
 
-  const scentsHeader = useMemo(
-    () => (
-      <Card>
-        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>ניחוחות</Text>
-        <View style={{ gap: 10 }}>
-          <Input label="שם ניחוח" value={scentName} onChangeText={setScentName} placeholder="Scent name" />
-          <Button title="הוסף ניחוח" onPress={addScent} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setCreateType('device');
+              setCreateOpen(true);
+            }}
+            hitSlop={8}
+          >
+            {({ pressed }) => (
+              <View style={[styles.plusBtn, pressed && { opacity: 0.82, transform: [{ scale: 0.96 }] }]}>
+                <Entypo name="plus" size={18} color="#FFFFFF" />
+              </View>
+            )}
+          </Pressable>
         </View>
-      </Card>
-    ),
-    [scentName]
-  );
+
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>מכשירים</Text>
+          {isSearching ? <Text style={styles.sectionMeta}>{filteredDevices.length} תוצאות</Text> : null}
+        </View>
+      </View>
+    );
+  }, [filteredDevices.length, query]);
 
   return (
     <Screen>
       <FlatList
-        style={{ marginTop: 4 }}
-        data={devices}
+        data={filteredDevices}
         keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
-        ListHeaderComponent={devicesHeader}
+        refreshing={loading}
+        onRefresh={fetchAll}
+        ListHeaderComponent={listHeader}
         renderItem={({ item }) => (
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -451,14 +492,24 @@ export function DevicesAndScentsScreen() {
             </View>
           </Card>
         )}
-        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין מכשירים.</Text>}
+        ListEmptyComponent={
+          <Text style={{ color: colors.muted, textAlign: 'right' }}>
+            {query.trim() ? 'לא נמצאו מכשירים.' : 'אין מכשירים.'}
+          </Text>
+        }
         ListFooterComponent={
           <View style={{ gap: 10, marginTop: 10 }}>
-            {scentsHeader}
-            {scents.length === 0 ? (
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>אין ניחוחות.</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>ניחוחות</Text>
+              {query.trim() ? <Text style={styles.sectionMeta}>{filteredScents.length} תוצאות</Text> : null}
+            </View>
+
+            {filteredScents.length === 0 ? (
+              <Text style={{ color: colors.muted, textAlign: 'right' }}>
+                {query.trim() ? 'לא נמצאו ניחוחות.' : 'אין ניחוחות.'}
+              </Text>
             ) : (
-              scents.map((item) => (
+              filteredScents.map((item) => (
                 <Card key={item.id}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -485,6 +536,82 @@ export function DevicesAndScentsScreen() {
           </View>
         }
       />
+
+      <ModalSheet visible={createOpen} onClose={() => setCreateOpen(false)} containerStyle={styles.createSheet}>
+        <View style={{ gap: 12 }}>
+          <View style={styles.createHeaderRow}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <View style={styles.createIconBubble}>
+                <Entypo name="plus" size={16} color="#fff" />
+              </View>
+              <View style={{ gap: 2 }}>
+                <Text style={styles.createTitle}>הוספה</Text>
+                <Text style={styles.createSubtitle}>בחר סוג ומלא פרטים</Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => setCreateOpen(false)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.closeIconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] }]}
+            >
+              <Entypo name="cross" size={18} color={colors.muted} />
+            </Pressable>
+          </View>
+
+          <View style={styles.segmented}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setCreateType('device')}
+              style={({ pressed }) => [
+                styles.segmentedItem,
+                createType === 'device' && styles.segmentedItemActive,
+                pressed && { opacity: 0.92 },
+              ]}
+            >
+              <Text style={[styles.segmentedText, createType === 'device' && styles.segmentedTextActive]}>מכשיר</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setCreateType('scent')}
+              style={({ pressed }) => [
+                styles.segmentedItem,
+                createType === 'scent' && styles.segmentedItemActive,
+                pressed && { opacity: 0.92 },
+              ]}
+            >
+              <Text style={[styles.segmentedText, createType === 'scent' && styles.segmentedTextActive]}>ניחוח</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.createFormWrap}>
+            {createType === 'device' ? (
+              <View style={{ gap: 10 }}>
+                <Text style={styles.createFormTitle}>פרטי מכשיר</Text>
+                <Input label="שם מכשיר" value={deviceName} onChangeText={setDeviceName} placeholder="לדוגמה: A100" />
+                <Input
+                  label="כמות מילוי"
+                  value={deviceRefill}
+                  onChangeText={setDeviceRefill}
+                  keyboardType="numeric"
+                  placeholder="100"
+                />
+                <Button
+                  title="הוסף מכשיר"
+                  onPress={addDevice}
+                  disabled={!deviceName.trim() || !Number(deviceRefill)}
+                />
+              </View>
+            ) : (
+              <View style={{ gap: 10 }}>
+                <Text style={styles.createFormTitle}>פרטי ניחוח</Text>
+                <Input label="שם ניחוח" value={scentName} onChangeText={setScentName} placeholder="לדוגמה: Ocean" />
+                <Button title="הוסף ניחוח" onPress={addScent} disabled={!scentName.trim()} />
+              </View>
+            )}
+          </View>
+        </View>
+      </ModalSheet>
 
       <ModalSheet visible={!!deleteDevice} onClose={() => setDeleteDevice(null)}>
         {!!deleteDevice && (
@@ -543,6 +670,161 @@ export function DevicesAndScentsScreen() {
 }
 
 const styles = StyleSheet.create({
+  actionRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+  },
+  searchWrap: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(15,23,42,0.05)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    borderWidth: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    backgroundColor: 'transparent',
+    fontSize: 14,
+  },
+  clearBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(100,116,139,0.10)',
+  },
+  plusBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.text,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 2,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  sectionMeta: {
+    color: colors.muted,
+    fontWeight: '800',
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  closeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: 'rgba(100,116,139,0.10)',
+  },
+  closeChipText: { color: colors.muted, fontWeight: '800', fontSize: 13 },
+  typeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15,23,42,0.05)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  typeChipActive: {
+    backgroundColor: 'rgba(37,99,235,0.12)',
+    borderColor: 'rgba(37,99,235,0.30)',
+  },
+  typeChipText: { color: colors.muted, fontWeight: '900' },
+  typeChipTextActive: { color: colors.primary },
+
+  createSheet: {
+    maxHeight: '82%',
+    paddingHorizontal: 16,
+    paddingBottom: 18,
+  },
+  createHeaderRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  createIconBubble: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.text,
+  },
+  createTitle: { color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' },
+  createSubtitle: { color: colors.muted, fontSize: 12, fontWeight: '800', textAlign: 'right' },
+  closeIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(100,116,139,0.10)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  segmented: {
+    flexDirection: 'row-reverse',
+    backgroundColor: 'rgba(15,23,42,0.06)',
+    borderRadius: 18,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  segmentedItem: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentedItemActive: {
+    backgroundColor: colors.elevated,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  segmentedText: { color: colors.muted, fontWeight: '900' },
+  segmentedTextActive: { color: colors.text },
+  createFormWrap: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 18,
+    padding: 12,
+  },
+  createFormTitle: {
+    color: colors.text,
+    fontWeight: '900',
+    textAlign: 'right',
+    fontSize: 14,
+  },
   iconBtn: {
     width: 34,
     height: 34,

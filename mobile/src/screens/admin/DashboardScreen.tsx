@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
-import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { endOfDay, endOfMonth, format, startOfDay, startOfMonth } from 'date-fns';
 import { useFocusEffect } from '@react-navigation/native';
 import { ClipboardList, Coins, UserRound, Users } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
@@ -61,6 +61,8 @@ export function DashboardScreen() {
   const [workers, setWorkers] = useState<SimpleUser[]>([]);
   const [customers, setCustomers] = useState<SimpleUser[]>([]);
   const [servicePoints, setServicePoints] = useState<ServicePoint[]>([]);
+  const [workerDetailsOpen, setWorkerDetailsOpen] = useState(false);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -114,6 +116,49 @@ export function DashboardScreen() {
     const jobsThisMonth = monthJobs.length;
     const pendingThisMonth = monthJobs.filter((j) => j.status === 'pending').length;
 
+    const monthByWorker = monthJobs.reduce<Record<string, { total: number; pending: number; completed: number }>>((acc, j) => {
+      const row = acc[j.worker_id] ?? { total: 0, pending: 0, completed: 0 };
+      row.total += 1;
+      if (j.status === 'pending') row.pending += 1;
+      else row.completed += 1;
+      acc[j.worker_id] = row;
+      return acc;
+    }, {});
+
+    const dailyDistribution = (() => {
+      const start = startOfDay(new Date()).getTime();
+      const end = endOfDay(new Date()).getTime();
+      const jobsToday = monthJobs.filter((j) => {
+        const t = new Date(j.date).getTime();
+        return Number.isFinite(t) && t >= start && t <= end;
+      });
+
+      const nameById = new Map(workers.map((w) => [w.id, w.name]));
+      const avatarById = new Map(workers.map((w) => [w.id, w.avatar_url ?? null]));
+
+      const counts = jobsToday.reduce<Record<string, { total: number; pending: number; completed: number }>>((acc, j) => {
+        const row = acc[j.worker_id] ?? { total: 0, pending: 0, completed: 0 };
+        row.total += 1;
+        if (j.status === 'pending') row.pending += 1;
+        else row.completed += 1;
+        acc[j.worker_id] = row;
+        return acc;
+      }, {});
+
+      const rows = Object.entries(counts)
+        .map(([id, c]) => ({
+          id,
+          name: nameById.get(id) ?? 'עובד',
+          avatar_url: avatarById.get(id) ?? null,
+          total: c.total,
+          pending: c.pending,
+          completed: c.completed,
+        }))
+        .sort((a, b) => b.total - a.total || b.pending - a.pending);
+
+      return { totalJobs: jobsToday.length, rows };
+    })();
+
     const deviceDistribution = servicePoints.reduce<Record<string, number>>((acc, sp) => {
       const key = sp.device_type || 'unknown';
       acc[key] = (acc[key] ?? 0) + 1;
@@ -128,21 +173,38 @@ export function DashboardScreen() {
       .slice(0, 6);
 
     const activeWorkerRows = (() => {
-      const pending = monthJobs.filter((j) => j.status === 'pending');
-      const counts = pending.reduce<Record<string, number>>((acc, j) => {
-        acc[j.worker_id] = (acc[j.worker_id] ?? 0) + 1;
-        return acc;
-      }, {});
-      const nameById = new Map(workers.map((w) => [w.id, w.name]));
-      const avatarById = new Map(workers.map((w) => [w.id, w.avatar_url ?? null]));
-      return Object.entries(counts)
-        .map(([id, count]) => ({ id, count, name: nameById.get(id) ?? 'עובד', avatar_url: avatarById.get(id) ?? null }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
+      return workers
+        .map((w) => ({
+          id: w.id,
+          name: w.name,
+          avatar_url: w.avatar_url ?? null,
+          count: monthByWorker[w.id]?.pending ?? 0,
+        }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'he'));
     })();
 
-    return { customersCount, totalPointsPrice, jobsThisMonth, pendingThisMonth, activeWorkers, deviceRows, activeWorkerRows };
+    return {
+      customersCount,
+      totalPointsPrice,
+      jobsThisMonth,
+      pendingThisMonth,
+      monthByWorker,
+      dailyDistribution,
+      activeWorkers,
+      deviceRows,
+      activeWorkerRows,
+    };
   }, [customers, monthJobs, servicePoints, workers]);
+
+  const selectedWorker = useMemo(() => {
+    if (!selectedWorkerId) return null;
+    return workers.find((w) => w.id === selectedWorkerId) ?? null;
+  }, [selectedWorkerId, workers]);
+
+  const selectedWorkerMonth = useMemo(() => {
+    if (!selectedWorkerId) return { total: 0, pending: 0, completed: 0 };
+    return stats.monthByWorker[selectedWorkerId] ?? { total: 0, pending: 0, completed: 0 };
+  }, [selectedWorkerId, stats.monthByWorker]);
 
   return (
     <Screen>
@@ -340,53 +402,92 @@ export function DashboardScreen() {
               elevation: 2,
             }}
           >
-            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>משימות אחרונות</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <View
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: '#EEF2FF',
+                  borderWidth: 1,
+                  borderColor: '#C7D2FE',
+                }}
+              >
+                <Text style={{ color: '#3730A3', fontWeight: '900' }}>{`היום · ${format(new Date(), 'd.M')}`}</Text>
+              </View>
 
-            <View style={{ marginTop: 10, gap: 10 }}>
-              {recentJobs.length ? (
-                recentJobs.map((j) => (
-                  <View
-                    key={j.id}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      backgroundColor: colors.bg,
-                      borderRadius: 16,
-                      paddingVertical: 12,
-                      paddingHorizontal: 12,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                    }}
-                  >
-                    <View
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 999,
-                        backgroundColor: j.status === 'pending' ? '#FEF3C7' : '#DCFCE7',
-                        borderWidth: 1,
-                        borderColor: j.status === 'pending' ? '#F59E0B' : '#22C55E',
-                      }}
-                    >
-                      <Text style={{ color: j.status === 'pending' ? '#92400E' : '#166534', fontWeight: '900' }}>
-                        {jobStatusLabel(j.status)}
-                      </Text>
-                    </View>
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>התפלגות משימות יומיות לפי עובדים</Text>
+                <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right', marginTop: 4 }}>
+                  {`סה״כ ${stats.dailyDistribution.totalJobs} משימות`}
+                </Text>
+              </View>
+            </View>
 
-                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>
-                        {jobTitle(j)}
-                      </Text>
-                      <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginTop: 4 }}>
-                        {formatShortDate(j.date)}
-                      </Text>
-                    </View>
-                  </View>
-                ))
+            <View style={{ marginTop: 12 }}>
+              {stats.dailyDistribution.rows.length ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10, paddingVertical: 2, paddingHorizontal: 2 }}
+                >
+                  {stats.dailyDistribution.rows.map((w) => {
+                    const pct = w.total ? Math.round((w.completed / w.total) * 100) : 0;
+                    return (
+                      <View
+                        key={w.id}
+                        style={{
+                          width: 190,
+                          borderRadius: 18,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          backgroundColor: colors.bg,
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <Avatar size={44} uri={w.avatar_url ?? null} name={w.name} />
+                          <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }} numberOfLines={1}>
+                              {w.name}
+                            </Text>
+                            <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right', marginTop: 3 }}>
+                              {`פתוחות ${w.pending} · הושלמו ${w.completed}`}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View
+                          style={{
+                            marginTop: 10,
+                            height: 10,
+                            borderRadius: 999,
+                            backgroundColor: '#E2E8F0',
+                            overflow: 'hidden',
+                            borderWidth: 1,
+                            borderColor: '#CBD5E1',
+                          }}
+                        >
+                          <View
+                            style={{
+                              height: '100%',
+                              width: `${pct}%`,
+                              backgroundColor: pct === 100 ? colors.success : '#3B82F6',
+                            }}
+                          />
+                        </View>
+
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+                          <Text style={{ color: colors.muted, fontWeight: '800' }}>סה״כ</Text>
+                          <Text style={{ color: colors.text, fontWeight: '900' }}>{w.total}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
               ) : (
-                <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right' }}>אין משימות להצגה.</Text>
+                <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right' }}>אין משימות להיום.</Text>
               )}
             </View>
           </Card>
@@ -403,15 +504,19 @@ export function DashboardScreen() {
           >
             <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>עובדים פעילים</Text>
 
-            <View style={{ marginTop: 10, gap: 10 }}>
+            <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               {stats.activeWorkerRows.length ? (
                 stats.activeWorkerRows.map((w) => (
-                  <View
+                  <Pressable
                     key={w.id}
+                    onPress={() => {
+                      setSelectedWorkerId(w.id);
+                      setWorkerDetailsOpen(true);
+                    }}
+                    android_ripple={{ color: 'rgba(15,23,42,0.06)' }}
                     style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
+                      flexBasis: '48%',
+                      flexGrow: 1,
                       paddingVertical: 12,
                       paddingHorizontal: 12,
                       borderRadius: 16,
@@ -420,26 +525,15 @@ export function DashboardScreen() {
                       backgroundColor: colors.bg,
                     }}
                   >
-                    <Avatar size={34} uri={w.avatar_url ?? null} name={w.name} />
-                    <View
-                      style={{
-                        minWidth: 40,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: '#93C5FD',
-                        backgroundColor: '#EFF6FF',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={{ color: '#1D4ED8', fontWeight: '900' }}>{w.count}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                        <Avatar size={36} uri={w.avatar_url ?? null} name={w.name} />
+                        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flexShrink: 1 }} numberOfLines={1}>
+                          {w.name}
+                        </Text>
+                      </View>
                     </View>
-
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>
-                      {w.name}
-                    </Text>
-                  </View>
+                  </Pressable>
                 ))
               ) : (
                 <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right' }}>אין עובדים פעילים כרגע</Text>
@@ -448,6 +542,94 @@ export function DashboardScreen() {
           </Card>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={workerDetailsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setWorkerDetailsOpen(false);
+          setSelectedWorkerId(null);
+        }}
+      >
+        <Pressable
+          onPress={() => {
+            setWorkerDetailsOpen(false);
+            setSelectedWorkerId(null);
+          }}
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(15,23,42,0.45)',
+            padding: 16,
+            justifyContent: 'center',
+          }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: colors.elevated,
+              borderRadius: 22,
+              borderWidth: 1,
+              borderColor: colors.border,
+              padding: 14,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Pressable
+                onPress={() => {
+                  setWorkerDetailsOpen(false);
+                  setSelectedWorkerId(null);
+                }}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  borderRadius: 12,
+                  backgroundColor: colors.bg,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ color: colors.text, fontWeight: '900' }}>סגור</Text>
+              </Pressable>
+
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={{ color: colors.muted, fontWeight: '800', textAlign: 'right' }}>סיכום חודשי</Text>
+                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginTop: 2 }} numberOfLines={1}>
+                  {selectedWorker?.name ?? 'עובד'}
+                </Text>
+              </View>
+
+              <Avatar size={44} uri={selectedWorker?.avatar_url ?? null} name={selectedWorker?.name ?? ''} />
+            </View>
+
+            <View style={{ marginTop: 12, gap: 10 }}>
+              <View
+                style={{
+                  backgroundColor: colors.bg,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: colors.muted, fontWeight: '800' }}>הושלמו החודש</Text>
+                  <Text style={{ color: colors.success, fontWeight: '900', fontSize: 18 }}>{selectedWorkerMonth.completed}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                  <Text style={{ color: colors.muted, fontWeight: '800' }}>פתוחות</Text>
+                  <Text style={{ color: colors.text, fontWeight: '900' }}>{selectedWorkerMonth.pending}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                  <Text style={{ color: colors.muted, fontWeight: '800' }}>סה״כ</Text>
+                  <Text style={{ color: colors.text, fontWeight: '900' }}>{selectedWorkerMonth.total}</Text>
+                </View>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }

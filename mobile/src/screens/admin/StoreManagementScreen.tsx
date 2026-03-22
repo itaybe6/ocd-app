@@ -4,8 +4,11 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -13,10 +16,6 @@ import {
 } from 'react-native';
 import Animated, {
   Extrapolate,
-  FadeIn,
-  FadeInUp,
-  FadeOut,
-  FadeOutDown,
   interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -27,10 +26,12 @@ import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalSheet } from '../../components/ModalSheet';
 import { supabase } from '../../lib/supabase';
 import { fetchProducts, type ShopifyProduct } from '../../lib/shopify';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
 type ProductLite = {
   handle: string;
@@ -184,15 +185,17 @@ function ProductPickerModal({
   visible,
   products,
   loading,
-  selectedHandle,
-  onSelect,
+  multi,
+  selectedHandles,
+  onChangeSelectedHandles,
   onClose,
 }: {
   visible: boolean;
   products: ProductLite[];
   loading: boolean;
-  selectedHandle: string;
-  onSelect: (p: ProductLite) => void;
+  multi?: boolean;
+  selectedHandles: string[];
+  onChangeSelectedHandles: (handles: string[]) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -211,118 +214,113 @@ function ProductPickerModal({
     );
   }, [products, q]);
 
+  const selectedSet = useMemo(() => new Set(selectedHandles), [selectedHandles]);
+  const selectedCount = selectedHandles.length;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-      presentationStyle="overFullScreen"
-    >
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Animated.View
-          entering={FadeIn.duration(240)}
-          exiting={FadeOut.duration(240)}
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.52)' }]}
-        />
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-
-        <Animated.View
-          entering={FadeInUp.duration(280)}
-          exiting={FadeOutDown.duration(240)}
-          style={pickerStyles.sheet}
-        >
-          {/* Handle bar */}
-          <View style={pickerStyles.handleRow}>
-            <View style={pickerStyles.handle} />
-          </View>
-
-          {/* Header */}
-          <View style={pickerStyles.headerRow}>
-            <Text style={pickerStyles.headerTitle}>בחר מוצר</Text>
-            <Pressable onPress={onClose} style={pickerStyles.closeBtn}>
-              <Text style={pickerStyles.closeBtnText}>סגור</Text>
+    <ModalSheet visible={visible} onClose={onClose} containerStyle={pickerStyles.sheet}>
+      {/* Header */}
+      <View style={pickerStyles.headerRow}>
+        <Text style={pickerStyles.headerTitle}>{multi ? 'בחר מוצרים' : 'בחר מוצר'}</Text>
+        <View style={{ flexDirection: 'row-reverse', gap: 8, alignItems: 'center' }}>
+          {multi ? (
+            <Pressable
+              onPress={() => onChangeSelectedHandles([])}
+              style={[pickerStyles.closeBtn, { backgroundColor: 'rgba(239,68,68,0.10)' }]}
+            >
+              <Text style={[pickerStyles.closeBtnText, { color: colors.danger }]}>נקה</Text>
             </Pressable>
-          </View>
-
-          {/* Search */}
-          <View style={pickerStyles.searchWrap}>
-            <Text style={pickerStyles.searchIcon}>⌕</Text>
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="חפש מוצר…"
-              placeholderTextColor="rgba(100,116,139,0.6)"
-              style={pickerStyles.searchInput}
-            />
-          </View>
-
-          {/* List */}
-          {loading ? (
-            <View style={pickerStyles.loadingWrap}>
-              <ActivityIndicator color={colors.primary} />
-              <Text style={pickerStyles.loadingText}>טוען מוצרים…</Text>
-            </View>
-          ) : (
-            <AnimatedFlatList
-              data={filtered}
-              keyExtractor={(item) => item.handle}
-              contentContainerStyle={pickerStyles.listContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-              CellRendererComponent={ProductPickerCellRenderer}
-              renderItem={({ item, index }: any) => {
-                const selected = item.handle === selectedHandle;
-                return (
-                  <AnimatedProductRow
-                    item={item}
-                    index={index}
-                    scrollY={scrollY}
-                    selected={selected}
-                    onPress={() => {
-                      onSelect(item);
-                      onClose();
-                    }}
-                  />
-                );
-              }}
-              ListEmptyComponent={
-                <View style={pickerStyles.emptyWrap}>
-                  <Text style={pickerStyles.emptyText}>לא נמצאו מוצרים{q ? ` עבור "${q}"` : ''}</Text>
-                </View>
-              }
-            />
-          )}
-        </Animated.View>
+          ) : null}
+          <Pressable onPress={onClose} style={pickerStyles.closeBtn}>
+            <Text style={pickerStyles.closeBtnText}>{multi ? `סגור (${selectedCount})` : 'סגור'}</Text>
+          </Pressable>
+        </View>
       </View>
-    </Modal>
+
+      {/* Search */}
+      <View style={pickerStyles.searchWrap}>
+        <Text style={pickerStyles.searchIcon}>⌕</Text>
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          placeholder="חפש מוצר…"
+          placeholderTextColor="rgba(100,116,139,0.6)"
+          style={pickerStyles.searchInput}
+        />
+      </View>
+
+      {/* List */}
+      {loading ? (
+        <View style={pickerStyles.loadingWrap}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={pickerStyles.loadingText}>טוען מוצרים…</Text>
+        </View>
+      ) : (
+        <AnimatedFlatList
+          data={filtered}
+          keyExtractor={(item: any, index: number) => item?.handle ?? String(index)}
+          contentContainerStyle={pickerStyles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          CellRendererComponent={ProductPickerCellRenderer}
+          renderItem={({ item, index }: any) => {
+            const product = item as ProductLite;
+            const isSelected = selectedSet.has(product.handle);
+            return (
+              <AnimatedProductRow
+                item={product}
+                index={index}
+                scrollY={scrollY}
+                selected={isSelected}
+                onPress={() => {
+                  if (!multi) {
+                    onChangeSelectedHandles([product.handle]);
+                    onClose();
+                    return;
+                  }
+                  const next = new Set(selectedSet);
+                  if (next.has(product.handle)) next.delete(product.handle);
+                  else next.add(product.handle);
+                  onChangeSelectedHandles(Array.from(next));
+                }}
+              />
+            );
+          }}
+          ListEmptyComponent={
+            <View style={pickerStyles.emptyWrap}>
+              <Text style={pickerStyles.emptyText}>לא נמצאו מוצרים{q ? ` עבור "${q}"` : ''}</Text>
+            </View>
+          }
+        />
+      )}
+
+      {multi ? (
+        <View style={pickerStyles.footerRow}>
+          <Button title="אישור" fullWidth={false} onPress={onClose} />
+          <Text style={pickerStyles.footerHint}>
+            נבחרו {selectedCount}
+          </Text>
+        </View>
+      ) : null}
+    </ModalSheet>
   );
 }
 
 const pickerStyles = StyleSheet.create({
   sheet: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: colors.border,
     maxHeight: '82%',
-    paddingBottom: 28,
+    paddingBottom: 14,
   },
-  handleRow: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
-  handle: { width: 44, height: 5, borderRadius: 999, backgroundColor: colors.border },
   headerRow: {
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingBottom: 12,
-    paddingTop: 4,
+    paddingHorizontal: 4,
+    paddingBottom: 10,
+    paddingTop: 0,
   },
   headerTitle: {
     color: colors.text,
@@ -409,29 +407,44 @@ const pickerStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkMark: { color: 'rgba(37,99,235,1)', fontSize: 13, fontWeight: '900' },
+  footerRow: {
+    paddingTop: 10,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 6,
+  },
+  footerHint: { color: colors.muted, fontWeight: '800' },
 });
 
 /* ─── Main screen ─── */
 export function StoreManagementScreen() {
   const { setIsLoading } = useLoading();
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [customImageUrl, setCustomImageUrl] = useState('');
-  const [useProductImage, setUseProductImage] = useState(true);
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
-  const [selectedHandle, setSelectedHandle] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(false);
 
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.handle === selectedHandle) ?? null,
-    [products, selectedHandle]
-  );
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [pushTitle, setPushTitle] = useState('');
+  const [pushBody, setPushBody] = useState('');
+  const [pushScope, setPushScope] = useState<'general' | 'product'>('general');
+  const [selectedHandles, setSelectedHandles] = useState<string[]>([]);
+  const [scheduleMode, setScheduleMode] = useState<'now' | 'scheduled'>('now');
+  const [scheduledAt, setScheduledAt] = useState<Date>(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 10);
+    return d;
+  });
+  const [iosPickerMode, setIosPickerMode] = useState<'date' | 'time'>('date');
 
-  const effectiveImageUrl = useMemo(() => {
-    if (useProductImage) return selectedProduct?.imageUrl ?? '';
-    return customImageUrl.trim();
-  }, [customImageUrl, selectedProduct?.imageUrl, useProductImage]);
+  const selectedProducts = useMemo(() => {
+    const map = new Map(products.map((p) => [p.handle, p]));
+    return selectedHandles.map((h) => map.get(h)).filter(Boolean) as ProductLite[];
+  }, [products, selectedHandles]);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -450,24 +463,41 @@ export function StoreManagementScreen() {
     loadProducts();
   }, [loadProducts]);
 
-  const sendBroadcast = async () => {
-    const t = title.trim();
-    const b = body.trim();
+  const openWizard = () => {
+    setWizardStep(0);
+    setPushTitle('');
+    setPushBody('');
+    setPushScope('general');
+    setSelectedHandles([]);
+    setScheduleMode('now');
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 10);
+    setScheduledAt(d);
+    setWizardOpen(true);
+  };
+
+  const submitWizard = async () => {
+    const t = pushTitle.trim();
+    const b = pushBody.trim();
     if (!t || !b) {
-      Toast.show({ type: 'error', text1: 'חסרים שדות', text2: 'יש להזין כותרת וטקסט' });
+      Toast.show({ type: 'error', text1: 'חסרים שדות', text2: 'יש להזין כותרת ותוכן' });
       return;
     }
-    if (!selectedHandle) {
-      Toast.show({ type: 'error', text1: 'חסר מוצר', text2: 'בחר מוצר כדי שההתראה תפתח אותו באפליקציה' });
-      return;
+    if (scheduleMode === 'scheduled') {
+      const now = Date.now();
+      if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() < now + 30_000) {
+        Toast.show({ type: 'error', text1: 'תזמון לא תקין', text2: 'בחר תאריך/שעה לפחות 30 שניות קדימה' });
+        return;
+      }
     }
 
-    const payload = {
+    const payload: any = {
       title: t,
       body: b,
-      productHandle: selectedHandle,
-      productTitle: selectedProduct?.title ?? null,
-      imageUrl: effectiveImageUrl || null,
+      scope: pushScope,
+      productHandles: pushScope === 'product' ? selectedHandles : [],
+      scheduleAt: scheduleMode === 'scheduled' ? scheduledAt.toISOString() : null,
+      imageUrl: null,
     };
 
     try {
@@ -478,14 +508,20 @@ export function StoreManagementScreen() {
         headers: secret ? { 'x-admin-secret': secret } : undefined,
       });
       if (error) throw error;
-      const total = (data as any)?.totalTokens ?? null;
-      const ok = (data as any)?.successCount ?? null;
-      const bad = (data as any)?.errorCount ?? null;
-      Toast.show({
-        type: 'success',
-        text1: 'ההתראה שוגרה',
-        text2: total != null ? `נשלח: ${ok ?? '—'} תקין, ${bad ?? '—'} שגוי (סה״כ ${total})` : undefined,
-      });
+      const mode = (data as any)?.mode ?? null;
+      if (mode === 'scheduled') {
+        Toast.show({ type: 'success', text1: 'הפוש תוזמן', text2: 'הוא יישלח בזמן שבחרת (בהרצת המתזמן בשרת)' });
+      } else {
+        const total = (data as any)?.totalTokens ?? null;
+        const ok = (data as any)?.successCount ?? null;
+        const bad = (data as any)?.errorCount ?? null;
+        Toast.show({
+          type: 'success',
+          text1: 'הפוש שוגר',
+          text2: total != null ? `נשלח: ${ok ?? '—'} תקין, ${bad ?? '—'} שגוי (סה״כ ${total})` : undefined,
+        });
+      }
+      setWizardOpen(false);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שליחה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -493,151 +529,426 @@ export function StoreManagementScreen() {
     }
   };
 
-  /* ─── Notification preview ─── */
-  const canPreview = title.trim() || body.trim();
+  const canNextTitle = !!pushTitle.trim();
+  const canNextBody = !!pushBody.trim();
+
+  const stepTitle = useMemo(() => {
+    return ['כותרת', 'סוג', 'מוצרים', 'תוכן', 'תזמון'][wizardStep] ?? '';
+  }, [wizardStep]);
 
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', fontSize: 18 }}>שיגור פושים</Text>
-          <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right', lineHeight: 20 }}>
-            שגר התראה לכל המשתמשים. בלחיצה על ההתראה, המשתמש יגיע למוצר שבחרת.
-          </Text>
-        </Card>
 
-        {/* Notification text */}
-        <Card>
-          <Text style={s.sectionLabel}>תוכן ההתראה</Text>
-          <View style={{ gap: 10, marginTop: 10 }}>
-            <Input label="כותרת" value={title} onChangeText={setTitle} placeholder="לדוגמה: מבצע חדש בחנות" />
-            <Input
-              label="גוף ההתראה"
-              value={body}
-              onChangeText={setBody}
-              placeholder="לדוגמה: 20% הנחה על כל המוצרים עד חצות"
-              multiline
-              style={{ minHeight: 88, textAlignVertical: 'top' }}
-            />
+        {/* ─── Push launch hero card ─── */}
+        <Pressable onPress={openWizard} style={({ pressed }) => [s.heroCard, pressed && s.heroCardPressed]}>
+          {/* Accent strip */}
+          <View style={s.heroAccentStrip} />
+
+          {/* Top row */}
+          <View style={s.heroTopRow}>
+            <View style={s.heroIconWrap}>
+              <Text style={s.heroIconText}>📣</Text>
+            </View>
+            <View style={s.heroBadge}>
+              <Text style={s.heroBadgeText}>PUSH</Text>
+            </View>
           </View>
 
-          {/* Live preview chip */}
-          {canPreview && (
-            <View style={s.previewChip}>
-              <View style={s.previewChipBar} />
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={s.previewChipTitle}>{title.trim() || 'כותרת…'}</Text>
-                <Text numberOfLines={2} style={s.previewChipBody}>{body.trim() || 'תוכן…'}</Text>
-              </View>
-              {!!effectiveImageUrl && (
-                <Image
-                  source={{ uri: effectiveImageUrl }}
-                  style={{ width: 44, height: 44, borderRadius: 10 }}
-                  resizeMode="cover"
-                />
-              )}
-            </View>
-          )}
-        </Card>
+          <Text style={s.heroTitle}>שיגור פושים</Text>
+          <Text style={s.heroSub}>שגר התראה ישירות לכל המשתמשים</Text>
 
-        {/* Product link */}
-        <Card>
-          <Text style={s.sectionLabel}>מוצר לקישור</Text>
-
-          <Pressable
-            onPress={() => setProductPickerOpen(true)}
-            disabled={loadingProducts}
-            style={({ pressed }) => [s.productTrigger, pressed && s.productTriggerPressed]}
-          >
-            {/* Left: image */}
-            <ProductThumb imageUrl={selectedProduct?.imageUrl ?? null} size={52} />
-
-            {/* Center: text */}
-            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <Text style={s.productTriggerLabel}>מוצר</Text>
-              {loadingProducts ? (
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={s.productTriggerValue}>טוען מוצרים…</Text>
+          {/* Step pills */}
+          <View style={s.heroSteps}>
+            {['כותרת', 'סוג', 'מוצרים', 'תוכן', 'תזמון'].map((step, i) => (
+              <View key={step} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
+                <View style={s.heroStep}>
+                  <Text style={s.heroStepNum}>{i + 1}</Text>
+                  <Text style={s.heroStepLabel}>{step}</Text>
                 </View>
-              ) : (
-                <Text numberOfLines={1} style={[s.productTriggerValue, !selectedProduct && s.productTriggerPlaceholder]}>
-                  {selectedProduct ? selectedProduct.title : 'בחר מוצר…'}
-                </Text>
-              )}
-              {selectedProduct && (
-                <Text style={s.productTriggerPrice}>
-                  {formatPrice(selectedProduct.price, selectedProduct.currencyCode)}
-                </Text>
-              )}
-            </View>
-
-            {/* Right: chevron */}
-            <View style={s.chevronWrap}>
-              <Text style={s.chevronIcon}>‹</Text>
-            </View>
-          </Pressable>
-
-          {selectedProduct && (
-            <Pressable onPress={() => setSelectedHandle('')} style={s.clearBtn}>
-              <Text style={s.clearBtnText}>× הסר בחירה</Text>
-            </Pressable>
-          )}
-        </Card>
-
-        {/* Image source */}
-        <Card>
-          <Text style={s.sectionLabel}>תמונה להתראה</Text>
-
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-            <Pressable
-              onPress={() => setUseProductImage(true)}
-              style={[s.imgToggleBtn, useProductImage && s.imgToggleBtnActive]}
-            >
-              <Text style={[s.imgToggleBtnText, useProductImage && s.imgToggleBtnTextActive]}>תמונת המוצר</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setUseProductImage(false)}
-              style={[s.imgToggleBtn, !useProductImage && s.imgToggleBtnActive]}
-            >
-              <Text style={[s.imgToggleBtnText, !useProductImage && s.imgToggleBtnTextActive]}>קישור מותאם</Text>
-            </Pressable>
+                {i < 4 ? <Text style={s.heroStepArrow}>›</Text> : null}
+              </View>
+            ))}
           </View>
 
-          {!useProductImage && (
-            <View style={{ marginTop: 10 }}>
-              <Input value={customImageUrl} onChangeText={setCustomImageUrl} placeholder="https://example.com/image.jpg" />
-            </View>
-          )}
+          {/* CTA */}
+          <View style={s.heroCta}>
+            <Text style={s.heroCtaText}>התחל שיגור</Text>
+            <Text style={s.heroCtaArrow}>←</Text>
+          </View>
+        </Pressable>
 
-          {!!effectiveImageUrl && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '700', fontSize: 12, marginBottom: 8 }}>
-                תצוגה מקדימה
-              </Text>
-              <Image
-                source={{ uri: effectiveImageUrl }}
-                style={{ width: '100%', height: 170, borderRadius: 18, backgroundColor: 'rgba(15,23,42,0.05)' }}
-                resizeMode="cover"
-              />
-              <Text style={{ color: colors.muted, marginTop: 8, textAlign: 'right', fontSize: 11 }}>
-                ב־iOS נדרשת Notification Service Extension לתמונה בפוש.
-              </Text>
-            </View>
-          )}
-        </Card>
+        {/* Products status pill */}
+        <View style={s.statusRow}>
+          <View style={[s.statusDot, loadingProducts && { backgroundColor: colors.warning }]} />
+          <Text style={s.statusText}>
+            {loadingProducts ? 'טוען מוצרים…' : `${products.length} מוצרים זמינים לבחירה`}
+          </Text>
+        </View>
 
-        {/* Send */}
-        <Button title="שגר פוש לכל המשתמשים" onPress={sendBroadcast} />
       </ScrollView>
+
+      {/* ─── Wizard full-screen modal ─── */}
+      <Modal
+        visible={wizardOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setWizardOpen(false)}
+        statusBarTranslucent
+      >
+        <SafeAreaView style={wz.root}>
+          <StatusBar barStyle="dark-content" />
+
+          {/* Header */}
+          <View style={wz.header}>
+            <Pressable
+              onPress={() => {
+                if (wizardStep === 0) setWizardOpen(false);
+                else setWizardStep((p) => p - 1);
+              }}
+              hitSlop={10}
+              style={({ pressed }) => [wz.navBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={wz.navBtnText}>{wizardStep === 0 ? '✕' : '‹ חזרה'}</Text>
+            </Pressable>
+
+            <Text style={wz.headerTitle}>שיגור פוש</Text>
+
+            <View style={wz.stepBadge}>
+              <Text style={wz.stepBadgeText}>{wizardStep + 1} / 5</Text>
+            </View>
+          </View>
+
+          {/* Progress bar */}
+          <View style={wz.progressTrack}>
+            <View style={[wz.progressFill, { width: `${((wizardStep + 1) / 5) * 100}%` as any }]} />
+          </View>
+
+          {/* Step label row */}
+          <View style={wz.stepLabelRow}>
+            {['כותרת', 'סוג', 'מוצרים', 'תוכן', 'תזמון'].map((lab, idx) => {
+              const active = idx === wizardStep;
+              const done = idx < wizardStep;
+              return (
+                <View key={lab} style={wz.stepLabelItem}>
+                  <View style={[wz.stepDot, active && wz.stepDotActive, done && wz.stepDotDone]}>
+                    {done
+                      ? <Text style={wz.stepDotCheck}>✓</Text>
+                      : <Text style={[wz.stepDotNum, active && wz.stepDotNumActive]}>{idx + 1}</Text>}
+                  </View>
+                  <Text style={[wz.stepLabelText, active && wz.stepLabelTextActive]}>{lab}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Content */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={wz.content}
+          >
+            {wizardStep === 0 ? (
+              <View style={wz.stepContent}>
+                <Text style={wz.stepHeading}>מה כותרת הפוש?</Text>
+                <Text style={wz.stepHint}>הכותרת היא הדבר הראשון שהמשתמש יראה</Text>
+                <Input
+                  label="כותרת"
+                  value={pushTitle}
+                  onChangeText={setPushTitle}
+                  placeholder="לדוגמה: מבצע חדש בחנות 🎉"
+                />
+                {!!pushTitle.trim() && (
+                  <View style={wz.previewChip}>
+                    <View style={wz.previewChipBar} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={wz.previewChipLabel}>תצוגה מקדימה</Text>
+                      <Text style={wz.previewChipTitle} numberOfLines={1}>{pushTitle.trim()}</Text>
+                    </View>
+                    <Text style={{ fontSize: 22 }}>🔔</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            {wizardStep === 1 ? (
+              <View style={wz.stepContent}>
+                <Text style={wz.stepHeading}>סוג הפוש</Text>
+                <Text style={wz.stepHint}>בחר אם הפוש כללי או קשור למוצר ספציפי</Text>
+                <View style={{ gap: 12 }}>
+                  <Pressable
+                    onPress={() => setPushScope('general')}
+                    style={[wz.scopeCard, pushScope === 'general' && wz.scopeCardActive]}
+                  >
+                    <View style={wz.scopeCardLeft}>
+                      <Text style={wz.scopeCardIcon}>📢</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[wz.scopeCardTitle, pushScope === 'general' && wz.scopeCardTitleActive]}>
+                        כללי
+                      </Text>
+                      <Text style={wz.scopeCardSub}>פוש שלא קשור למוצר ספציפי</Text>
+                    </View>
+                    {pushScope === 'general' && <View style={wz.scopeCheck}><Text style={wz.scopeCheckText}>✓</Text></View>}
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setPushScope('product')}
+                    style={[wz.scopeCard, pushScope === 'product' && wz.scopeCardActive]}
+                  >
+                    <View style={wz.scopeCardLeft}>
+                      <Text style={wz.scopeCardIcon}>🛍</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[wz.scopeCardTitle, pushScope === 'product' && wz.scopeCardTitleActive]}>
+                        קשור למוצר
+                      </Text>
+                      <Text style={wz.scopeCardSub}>לחיצה על הפוש תפתח מוצר באפליקציה</Text>
+                    </View>
+                    {pushScope === 'product' && <View style={wz.scopeCheck}><Text style={wz.scopeCheckText}>✓</Text></View>}
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {wizardStep === 2 ? (
+              <View style={wz.stepContent}>
+                <Text style={wz.stepHeading}>בחירת מוצרים</Text>
+                <Text style={wz.stepHint}>
+                  {pushScope !== 'product'
+                    ? 'שלב זה לא רלוונטי לפוש כללי — אפשר לעבור הלאה'
+                    : 'אפשר לבחור מוצר אחד או יותר (אופציונלי)'}
+                </Text>
+
+                {pushScope === 'product' ? (
+                  <>
+                    <Pressable
+                      onPress={() => setProductPickerOpen(true)}
+                      disabled={loadingProducts}
+                      style={({ pressed }) => [wz.productTrigger, pressed && wz.productTriggerPressed]}
+                    >
+                      <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                        <Text style={wz.productTriggerLabel}>מוצרים נבחרים</Text>
+                        {loadingProducts ? (
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={wz.productTriggerValue}>טוען…</Text>
+                          </View>
+                        ) : (
+                          <Text numberOfLines={1} style={[wz.productTriggerValue, !selectedHandles.length && wz.productTriggerPlaceholder]}>
+                            {selectedHandles.length ? `${selectedHandles.length} מוצרים נבחרו` : 'לחץ לבחירת מוצרים…'}
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={wz.productTriggerChevron}>‹</Text>
+                    </Pressable>
+
+                    {selectedProducts.length > 0 && (
+                      <View style={{ gap: 8, marginTop: 4 }}>
+                        {selectedProducts.slice(0, 4).map((p) => (
+                          <View key={p.handle} style={wz.selectedProductRow}>
+                            <ProductThumb imageUrl={p.imageUrl} size={44} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={wz.selectedProductTitle} numberOfLines={1}>{p.title}</Text>
+                              <Text style={wz.selectedProductPrice}>{formatPrice(p.price, p.currencyCode)}</Text>
+                            </View>
+                            <Pressable
+                              onPress={() => setSelectedHandles((prev) => prev.filter((h) => h !== p.handle))}
+                              hitSlop={8}
+                            >
+                              <Text style={{ color: colors.muted, fontSize: 18, fontWeight: '600' }}>×</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                        {selectedProducts.length > 4 && (
+                          <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '700', fontSize: 12 }}>
+                            ועוד {selectedProducts.length - 4} מוצרים…
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View style={wz.skipNote}>
+                    <Text style={{ fontSize: 24 }}>⏭</Text>
+                    <Text style={wz.skipNoteText}>ניתן לדלג לשלב הבא</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            {wizardStep === 3 ? (
+              <View style={wz.stepContent}>
+                <Text style={wz.stepHeading}>תוכן הפוש</Text>
+                <Text style={wz.stepHint}>מה ירצה לראות המשתמש כשמגיעה ההתראה?</Text>
+                <Input
+                  label="גוף ההתראה"
+                  value={pushBody}
+                  onChangeText={setPushBody}
+                  placeholder="לדוגמה: 20% הנחה על כל המוצרים עד חצות 🛒"
+                  multiline
+                  style={{ minHeight: 100, textAlignVertical: 'top' }}
+                />
+                {(!!pushTitle.trim() || !!pushBody.trim()) && (
+                  <View style={wz.previewChip}>
+                    <View style={wz.previewChipBar} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={wz.previewChipLabel}>תצוגה מקדימה</Text>
+                      {!!pushTitle.trim() && <Text style={wz.previewChipTitle} numberOfLines={1}>{pushTitle.trim()}</Text>}
+                      {!!pushBody.trim() && <Text style={wz.previewChipBody} numberOfLines={2}>{pushBody.trim()}</Text>}
+                    </View>
+                    <Text style={{ fontSize: 22 }}>🔔</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            {wizardStep === 4 ? (
+              <View style={wz.stepContent}>
+                <Text style={wz.stepHeading}>תזמון שליחה</Text>
+                <Text style={wz.stepHint}>מתי לשלוח את הפוש?</Text>
+
+                <View style={{ gap: 12 }}>
+                  <Pressable
+                    onPress={() => setScheduleMode('now')}
+                    style={[wz.scopeCard, scheduleMode === 'now' && wz.scopeCardActive]}
+                  >
+                    <View style={wz.scopeCardLeft}>
+                      <Text style={wz.scopeCardIcon}>⚡</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[wz.scopeCardTitle, scheduleMode === 'now' && wz.scopeCardTitleActive]}>שלח עכשיו</Text>
+                      <Text style={wz.scopeCardSub}>שיגור מיידי לכל המשתמשים</Text>
+                    </View>
+                    {scheduleMode === 'now' && <View style={wz.scopeCheck}><Text style={wz.scopeCheckText}>✓</Text></View>}
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setScheduleMode('scheduled')}
+                    style={[wz.scopeCard, scheduleMode === 'scheduled' && wz.scopeCardActive]}
+                  >
+                    <View style={wz.scopeCardLeft}>
+                      <Text style={wz.scopeCardIcon}>🗓</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[wz.scopeCardTitle, scheduleMode === 'scheduled' && wz.scopeCardTitleActive]}>תזמן לתאריך ושעה</Text>
+                      <Text style={wz.scopeCardSub}>בחר מועד שיגור בעתיד</Text>
+                    </View>
+                    {scheduleMode === 'scheduled' && <View style={wz.scopeCheck}><Text style={wz.scopeCheckText}>✓</Text></View>}
+                  </Pressable>
+                </View>
+
+                {scheduleMode === 'scheduled' ? (
+                  <View style={{ marginTop: 16, gap: 12 }}>
+                    <View style={wz.datetimeDisplay}>
+                      <Text style={wz.datetimeDisplayLabel}>מועד נבחר</Text>
+                      <Text style={wz.datetimeDisplayValue}>{scheduledAt.toLocaleString('he-IL')}</Text>
+                    </View>
+
+                    {Platform.OS === 'android' ? (
+                      <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button title="בחר תאריך" variant="secondary" onPress={() =>
+                            DateTimePickerAndroid.open({
+                              value: scheduledAt, mode: 'date', is24Hour: true,
+                              onChange: (_e, d) => { if (!d) return; const n = new Date(scheduledAt); n.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); setScheduledAt(n); },
+                            })
+                          } />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Button title="בחר שעה" variant="secondary" onPress={() =>
+                            DateTimePickerAndroid.open({
+                              value: scheduledAt, mode: 'time', is24Hour: true,
+                              onChange: (_e, d) => { if (!d) return; const n = new Date(scheduledAt); n.setHours(d.getHours(), d.getMinutes(), 0, 0); setScheduledAt(n); },
+                            })
+                          } />
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={{ gap: 10 }}>
+                        <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                          <Pressable onPress={() => setIosPickerMode('date')} style={[wz.modePill, iosPickerMode === 'date' && wz.modePillActive]}>
+                            <Text style={[wz.modePillText, iosPickerMode === 'date' && wz.modePillTextActive]}>תאריך</Text>
+                          </Pressable>
+                          <Pressable onPress={() => setIosPickerMode('time')} style={[wz.modePill, iosPickerMode === 'time' && wz.modePillActive]}>
+                            <Text style={[wz.modePillText, iosPickerMode === 'time' && wz.modePillTextActive]}>שעה</Text>
+                          </Pressable>
+                        </View>
+                        <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 8, borderWidth: 1, borderColor: colors.border }}>
+                          <DateTimePicker
+                            value={scheduledAt} mode={iosPickerMode} display="inline"
+                            themeVariant="light" is24Hour
+                            onChange={(_e, d) => {
+                              if (!d) return;
+                              const n = new Date(scheduledAt);
+                              if (iosPickerMode === 'date') n.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+                              else n.setHours(d.getHours(), d.getMinutes(), 0, 0);
+                              setScheduledAt(n);
+                            }}
+                          />
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+
+                {/* Summary card */}
+                <View style={wz.summaryCard}>
+                  <Text style={wz.summaryTitle}>סיכום הפוש</Text>
+                  <View style={wz.summaryRow}>
+                    <Text style={wz.summaryVal} numberOfLines={1}>{pushTitle.trim() || '—'}</Text>
+                    <Text style={wz.summaryKey}>כותרת</Text>
+                  </View>
+                  <View style={wz.summaryRow}>
+                    <Text style={wz.summaryVal} numberOfLines={2}>{pushBody.trim() || '—'}</Text>
+                    <Text style={wz.summaryKey}>תוכן</Text>
+                  </View>
+                  <View style={wz.summaryRow}>
+                    <Text style={wz.summaryVal}>{pushScope === 'general' ? 'כללי' : `קשור למוצר (${selectedHandles.length})`}</Text>
+                    <Text style={wz.summaryKey}>סוג</Text>
+                  </View>
+                  <View style={wz.summaryRow}>
+                    <Text style={wz.summaryVal}>{scheduleMode === 'now' ? 'מיידי' : scheduledAt.toLocaleString('he-IL')}</Text>
+                    <Text style={wz.summaryKey}>תזמון</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+          </ScrollView>
+
+          {/* Footer */}
+          <View style={wz.footer}>
+            {wizardStep < 4 ? (
+              <Pressable
+                style={({ pressed }) => [wz.nextBtn, pressed && wz.nextBtnPressed]}
+                onPress={() => {
+                  if (wizardStep === 0 && !canNextTitle) return Toast.show({ type: 'error', text1: 'חסרה כותרת' });
+                  if (wizardStep === 3 && !canNextBody) return Toast.show({ type: 'error', text1: 'חסר תוכן' });
+                  setWizardStep((p) => Math.min(4, p + 1));
+                }}
+              >
+                <Text style={wz.nextBtnText}>הבא</Text>
+                <Text style={wz.nextBtnArrow}>←</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [wz.sendBtn, pressed && wz.sendBtnPressed]}
+                onPress={submitWizard}
+              >
+                <Text style={wz.sendBtnText}>{scheduleMode === 'scheduled' ? '🗓 תזמן פוש' : '📣 שגר עכשיו'}</Text>
+              </Pressable>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       <ProductPickerModal
         visible={productPickerOpen}
         products={products}
         loading={loadingProducts}
-        selectedHandle={selectedHandle}
-        onSelect={(p) => setSelectedHandle(p.handle)}
+        multi
+        selectedHandles={selectedHandles}
+        onChangeSelectedHandles={setSelectedHandles}
         onClose={() => setProductPickerOpen(false)}
       />
     </Screen>
@@ -652,47 +963,122 @@ const s = StyleSheet.create({
     fontSize: 15,
   },
 
-  /* Preview chip */
-  previewChip: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(15,23,42,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.07)',
-    overflow: 'hidden',
+  /* ── Hero card ── */
+  heroCard: {
+    borderRadius: 22,
+    backgroundColor: '#101828',
+    padding: 20,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
-  previewChipBar: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-    backgroundColor: 'rgba(37,99,235,0.6)',
-  },
-  previewChipTitle: { color: colors.text, fontWeight: '800', fontSize: 13, textAlign: 'right' },
-  previewChipBody: { color: colors.muted, fontSize: 11, marginTop: 3, textAlign: 'right' },
+  heroCardPressed: { transform: [{ scale: 0.985 }], opacity: 0.9 },
 
-  /* Product trigger button */
-  productTrigger: {
+  heroAccentStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: '#3B82F6',
+  },
+
+  heroTopRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.elevated,
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    marginTop: 6,
   },
-  productTriggerPressed: { backgroundColor: 'rgba(37,99,235,0.05)', borderColor: 'rgba(37,99,235,0.25)' },
-  productTriggerLabel: { color: colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'right' },
-  productTriggerValue: { color: colors.text, fontWeight: '900', fontSize: 14, textAlign: 'right', marginTop: 1 },
-  productTriggerPlaceholder: { color: colors.muted, fontWeight: '700' },
-  productTriggerPrice: { color: colors.primary, fontWeight: '800', fontSize: 12, textAlign: 'right', marginTop: 2 },
+  heroBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(59,130,246,0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(59,130,246,0.35)',
+  },
+  heroBadgeText: { color: '#93C5FD', fontWeight: '900', fontSize: 10, letterSpacing: 1.5 },
+  heroIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(59,130,246,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(59,130,246,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroIconText: { fontSize: 20 },
+
+  heroTitle: {
+    color: '#F1F5F9',
+    fontWeight: '900',
+    fontSize: 22,
+    textAlign: 'right',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  heroSub: {
+    color: '#64748B',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'right',
+    marginBottom: 18,
+    lineHeight: 18,
+  },
+
+  heroSteps: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 18,
+  },
+  heroStep: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
+  },
+  heroStepNum: { color: '#60A5FA', fontWeight: '900', fontSize: 10 },
+  heroStepLabel: { color: '#94A3B8', fontWeight: '800', fontSize: 11 },
+  heroStepArrow: { color: '#334155', fontSize: 13, fontWeight: '600' },
+
+  heroCta: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+    paddingTop: 14,
+  },
+  heroCtaText: { color: '#E2E8F0', fontWeight: '900', fontSize: 14 },
+  heroCtaArrow: { color: '#3B82F6', fontSize: 18, fontWeight: '900' },
+
+  statusRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: colors.success,
+  },
+  statusText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
+
   chevronWrap: {
     width: 28,
     height: 28,
@@ -702,30 +1088,308 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   chevronIcon: { color: colors.muted, fontSize: 18, fontWeight: '600' },
+});
 
-  /* Clear selection */
-  clearBtn: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  clearBtnText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-
-  /* Image toggle buttons */
-  imgToggleBtn: {
+/* ─────────────────────────────────────────────────────────
+   Wizard (full-screen modal) styles
+───────────────────────────────────────────────────────── */
+const wz = StyleSheet.create({
+  root: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+  },
+
+  /* Header */
+  header: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  headerTitle: {
+    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+    flex: 1,
+  },
+  navBtn: {
+    minWidth: 70,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  navBtnText: { color: '#475569', fontWeight: '800', fontSize: 14 },
+  stepBadge: {
+    minWidth: 70,
+    alignItems: 'flex-end',
+    paddingRight: 2,
+  },
+  stepBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 13 },
+
+  /* Progress */
+  progressTrack: {
+    height: 3,
+    backgroundColor: '#E5E7EB',
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: '#2563EB',
+    borderRadius: 999,
+  },
+
+  /* Step label row */
+  stepLabelRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 4,
+  },
+  stepLabelItem: { alignItems: 'center', gap: 4, flex: 1 },
+  stepDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.elevated,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  imgToggleBtnActive: {
-    borderColor: 'rgba(37,99,235,0.45)',
-    backgroundColor: 'rgba(37,99,235,0.09)',
+  stepDotActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  stepDotDone: { backgroundColor: '#16A34A', borderColor: '#16A34A' },
+  stepDotNum: { color: '#94A3B8', fontWeight: '900', fontSize: 11 },
+  stepDotNumActive: { color: '#FFFFFF' },
+  stepDotCheck: { color: '#FFFFFF', fontWeight: '900', fontSize: 12 },
+  stepLabelText: { color: '#94A3B8', fontWeight: '700', fontSize: 10, textAlign: 'center' },
+  stepLabelTextActive: { color: '#2563EB', fontWeight: '900' },
+
+  /* Scroll content */
+  content: { padding: 16, gap: 14, paddingBottom: 16 },
+
+  /* Step content wrapper */
+  stepContent: { gap: 14 },
+  stepHeading: {
+    color: '#0F172A',
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'right',
+    letterSpacing: -0.3,
   },
-  imgToggleBtnText: { color: colors.muted, fontWeight: '800', fontSize: 13 },
-  imgToggleBtnTextActive: { color: 'rgba(37,99,235,1)' },
+  stepHint: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'right',
+    lineHeight: 20,
+  },
+
+  /* Preview chip */
+  previewChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    marginTop: 4,
+  },
+  previewChipBar: {
+    position: 'absolute',
+    right: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#0EA5E9',
+  },
+  previewChipLabel: { color: '#0369A1', fontWeight: '800', fontSize: 10, textAlign: 'right', marginBottom: 2 },
+  previewChipTitle: { color: '#0F172A', fontWeight: '900', fontSize: 13, textAlign: 'right' },
+  previewChipBody: { color: '#475569', fontWeight: '600', fontSize: 12, textAlign: 'right', marginTop: 2 },
+
+  /* Scope / schedule cards */
+  scopeCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  scopeCardActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  scopeCardLeft: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scopeCardIcon: { fontSize: 22 },
+  scopeCardTitle: { color: '#0F172A', fontWeight: '900', fontSize: 15, textAlign: 'right' },
+  scopeCardTitleActive: { color: '#1D4ED8' },
+  scopeCardSub: { color: '#94A3B8', fontWeight: '600', fontSize: 12, textAlign: 'right', marginTop: 2 },
+  scopeCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scopeCheckText: { color: '#FFFFFF', fontWeight: '900', fontSize: 12 },
+
+  /* Product trigger */
+  productTrigger: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  productTriggerPressed: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
+  productTriggerLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', textAlign: 'right' },
+  productTriggerValue: { color: '#0F172A', fontWeight: '900', fontSize: 14, textAlign: 'right', marginTop: 2 },
+  productTriggerPlaceholder: { color: '#94A3B8', fontWeight: '700' },
+  productTriggerChevron: { color: '#94A3B8', fontSize: 22, fontWeight: '600' },
+
+  /* Selected product row */
+  selectedProductRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  selectedProductTitle: { color: '#0F172A', fontWeight: '800', fontSize: 13, textAlign: 'right' },
+  selectedProductPrice: { color: '#64748B', fontWeight: '700', fontSize: 12, textAlign: 'right', marginTop: 2 },
+
+  /* Skip note */
+  skipNote: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  skipNoteText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
+
+  /* Datetime */
+  datetimeDisplay: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  datetimeDisplayLabel: { color: '#94A3B8', fontWeight: '800', fontSize: 12 },
+  datetimeDisplayValue: { color: '#0F172A', fontWeight: '900', fontSize: 14 },
+
+  modePill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  modePillActive: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
+  modePillText: { color: '#64748B', fontWeight: '800', fontSize: 13 },
+  modePillTextActive: { color: '#1D4ED8' },
+
+  /* Summary card */
+  summaryCard: {
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  summaryTitle: {
+    color: '#0F172A',
+    fontWeight: '900',
+    fontSize: 14,
+    textAlign: 'right',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  summaryRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    gap: 10,
+  },
+  summaryKey: { color: '#94A3B8', fontWeight: '800', fontSize: 12, minWidth: 48, textAlign: 'left' },
+  summaryVal: { color: '#0F172A', fontWeight: '700', fontSize: 13, textAlign: 'right', flex: 1 },
+
+  /* Footer */
+  footer: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  nextBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 16,
+    backgroundColor: '#1D4ED8',
+  },
+  nextBtnPressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
+  nextBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 16 },
+  nextBtnArrow: { color: '#93C5FD', fontSize: 18, fontWeight: '900' },
+
+  sendBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: 16,
+    backgroundColor: '#0F172A',
+  },
+  sendBtnPressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
+  sendBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 16 },
 });

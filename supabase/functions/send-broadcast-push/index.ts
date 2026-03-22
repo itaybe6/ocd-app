@@ -3,9 +3,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 type BroadcastRequest = {
   title: string;
   body: string;
-  productHandle: string;
+  scope?: 'general' | 'product';
+  productHandle?: string | null;
+  productHandles?: string[] | null;
   productTitle?: string | null;
   imageUrl?: string | null;
+  scheduleAt?: string | null; // ISO
 };
 
 type PushTokenRow = { expo_push_token: string };
@@ -56,6 +59,19 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+function normalizeHandles(payload: BroadcastRequest): string[] {
+  const handles: string[] = [];
+  const single = (payload.productHandle ?? null) ? String(payload.productHandle).trim() : '';
+  if (single) handles.push(single);
+  if (Array.isArray(payload.productHandles)) {
+    for (const h of payload.productHandles) {
+      const v = (h ?? null) ? String(h).trim() : '';
+      if (v) handles.push(v);
+    }
+  }
+  return Array.from(new Set(handles));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders() });
@@ -87,13 +103,15 @@ Deno.serve(async (req) => {
 
   const title = (payload.title ?? '').trim();
   const body = (payload.body ?? '').trim();
-  const productHandle = (payload.productHandle ?? '').trim();
+  const handles = normalizeHandles(payload);
+  const primaryHandle = handles[0] ?? null;
   const productTitle = (payload.productTitle ?? null) ? String(payload.productTitle).trim() : null;
   const imageUrl = (payload.imageUrl ?? null) ? String(payload.imageUrl).trim() : null;
+  const scheduleAtRaw = (payload.scheduleAt ?? null) ? String(payload.scheduleAt).trim() : '';
 
-  if (!title || !body || !productHandle) {
+  if (!title || !body) {
     return jsonResponse(
-      { error: 'Missing required fields: title, body, productHandle' },
+      { error: 'Missing required fields: title, body' },
       { status: 400, headers: corsHeaders() },
     );
   }
@@ -102,6 +120,38 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
+  // If scheduleAt is provided and is in the future, enqueue instead of sending immediately.
+  if (scheduleAtRaw) {
+    const d = new Date(scheduleAtRaw);
+    if (Number.isNaN(d.getTime())) {
+      return jsonResponse({ error: 'Invalid scheduleAt' }, { status: 400, headers: corsHeaders() });
+    }
+    const now = Date.now();
+    if (d.getTime() > now + 5_000) {
+      const scope: 'general' | 'product' = payload.scope === 'product' || handles.length ? 'product' : 'general';
+      const { data: job, error: jobErr } = await supabaseAdmin
+        .from('push_notification_jobs')
+        .insert({
+          title,
+          body,
+          image_url: imageUrl,
+          scope,
+          product_handles: handles.length ? handles : null,
+          scheduled_for: d.toISOString(),
+          status: 'scheduled',
+        })
+        .select('id, scheduled_for')
+        .single();
+      if (jobErr) {
+        return jsonResponse({ error: jobErr.message }, { status: 500, headers: corsHeaders() });
+      }
+      return jsonResponse(
+        { mode: 'scheduled', jobId: (job as any)?.id ?? null, scheduledFor: (job as any)?.scheduled_for ?? null },
+        { headers: corsHeaders() },
+      );
+    }
+  }
+
   const sentAt = new Date().toISOString();
   const { data: inserted, error: insertErr } = await supabaseAdmin
     .from('push_notifications')
@@ -109,7 +159,7 @@ Deno.serve(async (req) => {
       title,
       body,
       image_url: imageUrl,
-      product_handle: productHandle,
+      product_handle: primaryHandle,
       product_title: productTitle,
       sent_at: sentAt,
     })
@@ -145,14 +195,16 @@ Deno.serve(async (req) => {
     return jsonResponse({ totalTokens: 0, successCount: 0, errorCount: 0 }, { headers: corsHeaders() });
   }
 
+  const scope: 'general' | 'product' = payload.scope === 'product' || handles.length ? 'product' : 'general';
   const baseMessage: Record<string, unknown> = {
     title,
     body,
     sound: 'default',
     channelId: 'marketing',
     data: {
-      type: 'product',
-      productHandle,
+      type: scope,
+      ...(primaryHandle ? { productHandle: primaryHandle } : {}),
+      ...(handles.length > 1 ? { productHandles: handles } : {}),
     },
   };
   if (imageUrl) {
@@ -222,6 +274,7 @@ Deno.serve(async (req) => {
 
   return jsonResponse(
     {
+      mode: 'sent',
       notificationId,
       totalTokens: tokens.length,
       successCount,

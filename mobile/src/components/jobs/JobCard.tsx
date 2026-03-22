@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
+import type { OriginRect } from '../OriginWindow';
 
 export type JobCardStatus = 'pending' | 'completed';
 export type JobCardKind = 'regular' | 'installation' | 'special';
@@ -91,12 +92,13 @@ export function JobChip({
 }: {
   text: string;
   muted?: boolean;
-  accent?: 'blue' | 'purple' | 'orange';
+  accent?: 'blue' | 'purple' | 'orange' | 'neutral';
 }) {
   const accentMap = {
     blue:   { bg: 'rgba(0,88,188,0.09)',   fg: '#0058BC', border: 'rgba(0,88,188,0.22)' },
     purple: { bg: 'rgba(124,58,237,0.09)', fg: '#6D28D9', border: 'rgba(124,58,237,0.22)' },
     orange: { bg: 'rgba(234,88,12,0.09)',  fg: '#C2410C', border: 'rgba(234,88,12,0.22)' },
+    neutral:{ bg: 'rgba(15,23,42,0.05)',   fg: '#475569', border: 'rgba(15,23,42,0.10)' },
   };
   const c = accent ? accentMap[accent] : null;
 
@@ -132,6 +134,7 @@ export function JobCard({
   primaryNode,
   description,
   onPress,
+  onOriginRect,
   actions,
   chips,
   faded,
@@ -144,12 +147,25 @@ export function JobCard({
   primaryNode?: React.ReactNode;
   description?: string | null;
   onPress?: () => void;
+  onOriginRect?: (rect: OriginRect) => void;
   actions?: React.ReactNode;
   chips?: React.ReactNode;
   faded?: boolean;
   kind?: JobCardKind;
   style?: ViewStyle;
 }) {
+  const hasTitle = !!title?.trim();
+  const outerRef = useRef<View>(null);
+
+  const captureOriginRect = () => {
+    if (!onOriginRect) return;
+    outerRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        onOriginRect({ x, y, width, height, borderRadius: 20 });
+      }
+    });
+  };
+
   const shadow: ViewStyle = {
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -165,24 +181,26 @@ export function JobCard({
       <View
         style={{
           flexDirection: 'row-reverse',
-          justifyContent: 'space-between',
+          justifyContent: hasTitle ? 'space-between' : 'flex-start',
           alignItems: 'flex-start',
           gap: 8,
         }}
       >
-        <Text
-          style={{
-            color: colors.text,
-            fontWeight: '800',
-            fontSize: 15,
-            textAlign: 'right',
-            flex: 1,
-            letterSpacing: -0.3,
-          }}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
+        {hasTitle ? (
+          <Text
+            style={{
+              color: colors.text,
+              fontWeight: '800',
+              fontSize: 15,
+              textAlign: 'right',
+              flex: 1,
+              letterSpacing: -0.3,
+            }}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        ) : null}
         {status ? (
           <View
             style={{
@@ -234,6 +252,8 @@ export function JobCard({
 
   return (
     <View
+      ref={outerRef}
+      collapsable={false}
       style={[
         shadow,
         {
@@ -248,7 +268,11 @@ export function JobCard({
     >
       <View style={{ padding: 16 }}>
         {onPress ? (
-          <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}>
+          <Pressable
+            onPress={onPress}
+            onPressIn={captureOriginRect}
+            style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+          >
             {inner}
           </Pressable>
         ) : (
