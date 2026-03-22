@@ -1,54 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
-import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Pencil, X } from 'lucide-react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '../../components/Screen';
-import { Card } from '../../components/ui/Card';
-import { Avatar } from '../../components/ui/Avatar';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { ModalDialog } from '../../components/ModalDialog';
 import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import { ensureWorkTemplates28, templateDay, type WorkTemplateLite } from '../../lib/workTemplates';
-import { useLoading } from '../../state/LoadingContext';
+import type { WorkTemplatesStackParamList } from '../../navigation/workTemplatesTypes';
 
 type Template = { id: string; day: number };
 type TemplateForGrid = { id: string; day: number };
-type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
-type UserLite = { id: string; name: string; role: 'customer' | 'worker'; avatar_url?: string | null };
-type DropdownKind = 'customer' | 'worker';
 
-export function WorkTemplatesScreen() {
-  const { setIsLoading } = useLoading();
+export function WorkTemplatesScreen({ navigation }: NativeStackScreenProps<WorkTemplatesStackParamList, 'WorkTemplatesHome'>) {
   const [templateCandidates, setTemplateCandidates] = useState<Template[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [stations, setStations] = useState<Station[]>([]);
-  const [users, setUsers] = useState<UserLite[]>([]);
   const [loading, setLoading] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [templateCounts, setTemplateCounts] = useState<Record<string, number>>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [editingStationId, setEditingStationId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ customerId: string | null; workerId: string | null; scheduledTime: string }>({
-    customerId: null,
-    workerId: null,
-    scheduledTime: '09:00',
-  });
-  const [editError, setEditError] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<{ customerId: string | null; workerId: string | null; scheduledTime: string }>({
-    customerId: null,
-    workerId: null,
-    scheduledTime: '09:00',
-  });
-  const [createError, setCreateError] = useState('');
-  const [pickerKind, setPickerKind] = useState<DropdownKind | null>(null);
-  const [pickerQuery, setPickerQuery] = useState('');
-  const [pickerTarget, setPickerTarget] = useState<'edit' | 'create'>('edit');
-
-  const timeRegex = useMemo(() => /^([01]\d|2[0-3]):([0-5]\d)$/, []);
 
   const ensureTemplates = async () => {
     const { templates: raw } = await ensureWorkTemplates28();
@@ -58,8 +24,6 @@ export function WorkTemplatesScreen() {
       .sort((a, b) => a.day - b.day);
 
     setTemplateCandidates(normalized);
-    // don't auto-open any template; keep selection if user already picked
-    setSelectedTemplateId((prev) => prev || '');
   };
 
   const fetchTemplateCounts = async (templateIds: string[]) => {
@@ -75,34 +39,10 @@ export function WorkTemplatesScreen() {
     setTemplateCounts(counts);
   };
 
-  const fetchUsers = async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').in('role', ['customer', 'worker']).order('name');
-    if (!error) setUsers((data ?? []) as any);
-  };
-
-  const fetchStations = async (templateId: string) => {
-    const { data, error } = await supabase
-      .from('template_stations')
-      .select('id, template_id, "order", customer_id, worker_id, scheduled_time')
-      .eq('template_id', templateId)
-      .order('order', { ascending: true });
-    if (error) throw error;
-    const list = (data ?? []) as any as Station[];
-    setStations(list);
-    setEditingStationId(null);
-    setPickerKind(null);
-    setPickerQuery('');
-    setEditError('');
-    setCreateOpen(false);
-    setCreateError('');
-  };
-
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      await Promise.all([ensureTemplates(), fetchUsers()]);
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'טעינה נכשלה', text2: e?.message ?? 'Unknown error' });
+      await ensureTemplates();
     } finally {
       setLoading(false);
     }
@@ -113,11 +53,6 @@ export function WorkTemplatesScreen() {
       refresh();
     }, [refresh])
   );
-
-  useEffect(() => {
-    if (!selectedTemplateId) return;
-    fetchStations(selectedTemplateId).catch((e: any) => Toast.show({ type: 'error', text1: 'טעינת תחנות נכשלה', text2: e?.message ?? 'Unknown error' }));
-  }, [selectedTemplateId]);
 
   useEffect(() => {
     fetchTemplateCounts(templateCandidates.map((t) => t.id)).catch(() => {});
@@ -145,178 +80,6 @@ export function WorkTemplatesScreen() {
     return Array.from(best.values()).sort((a, b) => a.day - b.day);
   }, [templateCandidates, templateCounts]);
 
-  const selectedDay = useMemo(
-    () => templateCandidates.find((t) => t.id === selectedTemplateId)?.day ?? null,
-    [selectedTemplateId, templateCandidates]
-  );
-
-  const userNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const u of users) map.set(u.id, u.name);
-    return map;
-  }, [users]);
-
-  const userById = useMemo(() => {
-    const map = new Map<string, UserLite>();
-    for (const u of users) map.set(u.id, u);
-    return map;
-  }, [users]);
-
-  const filteredStations = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return stations;
-    return stations.filter((s) => {
-      const customer = (s.customer_id ? userNameById.get(s.customer_id) : '') ?? '';
-      const worker = (s.worker_id ? userNameById.get(s.worker_id) : '') ?? '';
-      return customer.toLowerCase().includes(q) || worker.toLowerCase().includes(q);
-    });
-  }, [searchQuery, stations, userNameById]);
-
-  const updateStation = async (stationId: string, updates: Partial<Station>) => {
-    const before = stations;
-    setStations((prev) => prev.map((s) => (s.id === stationId ? { ...s, ...updates } : s)));
-    const { error } = await supabase.from('template_stations').update(updates).eq('id', stationId);
-    if (error) {
-      setStations(before);
-      throw error;
-    }
-  };
-
-  const closeDetail = () => {
-    setDetailOpen(false);
-    setEditingStationId(null);
-    setCreateOpen(false);
-    setPickerKind(null);
-    setPickerQuery('');
-    setEditError('');
-    setCreateError('');
-  };
-
-  const openCreateStation = () => {
-    if (!selectedTemplateId) return;
-    setCreateOpen(true);
-    setCreateForm({ customerId: null, workerId: null, scheduledTime: '09:00' });
-    setCreateError('');
-    setEditingStationId(null);
-    setEditError('');
-    setPickerKind(null);
-    setPickerQuery('');
-  };
-
-  const saveCreateStation = async () => {
-    if (!selectedTemplateId) return;
-    const time = createForm.scheduledTime.trim();
-    if (!createForm.customerId) {
-      setCreateError('בחר לקוח לפני שמוסיפים תחנה');
-      return;
-    }
-    if (!createForm.workerId) {
-      setCreateError('בחר עובד לפני שמוסיפים תחנה');
-      return;
-    }
-    if (!timeRegex.test(time)) {
-      setCreateError('יש להזין שעה בפורמט HH:mm (למשל 09:00)');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const nextOrder = (stations[stations.length - 1]?.order ?? 0) + 1;
-      const { error } = await supabase.from('template_stations').insert({
-        template_id: selectedTemplateId,
-        order: nextOrder,
-        scheduled_time: time,
-        customer_id: createForm.customerId,
-        worker_id: createForm.workerId,
-      });
-      if (error) throw error;
-      await fetchStations(selectedTemplateId);
-      setTemplateCounts((prev) => ({ ...prev, [selectedTemplateId]: (prev[selectedTemplateId] ?? 0) + 1 }));
-      setCreateOpen(false);
-      setPickerKind(null);
-      setPickerQuery('');
-      setCreateError('');
-      Toast.show({ type: 'success', text1: 'נוספה תחנה' });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'הוספה נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const deleteStation = async (s: Station) => {
-    try {
-      setIsLoading(true);
-      const { error } = await supabase.from('template_stations').delete().eq('id', s.id);
-      if (error) throw error;
-      await fetchStations(s.template_id);
-      setTemplateCounts((prev) => ({ ...prev, [s.template_id]: Math.max(0, (prev[s.template_id] ?? 0) - 1) }));
-      Toast.show({ type: 'success', text1: 'נמחק' });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'מחיקה נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const openTemplate = (t: Template) => {
-    setSelectedTemplateId(t.id);
-    setSearchQuery('');
-    setDetailOpen(true);
-  };
-
-  const editingStation = useMemo(
-    () => (editingStationId ? stations.find((s) => s.id === editingStationId) ?? null : null),
-    [editingStationId, stations]
-  );
-
-  const pickerUsers = useMemo(() => {
-    const base = pickerKind === 'worker' ? users.filter((u) => u.role === 'worker') : users.filter((u) => u.role === 'customer');
-    const q = pickerQuery.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter((u) => (u.name ?? '').toLowerCase().includes(q));
-  }, [pickerKind, pickerQuery, users]);
-
-  const openStationEditor = (s: Station) => {
-    setEditingStationId(s.id);
-    setEditForm({
-      customerId: s.customer_id ?? null,
-      workerId: s.worker_id ?? null,
-      scheduledTime: (s.scheduled_time ?? '09:00').trim() || '09:00',
-    });
-    setEditError('');
-    setPickerKind(null);
-    setPickerQuery('');
-  };
-
-  const saveEditingStation = async () => {
-    if (!editingStation) return;
-    const value = editForm.scheduledTime.trim();
-    const isValid = timeRegex.test(value);
-    if (!isValid) {
-      setEditError('יש להזין שעה בפורמט HH:mm (למשל 09:00)');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      await updateStation(editingStation.id, {
-        customer_id: editForm.customerId,
-        worker_id: editForm.workerId,
-        scheduled_time: value,
-      });
-      Toast.show({ type: 'success', text1: 'עודכן' });
-      setEditingStationId(null);
-      setPickerKind(null);
-      setPickerQuery('');
-      setEditError('');
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <Screen>
       <View>
@@ -326,10 +89,15 @@ export function WorkTemplatesScreen() {
           numColumns={2}
           columnWrapperStyle={{ gap: 10 }}
           contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
+          refreshing={loading}
+          onRefresh={refresh}
           renderItem={({ item }) => {
             const count = templateCounts[item.id] ?? 0;
             return (
-              <Pressable style={{ flex: 1 }} onPress={() => openTemplate(item)}>
+              <Pressable
+                style={{ flex: 1 }}
+                onPress={() => navigation.navigate('WorkTemplateStations', { templateId: item.id, day: item.day })}
+              >
                 {({ pressed }) => (
                   <View
                     style={{
@@ -369,445 +137,6 @@ export function WorkTemplatesScreen() {
           }}
         />
       </View>
-
-      <ModalDialog
-        visible={detailOpen}
-        onClose={closeDetail}
-        containerStyle={{ height: '88%' }}
-      >
-        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>
-              {selectedDay != null ? `תחנות בתבנית ${selectedDay}` : 'תחנות בתבנית'}
-            </Text>
-            <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>הקצה לקוח+עובד לכל תחנה</Text>
-          </View>
-          <Button title="סגור" variant="secondary" fullWidth={false} onPress={closeDetail} />
-        </View>
-
-        <View style={{ marginTop: 12, gap: 10 }}>
-          <Input label="חיפוש לפי לקוח או עובד" value={searchQuery} onChangeText={setSearchQuery} placeholder="חפש..." />
-          <Button title={createOpen ? 'הוספה פתוחה' : 'הוסף תחנה'} variant={createOpen ? 'secondary' : 'primary'} onPress={openCreateStation} />
-        </View>
-
-        {!!createOpen && (
-          <View style={{ marginTop: 10 }}>
-            <Card>
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900', textAlign: 'right' }}>הוספת תחנה</Text>
-                <Pressable
-                  accessibilityLabel="סגור הוספה"
-                  onPress={() => {
-                    setCreateOpen(false);
-                    setPickerKind(null);
-                    setPickerQuery('');
-                    setCreateError('');
-                  }}
-                  style={({ pressed }) => ({
-                    width: 38,
-                    height: 38,
-                    borderRadius: 19,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: pressed ? 'rgba(100,116,139,0.18)' : 'rgba(100,116,139,0.10)',
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  })}
-                >
-                  <X size={18} color={colors.text} />
-                </Pressable>
-              </View>
-
-              <View style={{ marginTop: 12, gap: 10 }}>
-                <Pressable
-                  onPress={() => {
-                    setPickerTarget('create');
-                    setPickerKind('customer');
-                    setPickerQuery('');
-                  }}
-                  style={{
-                    backgroundColor: colors.elevated,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    borderRadius: 14,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                  }}
-                >
-                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
-                  <Text style={{ color: createForm.customerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
-                    {createForm.customerId ? userNameById.get(createForm.customerId) ?? '—' : 'בחר לקוח…'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    setPickerTarget('create');
-                    setPickerKind('worker');
-                    setPickerQuery('');
-                  }}
-                  style={{
-                    backgroundColor: colors.elevated,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    borderRadius: 14,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                  }}
-                >
-                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
-                  <Text style={{ color: createForm.workerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
-                    {createForm.workerId ? userNameById.get(createForm.workerId) ?? '—' : 'בחר עובד…'}
-                  </Text>
-                </Pressable>
-
-                <Input
-                  label="שעה (HH:mm)"
-                  value={createForm.scheduledTime}
-                  onChangeText={(v) => {
-                    setCreateForm((prev) => ({ ...prev, scheduledTime: v }));
-                    setCreateError('');
-                  }}
-                  placeholder="09:00"
-                  inputMode="numeric"
-                />
-
-                {!!createError && <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>{createError}</Text>}
-
-                <Button title="הוסף תחנה" variant="primary" onPress={saveCreateStation} />
-                <Button
-                  title="ביטול"
-                  variant="secondary"
-                  onPress={() => {
-                    setCreateOpen(false);
-                    setPickerKind(null);
-                    setPickerQuery('');
-                    setCreateError('');
-                  }}
-                />
-              </View>
-            </Card>
-          </View>
-        )}
-
-        <View style={{ marginTop: 12, flex: 1 }}>
-          <FlatList
-            data={filteredStations}
-            keyExtractor={(i) => i.id}
-            contentContainerStyle={{ gap: 10, paddingBottom: 6 }}
-            renderItem={({ item }) => {
-              const customer = item.customer_id ? userById.get(item.customer_id) ?? null : null;
-              const worker = item.worker_id ? userById.get(item.worker_id) ?? null : null;
-              const customerName = customer?.name ?? null;
-              const workerName = worker?.name ?? null;
-              return (
-                <Card>
-                  <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תחנה #{item.order}</Text>
-                      <View style={{ marginTop: 10, flexDirection: 'row-reverse', gap: 10 }}>
-                        <View style={{ flex: 1, gap: 6 }}>
-                          <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
-                          <View
-                            style={{
-                              backgroundColor: colors.elevated,
-                              borderColor: colors.border,
-                              borderWidth: 1,
-                              borderRadius: 14,
-                              paddingVertical: 10,
-                              paddingHorizontal: 12,
-                              flexDirection: 'row-reverse',
-                              alignItems: 'center',
-                              gap: 8,
-                            }}
-                          >
-                            <Avatar size={22} uri={customer?.avatar_url ?? null} name={customerName} style={{ backgroundColor: '#fff' }} />
-                            <Text style={{ color: customerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', flex: 1 }} numberOfLines={1}>
-                              {customerName ?? 'לא נבחר'}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={{ flex: 1, gap: 6 }}>
-                          <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
-                          <View
-                            style={{
-                              backgroundColor: colors.elevated,
-                              borderColor: colors.border,
-                              borderWidth: 1,
-                              borderRadius: 14,
-                              paddingVertical: 10,
-                              paddingHorizontal: 12,
-                              flexDirection: 'row-reverse',
-                              alignItems: 'center',
-                              gap: 8,
-                            }}
-                          >
-                            <Avatar size={22} uri={worker?.avatar_url ?? null} name={workerName} style={{ backgroundColor: '#fff' }} />
-                            <Text style={{ color: workerName ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', flex: 1 }} numberOfLines={1}>
-                              {workerName ?? 'לא נבחר'}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                      <View
-                        style={{
-                          backgroundColor: 'rgba(100,116,139,0.10)',
-                          borderRadius: 999,
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
-                        }}
-                      >
-                        <Text style={{ color: colors.text, fontWeight: '900', fontSize: 12 }}>{item.scheduled_time}</Text>
-                      </View>
-                      <Pressable
-                        accessibilityLabel={`עריכת תחנה ${item.order}`}
-                        onPress={() => openStationEditor(item)}
-                        style={({ pressed }) => ({
-                          width: 38,
-                          height: 38,
-                          borderRadius: 19,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: pressed ? 'rgba(37, 99, 235, 0.16)' : 'rgba(37, 99, 235, 0.10)',
-                          borderWidth: 1,
-                          borderColor: 'rgba(37, 99, 235, 0.25)',
-                        })}
-                      >
-                        <Pencil size={18} color={colors.primary} />
-                      </Pressable>
-                    </View>
-                  </View>
-                </Card>
-              );
-            }}
-            ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין תחנות.</Text>}
-          />
-        </View>
-      </ModalDialog>
-
-      <ModalDialog
-        visible={!!editingStationId}
-        onClose={() => {
-          setEditingStationId(null);
-          setPickerKind(null);
-          setPickerQuery('');
-          setEditError('');
-        }}
-        containerStyle={{ height: '78%' }}
-      >
-        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            {editingStation ? `עריכת תחנה #${editingStation.order}` : 'עריכת תחנה'}
-          </Text>
-          <Pressable
-            accessibilityLabel="סגור"
-            onPress={() => {
-              setEditingStationId(null);
-              setPickerKind(null);
-              setPickerQuery('');
-              setEditError('');
-            }}
-            style={({ pressed }) => ({
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: pressed ? 'rgba(100,116,139,0.18)' : 'rgba(100,116,139,0.10)',
-              borderWidth: 1,
-              borderColor: colors.border,
-            })}
-          >
-            <X size={18} color={colors.text} />
-          </Pressable>
-        </View>
-
-        <View style={{ marginTop: 12, gap: 10 }}>
-          <Pressable
-            onPress={() => {
-              setPickerTarget('edit');
-              setPickerKind('customer');
-              setPickerQuery('');
-            }}
-            style={{
-              backgroundColor: colors.elevated,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 14,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-            }}
-          >
-            <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
-            <Text style={{ color: editForm.customerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
-              {editForm.customerId ? userNameById.get(editForm.customerId) ?? '—' : 'בחר לקוח…'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              setPickerTarget('edit');
-              setPickerKind('worker');
-              setPickerQuery('');
-            }}
-            style={{
-              backgroundColor: colors.elevated,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 14,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-            }}
-          >
-            <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>עובד</Text>
-            <Text style={{ color: editForm.workerId ? colors.text : colors.muted, fontWeight: '900', textAlign: 'right', marginTop: 2 }}>
-              {editForm.workerId ? userNameById.get(editForm.workerId) ?? '—' : 'בחר עובד…'}
-            </Text>
-          </Pressable>
-
-          <Input
-            label="שעה (HH:mm)"
-            value={editForm.scheduledTime}
-            onChangeText={(v) => {
-              setEditForm((prev) => ({ ...prev, scheduledTime: v }));
-              setEditError('');
-            }}
-            placeholder="09:00"
-            inputMode="numeric"
-          />
-          {!!editError && <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>{editError}</Text>}
-
-          <Button title="שמור" variant="primary" onPress={saveEditingStation} />
-          <Button
-            title="מחק תחנה"
-            variant="danger"
-            onPress={async () => {
-              if (!editingStation) return;
-              const toDelete = editingStation;
-              setEditingStationId(null);
-              setPickerKind(null);
-              setPickerQuery('');
-              setEditError('');
-              await deleteStation(toDelete);
-            }}
-          />
-        </View>
-      </ModalDialog>
-
-      <ModalDialog
-        visible={pickerKind !== null}
-        onClose={() => {
-          setPickerKind(null);
-          setPickerQuery('');
-        }}
-        containerStyle={{ height: '78%' }}
-      >
-        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            {pickerKind === 'worker' ? 'בחר עובד' : 'בחר לקוח'}
-          </Text>
-          <Pressable
-            accessibilityLabel="סגור"
-            onPress={() => {
-              setPickerKind(null);
-              setPickerQuery('');
-            }}
-            style={({ pressed }) => ({
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: pressed ? 'rgba(100,116,139,0.18)' : 'rgba(100,116,139,0.10)',
-              borderWidth: 1,
-              borderColor: colors.border,
-            })}
-          >
-            <X size={18} color={colors.text} />
-          </Pressable>
-        </View>
-
-        <View style={{ marginTop: 12, gap: 10, flex: 1 }}>
-          <Input
-            value={pickerQuery}
-            onChangeText={setPickerQuery}
-            placeholder={pickerKind === 'worker' ? 'חפש עובד…' : 'חפש לקוח…'}
-          />
-
-          <Pressable
-            onPress={() => {
-              if (!pickerKind) return;
-              if (pickerTarget === 'edit') {
-                setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: null } as any));
-                setEditError('');
-              } else {
-                setCreateForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: null } as any));
-                setCreateError('');
-              }
-              setPickerKind(null);
-              setPickerQuery('');
-            }}
-            style={{
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 14,
-              paddingVertical: 12,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: colors.text, fontWeight: '900' }}>{pickerKind === 'worker' ? 'נקה עובד' : 'נקה לקוח'}</Text>
-          </Pressable>
-
-          <View style={{ flex: 1 }}>
-            <FlatList
-              data={pickerUsers}
-              keyExtractor={(u) => u.id}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
-              renderItem={({ item: u }) => {
-                const activeForm = pickerTarget === 'edit' ? editForm : createForm;
-                const selectedId = pickerKind === 'worker' ? activeForm.workerId : activeForm.customerId;
-                const selected = selectedId === u.id;
-                return (
-                  <Pressable
-                    onPress={() => {
-                      if (!pickerKind) return;
-                      if (pickerTarget === 'edit') {
-                        setEditForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: u.id } as any));
-                        setEditError('');
-                      } else {
-                        setCreateForm((prev) => ({ ...prev, [pickerKind === 'worker' ? 'workerId' : 'customerId']: u.id } as any));
-                        setCreateError('');
-                      }
-                      setPickerKind(null);
-                      setPickerQuery('');
-                    }}
-                    style={({ pressed }) => ({
-                      backgroundColor: selected ? 'rgba(37, 99, 235, 0.12)' : colors.elevated,
-                      borderColor: selected ? 'rgba(37, 99, 235, 0.35)' : colors.border,
-                      borderWidth: 1,
-                      borderRadius: 14,
-                      paddingVertical: 12,
-                      paddingHorizontal: 12,
-                      transform: [{ scale: pressed ? 0.99 : 1 }],
-                    })}
-                  >
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
-                      <Avatar size={28} uri={u.avatar_url ?? null} name={u.name} style={{ backgroundColor: '#fff' }} />
-                      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>{u.name}</Text>
-                    </View>
-                  </Pressable>
-                );
-              }}
-              ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין תוצאות.</Text>}
-            />
-          </View>
-        </View>
-      </ModalDialog>
     </Screen>
   );
 }

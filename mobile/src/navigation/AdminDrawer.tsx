@@ -25,7 +25,7 @@ import { DashboardScreen } from '../screens/admin/DashboardScreen';
 import { SupportScreen } from '../screens/admin/SupportScreen';
 import { UsersScreen } from '../screens/admin/UsersScreen';
 import { JobsScreen } from '../screens/admin/JobsScreen';
-import { WorkTemplatesScreen } from '../screens/admin/WorkTemplatesScreen';
+import { WorkTemplatesStack } from './WorkTemplatesStack';
 import { WorkScheduleScreen } from '../screens/admin/WorkScheduleScreen';
 import { DailyScheduleScreen } from '../screens/admin/DailyScheduleScreen';
 import { ReportsScreen } from '../screens/admin/ReportsScreen';
@@ -305,7 +305,7 @@ export function AdminDrawer() {
       <Drawer.Screen name="Dashboard" options={{ title: 'לוח בקרה' }} component={DashboardScreen} />
       <Drawer.Screen name="Users" options={{ title: 'משתמשים' }} component={UsersScreen} />
       <Drawer.Screen name="Jobs" options={{ title: 'משימות' }} component={JobsScreen} />
-      <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה' }} component={WorkTemplatesScreen} />
+      <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה', headerShown: false }} component={WorkTemplatesStack} />
       <Drawer.Screen name="WorkSchedule" options={{ title: 'קווי עבודה' }} component={WorkScheduleScreen} />
       <Drawer.Screen name="DailySchedule" options={{ title: 'לוז יומי' }} component={DailyScheduleScreen} />
       <Drawer.Screen name="Support" options={{ title: 'שירות לקוחות' }} component={SupportScreen} />

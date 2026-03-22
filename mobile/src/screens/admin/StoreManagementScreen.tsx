@@ -23,7 +23,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { endOfWeek, startOfWeek } from 'date-fns';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -575,7 +574,7 @@ export function StoreManagementScreen() {
   }, [wizardStep]);
 
   return (
-    <Screen padded={false}>
+    <View style={{ flex: 1, backgroundColor: '#F6F7FB' }}>
       <ScrollView
         contentContainerStyle={{ gap: 14, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 36 }}
         showsVerticalScrollIndicator={false}
@@ -1021,7 +1020,7 @@ export function StoreManagementScreen() {
         onChangeSelectedHandles={setSelectedHandles}
         onClose={() => setProductPickerOpen(false)}
       />
-    </Screen>
+    </View>
   );
 }
 

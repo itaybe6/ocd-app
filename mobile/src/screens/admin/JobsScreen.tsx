@@ -5,7 +5,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays, Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -729,15 +728,15 @@ export function JobsScreen() {
   );
 
   return (
-    <Screen backgroundColor={ui.surface}>
+    <View style={{ flex: 1, backgroundColor: ui.surface }}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => `${item.kind}:${item.id}`}
         stickySectionHeadersEnabled={false}
         style={{ marginTop: 4 }}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 16, paddingTop: 12 }}
         ListHeaderComponent={
-          <View style={{ gap: 14, marginBottom: 16, paddingTop: 6 }}>
+          <View style={{ gap: 14, marginBottom: 16 }}>
             {/* Stats bento (neutral) */}
             <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
               {[
@@ -1722,12 +1721,6 @@ export function JobsScreen() {
                 onChange={(v) => setEditing((p) => (p ? { ...p, worker_id: v } : p))}
               />
               <Input
-                label="Order number"
-                value={String(editing.order_number ?? '')}
-                onChangeText={(v) => setEditing((p) => (p ? { ...p, order_number: v ? Number(v) : null } : p))}
-                keyboardType="numeric"
-              />
-              <Input
                 label="Notes"
                 value={editing.notes ?? ''}
                 onChangeText={(v) => setEditing((p) => (p ? { ...p, notes: v } : p))}
@@ -1908,7 +1901,7 @@ export function JobsScreen() {
           </ScrollView>
         )}
       </ModalSheet>
-    </Screen>
+    </View>
   );
 }
 
