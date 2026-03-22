@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -229,7 +228,7 @@ export function WorkScheduleScreen() {
   };
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchAll} />
         <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>קווי עבודה</Text>
@@ -275,7 +274,7 @@ export function WorkScheduleScreen() {
           </View>
         )}
       </ModalSheet>
-    </Screen>
+    </View>
   );
 }
 

@@ -4,7 +4,6 @@ import Toast from 'react-native-toast-message';
 import { endOfDay, endOfMonth, format, startOfDay, startOfMonth } from 'date-fns';
 import { useFocusEffect } from '@react-navigation/native';
 import { ClipboardList, Coins, UserRound, Users } from 'lucide-react-native';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
@@ -242,8 +241,11 @@ export function DashboardScreen() {
   }, [workerDetailsOpen, selectedWorkerId]);
 
   return (
-    <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 26 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 26, paddingHorizontal: 16, paddingTop: 12 }}
+      >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           <Card
             style={{
@@ -776,7 +778,7 @@ export function DashboardScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </Screen>
+    </View>
   );
 }
 

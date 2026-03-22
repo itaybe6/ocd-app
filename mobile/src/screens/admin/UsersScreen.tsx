@@ -5,7 +5,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { Screen } from '../../components/Screen';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -435,7 +434,7 @@ export function UsersScreen() {
   };
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ gap: 10 }}>
         {/* iOS-like header */}
         <View
@@ -592,7 +591,7 @@ export function UsersScreen() {
       </View>
 
       <FlatList
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 12, flex: 1 }}
         data={filtered}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
@@ -925,7 +924,7 @@ export function UsersScreen() {
           </ScrollView>
         </View>
       </AnchoredWindow>
-    </Screen>
+    </View>
   );
 }
 

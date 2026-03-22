@@ -6,7 +6,6 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { addDays, format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { CalendarDays, ChevronLeft, ChevronRight, Eye } from 'lucide-react-native';
-import { Screen } from '../../components/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { ModalSheet } from '../../components/ModalSheet';
@@ -284,7 +283,7 @@ export function DailyScheduleScreen() {
   };
 
   return (
-    <Screen backgroundColor="#FAF9FE">
+    <View style={{ flex: 1, backgroundColor: '#FAF9FE', paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ gap: 10 }}>
         <>
           <View style={{ gap: 6 }}>
@@ -573,7 +572,7 @@ export function DailyScheduleScreen() {
           />
         </View>
       </OriginWindow>
-    </Screen>
+    </View>
   );
 }
 

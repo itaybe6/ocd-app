@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { SelectSheet } from '../../components/ui/SelectSheet';
@@ -106,7 +105,7 @@ export function ReportsScreen() {
   const total = useMemo(() => jobs.reduce((sum, j) => sum + j.totalRefill, 0), [jobs]);
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'הרץ דוח'} fullWidth={false} onPress={runReport} />
@@ -138,7 +137,7 @@ export function ReportsScreen() {
           ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נתונים.</Text>}
         />
       </View>
-    </Screen>
+    </View>
   );
 }
 

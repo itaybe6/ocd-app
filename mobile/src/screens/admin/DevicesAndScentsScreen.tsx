@@ -25,7 +25,6 @@ import Animated, {
   useAnimatedKeyboard,
   useAnimatedStyle,
 } from 'react-native-reanimated';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -476,12 +475,12 @@ export function DevicesAndScentsScreen() {
   }, [filteredDevices.length, query]);
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <FlatList
         data={filteredDevices}
         keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
+        contentContainerStyle={{ gap: 10, paddingBottom: 24, paddingHorizontal: 16, paddingTop: 12 }}
         refreshing={loading}
         onRefresh={fetchAll}
         ListHeaderComponent={listHeader}
@@ -709,7 +708,7 @@ export function DevicesAndScentsScreen() {
           </View>
         </FabButton>
       )}
-    </Screen>
+    </View>
   );
 }
 
