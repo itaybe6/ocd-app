@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, type PressableProps, type ViewStyle } from 'react-native';
+import { Pressable, Text, View, type PressableProps, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
 
 type Variant = 'primary' | 'secondary' | 'danger';
@@ -23,20 +23,30 @@ export function Button({ title, variant = 'primary', fullWidth = true, disabled,
     <Pressable
       {...rest}
       disabled={disabled}
-      style={[
-        {
-          backgroundColor: disabled ? disabledBackground : backgroundColor,
-          borderRadius: 18,
-          paddingVertical: 14,
-          alignItems: 'center',
-          width: fullWidth ? '100%' : undefined,
-          borderWidth: variant === 'secondary' ? 1 : 0,
-          borderColor: disabled ? disabledBorder : variant === 'secondary' ? colors.border : undefined,
-        },
-        style,
-      ]}
+      style={({ pressed }) => ({
+        width: fullWidth ? '100%' : undefined,
+        opacity: pressed ? 0.94 : 1,
+      })}
     >
-      <Text style={{ color: disabled ? disabledText : textColor, fontWeight: '900' }}>{title}</Text>
+      <View
+        style={[
+          {
+            backgroundColor: disabled ? disabledBackground : backgroundColor,
+            borderRadius: 18,
+            paddingVertical: 14,
+            paddingHorizontal: 16,
+            minHeight: 52,
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            borderWidth: variant === 'secondary' ? 1 : 0,
+            borderColor: disabled ? disabledBorder : variant === 'secondary' ? colors.border : undefined,
+          },
+          style,
+        ]}
+      >
+        <Text style={{ color: disabled ? disabledText : textColor, fontWeight: '900' }}>{title}</Text>
+      </View>
     </Pressable>
   );
 }

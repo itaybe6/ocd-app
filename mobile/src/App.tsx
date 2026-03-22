@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './navigation/RootNavigator';
 import { AuthProvider, useAuth } from './state/AuthContext';
 import { CartProvider } from './state/CartContext';
+import { FavoritesProvider } from './state/FavoritesContext';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { LoadingProvider, useLoading } from './state/LoadingContext';
 import { registerForPushNotifications } from './lib/pushNotifications';
@@ -50,9 +51,11 @@ export default function App() {
     <SafeAreaProvider>
       <LoadingProvider>
         <AuthProvider>
-          <CartProvider>
-            <AppShell />
-          </CartProvider>
+          <FavoritesProvider>
+            <CartProvider>
+              <AppShell />
+            </CartProvider>
+          </FavoritesProvider>
         </AuthProvider>
       </LoadingProvider>
     </SafeAreaProvider>

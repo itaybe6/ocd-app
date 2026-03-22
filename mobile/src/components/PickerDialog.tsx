@@ -35,6 +35,27 @@ export function PickerDialog({
     return options.filter((o) => o.label.toLowerCase().includes(query));
   }, [options, q]);
 
+  const renderPickerSurface = ({
+    title,
+    selected = false,
+  }: {
+    title: string;
+    selected?: boolean;
+  }) => (
+    <View
+      style={{
+        backgroundColor: selected ? '#EAF2FF' : colors.elevated,
+        borderColor: selected ? '#93C5FD' : colors.border,
+        borderWidth: 1,
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+      }}
+    >
+      <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{title}</Text>
+    </View>
+  );
+
   return (
     <ModalDialog
       visible={visible}
@@ -59,16 +80,9 @@ export function PickerDialog({
               onClear();
               onClose();
             }}
-            style={{
-              backgroundColor: colors.elevated,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 14,
-              paddingVertical: 12,
-              alignItems: 'center',
-            }}
+            style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
           >
-            <Text style={{ color: colors.text, fontWeight: '900' }}>נקה בחירה</Text>
+            {renderPickerSurface({ title: 'נקה בחירה' })}
           </Pressable>
         )}
       </View>
@@ -86,16 +100,9 @@ export function PickerDialog({
                   onSelect(item.value);
                   onClose();
                 }}
-                style={{
-                  backgroundColor: selected ? 'rgba(37, 99, 235, 0.10)' : colors.elevated,
-                  borderColor: selected ? 'rgba(37, 99, 235, 0.35)' : colors.border,
-                  borderWidth: 1,
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                  paddingHorizontal: 12,
-                }}
+                style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
               >
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.label}</Text>
+                {renderPickerSurface({ title: item.label, selected })}
               </Pressable>
             );
           }}

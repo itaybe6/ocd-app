@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ShoppingCart } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import {
   fetchCollectionProducts,
@@ -26,7 +27,10 @@ import {
   type ShopifyMenuItem,
   type ShopifyProduct,
 } from '../../lib/shopify';
+import { FavoriteToggleButton } from '../../components/FavoriteToggleButton';
+import { favoriteInputFromStoreProduct } from '../../lib/favorites';
 import { useCart } from '../../state/CartContext';
+import { useFavorites } from '../../state/FavoritesContext';
 
 type StoreCategory = {
   id: string;
@@ -65,6 +69,7 @@ export type StoreProduct = {
   subtitle: string;
   categoryId: string;
   price: number;
+  currencyCode: string;
   handle: string;
   description: string;
   badge?: string;
@@ -73,6 +78,9 @@ export type StoreProduct = {
   accentColor: string;
   imageUrl: string | null;
   imageAltText: string | null;
+  variantId: string;
+  variantTitle: string | null;
+  availableForSale: boolean;
 };
 
 type CollectionCard = {
@@ -110,6 +118,7 @@ const COLLECTIONS: CollectionCard[] = [
 
 const BOTTOM_NAV_ITEMS = [
   { id: 'home', label: 'בית' },
+  { id: 'favorites', label: 'אהבתי' },
   { id: 'categories', label: 'קטגוריות' },
   { id: 'ocdPlus', label: 'OCD+' },
   { id: 'search', label: 'חיפוש' },
@@ -170,6 +179,22 @@ const CATEGORY_STORY_PRODUCT_OVERRIDES: Record<string, string[]> = {
 
 const FEATURED_BRAND_IMAGE_OVERRIDES: Record<string, number> = {
   סנו: require('../../../assets/brands/sano.png'),
+  טאצ: require('../../../assets/brands/touch.jpg'),
+  "טאץ'": require('../../../assets/brands/touch.jpg'),
+  TOUCH: require('../../../assets/brands/touch.jpg'),
+  פינל: require('../../../assets/brands/final.jpg'),
+  פייל: require('../../../assets/brands/final.jpg'),
+  FINAL: require('../../../assets/brands/final.jpg'),
+  יעקובי: require('../../../assets/brands/yaakoby-logo.png'),
+  YAAKOBY: require('../../../assets/brands/yaakoby-logo.png'),
+  סאג: require('../../../assets/brands/sag.png'),
+  SAG: require('../../../assets/brands/sag.png'),
+  סוסייטא: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
+  סוסיטסא: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
+  סוסיטסה: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
+  SUCITESA: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
+  'מוצרי TNX': require('../../../assets/brands/TNX.png'),
+  TNX: require('../../../assets/brands/TNX.png'),
 };
 
 function formatPrice(price: number) {
@@ -204,6 +229,7 @@ function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride
     subtitle,
     categoryId: categoryIdOverride || normalizedProductType || 'all',
     price: product.price,
+    currencyCode: product.currencyCode,
     handle: product.handle,
     description: product.description,
     badge: getProductBadge(index),
@@ -212,6 +238,9 @@ function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride
     accentColor: palette.accentColor,
     imageUrl: product.imageUrl,
     imageAltText: product.imageAltText,
+    variantId: product.variantId ?? '',
+    variantTitle: product.variantTitle,
+    availableForSale: product.availableForSale,
   };
 }
 
@@ -725,15 +754,19 @@ function getCategoryAvatarLabel(name: string) {
   return words.slice(0, 2).map((word) => word[0]).join('') || name.slice(0, 1);
 }
 
-function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean) {
-  const color = isActive ? '#111111' : '#7B8190';
-  const size = 20;
+function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorOverride?: string, sizeOverride?: number) {
+  const color = colorOverride ?? (isActive ? '#111111' : '#7B8190');
+  const size = sizeOverride ?? 20;
   const iconName =
     itemId === 'home'
       ? isActive
         ? 'home'
         : 'home-outline'
-      : itemId === 'categories'
+      : itemId === 'favorites'
+        ? isActive
+          ? 'heart'
+          : 'heart-outline'
+        : itemId === 'categories'
         ? isActive
           ? 'grid'
           : 'grid-outline'
@@ -752,10 +785,92 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean) {
   return <Ionicons name={iconName} size={size} color={color} />;
 }
 
+function AnimatedStoreTabButton({
+  focused,
+  onPress,
+  icon,
+  compact = false,
+}: {
+  focused: boolean;
+  onPress: () => void;
+  icon: React.ReactNode;
+  compact?: boolean;
+}) {
+  const progress = useSharedValue(focused ? 1 : 0);
+  const pressed = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(focused ? 1 : 0, { duration: 180 });
+  }, [focused, progress]);
+
+  const animatedBubbleStyle = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(progress.value, [0, 1], ['transparent', '#000000']);
+    const scale = withTiming(pressed.value ? 0.94 : 1, { duration: 140 });
+
+    return {
+      backgroundColor,
+      transform: [{ scale }],
+    };
+  });
+
+  const animatedLabelStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(focused ? 1 : 0.78, { duration: 160 }),
+    transform: [{ translateY: withTiming(focused ? 0 : 1, { duration: 160 }) }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        pressed.value = 1;
+      }}
+      onPressOut={() => {
+        pressed.value = 0;
+      }}
+      style={{
+        minWidth: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Animated.View
+        style={[
+          {
+            width: compact ? 42 : 40,
+            height: compact ? 42 : 40,
+            borderRadius: 999,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 0,
+          },
+          animatedBubbleStyle,
+        ]}
+      >
+        {icon}
+      </Animated.View>
+      <Animated.Text
+        style={[
+          {
+            fontSize: 11,
+            fontWeight: focused ? '800' : '600',
+            color: focused ? '#111111' : '#7B8190',
+            textAlign: 'center',
+            height: 0,
+            opacity: 0,
+          },
+          animatedLabelStyle,
+        ]}
+      >
+        {' '}
+      </Animated.Text>
+    </Pressable>
+  );
+}
+
 export function getStoreBottomBarMetrics(insetsBottom: number) {
   const bottomBarInset = Math.max(4, Math.min(insetsBottom, 8));
   const bottomBarOffset = 4 + insetsBottom;
-  const bottomBarHeight = 58 + bottomBarInset;
+  const bottomBarHeight = 70 + bottomBarInset;
 
   return {
     bottomBarInset,
@@ -779,52 +894,115 @@ export function StoreFloatingTabBar({
     <View
       style={{
         position: 'absolute',
-        left: 20,
-        right: 20,
+        left: 0,
+        right: 0,
         bottom: bottomBarOffset,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 34,
-        padding: 2,
-        shadowColor: '#000000',
-        shadowOpacity: 0.2,
-        shadowRadius: 24,
-        shadowOffset: { width: 0, height: 14 },
-        elevation: 18,
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
       }}
     >
       <View
         style={{
-          flexDirection: 'row-reverse',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          minHeight: 48,
-          borderRadius: 32,
-          backgroundColor: '#F3F4F6',
-          paddingHorizontal: 14,
-          paddingTop: 8,
-          paddingBottom: bottomBarInset,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 999,
+          padding: 4,
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
+          shadowColor: '#000000',
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
         }}
       >
-        {BOTTOM_NAV_ITEMS.map((item) => (
-          <Pressable
-            key={item.id}
-            onPress={() => onTabPress(item.id)}
-            style={{ alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1, minHeight: 46 }}
-          >
-            <View style={{ alignItems: 'center', justifyContent: 'center', height: 20 }}>
-              {renderBottomNavIcon(item.id, activeTab === item.id)}
-            </View>
-            <Text
-              style={{
-                color: activeTab === item.id ? '#111111' : '#7B8190',
-                fontSize: 11,
-                fontWeight: activeTab === item.id ? '800' : '700',
-              }}
-            >
-              {item.label}
-            </Text>
-          </Pressable>
-        ))}
+        <AnimatedStoreTabButton
+          compact
+          focused={activeTab === 'search'}
+          onPress={() => onTabPress('search')}
+          icon={renderBottomNavIcon('search', activeTab === 'search', activeTab === 'search' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+      </View>
+
+      <View
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 999,
+          padding: 4,
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
+          shadowColor: '#000000',
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
+        }}
+      >
+        <AnimatedStoreTabButton
+          compact
+          focused={activeTab === 'favorites'}
+          onPress={() => onTabPress('favorites')}
+          icon={renderBottomNavIcon('favorites', activeTab === 'favorites', activeTab === 'favorites' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+      </View>
+
+      <View
+        style={{
+          flexDirection: 'row-reverse',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 999,
+          padding: 5,
+          paddingHorizontal: 8,
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
+          shadowColor: '#000000',
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
+        }}
+      >
+        <AnimatedStoreTabButton
+          focused={activeTab === 'home'}
+          onPress={() => onTabPress('home')}
+          icon={renderBottomNavIcon('home', activeTab === 'home', activeTab === 'home' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+        <AnimatedStoreTabButton
+          focused={activeTab === 'categories'}
+          onPress={() => onTabPress('categories')}
+          icon={renderBottomNavIcon('categories', activeTab === 'categories', activeTab === 'categories' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+        <AnimatedStoreTabButton
+          focused={activeTab === 'ocdPlus'}
+          onPress={() => onTabPress('ocdPlus')}
+          icon={renderBottomNavIcon('ocdPlus', activeTab === 'ocdPlus', activeTab === 'ocdPlus' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+      </View>
+
+      <View
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 999,
+          padding: 4,
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
+          shadowColor: '#000000',
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
+        }}
+      >
+        <AnimatedStoreTabButton
+          compact
+          focused={activeTab === 'profile'}
+          onPress={() => onTabPress('profile')}
+          icon={renderBottomNavIcon('profile', activeTab === 'profile', activeTab === 'profile' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
       </View>
     </View>
   );
@@ -886,6 +1064,7 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
 
 export function StoreHomeScreen({
   onProfilePress,
+  onFavoritesPress,
   onOcdPlusPress,
   onProductPress,
   onOpenCart,
@@ -895,6 +1074,7 @@ export function StoreHomeScreen({
   initialTabRequestId,
 }: {
   onProfilePress: () => void;
+  onFavoritesPress?: () => void;
   onOcdPlusPress?: () => void;
   onProductPress?: (handle: string) => void;
   onOpenCart?: () => void;
@@ -913,7 +1093,9 @@ export function StoreHomeScreen({
   const { width: windowWidth } = useWindowDimensions();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const categoryCardWidth = Math.max(150, Math.floor((windowWidth - 40) / 2));
-  const brandCardWidth = Math.max(96, Math.floor((windowWidth - 44) / 3));
+  const featuredBrandCarouselGap = 14;
+  const featuredBrandCarouselCardWidth = Math.min(Math.max(Math.floor(windowWidth * 0.42), 148), 188);
+  const featuredBrandCarouselStep = featuredBrandCarouselCardWidth + featuredBrandCarouselGap;
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
@@ -928,11 +1110,15 @@ export function StoreHomeScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const categoryTabsRef = useRef<ScrollView | null>(null);
+  const featuredBrandsCarouselRef = useRef<ScrollView | null>(null);
+  const featuredBrandsCarouselOffsetRef = useRef(0);
+  const featuredBrandsCarouselPausedRef = useRef(false);
   const searchInputRef = useRef<TextInput | null>(null);
   const [activePrimaryTab, setActivePrimaryTab] = useState<StoreMainTabId>('home');
   const activeBottomTab = activePrimaryTab;
   const lastHandledInitialTabRequestIdRef = useRef<number | undefined>(undefined);
   const { itemCount } = useCart();
+  const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     let isMounted = true;
@@ -1031,15 +1217,10 @@ export function StoreHomeScreen({
       })),
     [featuredBrandsSection]
   );
-  const featuredBrandRows = useMemo(() => {
-    const rows: StoreSubcategory[][] = [];
-
-    for (let index = 0; index < featuredBrands.length; index += 3) {
-      rows.push(featuredBrands.slice(index, index + 3));
-    }
-
-    return rows;
-  }, [featuredBrands]);
+  const featuredBrandsCarouselItems = useMemo(
+    () => (featuredBrands.length > 1 ? [...featuredBrands, ...featuredBrands, ...featuredBrands] : featuredBrands),
+    [featuredBrands]
+  );
   const selectedCategoryInfo = useMemo(
     () => categories.find((category) => category.id === selectedCategory) ?? topLevelCategories.find((category) => category.id === selectedCategory),
     [categories, selectedCategory, topLevelCategories]
@@ -1095,6 +1276,41 @@ export function StoreHomeScreen({
       setSelectedCategory(topLevelCategories[0].id);
     }
   }, [initialTab, initialTabRequestId, topLevelCategories]);
+
+  useEffect(() => {
+    if (!featuredBrands.length) return;
+
+    const initialOffset = featuredBrands.length > 1 ? featuredBrands.length * featuredBrandCarouselStep : 0;
+    const frameId = requestAnimationFrame(() => {
+      featuredBrandsCarouselRef.current?.scrollTo({ x: initialOffset, animated: false });
+      featuredBrandsCarouselOffsetRef.current = initialOffset;
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [featuredBrands.length, featuredBrandCarouselStep]);
+
+  useEffect(() => {
+    if (activePrimaryTab !== 'categories') return;
+    if (featuredBrands.length <= 1) return;
+
+    const intervalId = setInterval(() => {
+      if (featuredBrandsCarouselPausedRef.current) return;
+
+      const singleSetWidth = featuredBrands.length * featuredBrandCarouselStep;
+      let nextOffset = featuredBrandsCarouselOffsetRef.current;
+
+      if (nextOffset >= singleSetWidth * 2) {
+        nextOffset = singleSetWidth;
+        featuredBrandsCarouselRef.current?.scrollTo({ x: nextOffset, animated: false });
+      }
+
+      nextOffset += featuredBrandCarouselStep;
+      featuredBrandsCarouselRef.current?.scrollTo({ x: nextOffset, animated: true });
+      featuredBrandsCarouselOffsetRef.current = nextOffset;
+    }, 2200);
+
+    return () => clearInterval(intervalId);
+  }, [activePrimaryTab, featuredBrands.length, featuredBrandCarouselStep]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1239,6 +1455,13 @@ export function StoreHomeScreen({
       setMenuOpen(false);
       searchInputRef.current?.blur();
       onOcdPlusPress?.();
+      return;
+    }
+
+    if (itemId === 'favorites') {
+      setMenuOpen(false);
+      searchInputRef.current?.blur();
+      onFavoritesPress?.();
       return;
     }
 
@@ -1726,32 +1949,63 @@ export function StoreHomeScreen({
                       <Text style={{ color: '#9CA3AF', fontSize: 12 }}>מותגים נבחרים לרכישה מהירה</Text>
                     </View>
 
-                    <View style={{ gap: 10 }}>
-                      {featuredBrandRows.map((row, rowIndex) => (
-                        <View
-                          key={`featured-brand-row-${rowIndex}`}
-                          style={{
-                            flexDirection: 'row-reverse',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          {row.map((brand) => (
+                    <View style={{ marginHorizontal: -16 }}>
+                      <ScrollView
+                        ref={featuredBrandsCarouselRef}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        decelerationRate="fast"
+                        snapToInterval={featuredBrandCarouselStep}
+                        snapToAlignment="center"
+                        disableIntervalMomentum
+                        scrollEventThrottle={16}
+                        contentContainerStyle={{
+                          paddingHorizontal: Math.max(16, Math.floor((windowWidth - featuredBrandCarouselCardWidth) / 2)),
+                          gap: featuredBrandCarouselGap,
+                        }}
+                        onScrollBeginDrag={() => {
+                          featuredBrandsCarouselPausedRef.current = true;
+                        }}
+                        onScrollEndDrag={() => {
+                          featuredBrandsCarouselPausedRef.current = false;
+                        }}
+                        onMomentumScrollEnd={(event) => {
+                          const singleSetWidth = featuredBrands.length * featuredBrandCarouselStep;
+                          let currentOffset = event.nativeEvent.contentOffset.x;
+
+                          if (featuredBrands.length > 1) {
+                            if (currentOffset <= singleSetWidth * 0.5) {
+                              currentOffset += singleSetWidth;
+                              featuredBrandsCarouselRef.current?.scrollTo({ x: currentOffset, animated: false });
+                            } else if (currentOffset >= singleSetWidth * 2.5) {
+                              currentOffset -= singleSetWidth;
+                              featuredBrandsCarouselRef.current?.scrollTo({ x: currentOffset, animated: false });
+                            }
+                          }
+
+                          featuredBrandsCarouselOffsetRef.current = currentOffset;
+                          featuredBrandsCarouselPausedRef.current = false;
+                        }}
+                        onScroll={(event) => {
+                          featuredBrandsCarouselOffsetRef.current = event.nativeEvent.contentOffset.x;
+                        }}
+                      >
+                        {featuredBrandsCarouselItems.map((brand, brandIndex) => {
+                          const brandImageOverride = FEATURED_BRAND_IMAGE_OVERRIDES[brand.title];
+
+                          return (
                             <View
-                              key={`featured-brand-${brand.id}`}
+                              key={`featured-brand-${brand.id}-${brandIndex}`}
                               style={{
-                                width: brandCardWidth,
-                                borderRadius: 20,
+                                width: featuredBrandCarouselCardWidth,
+                                borderRadius: 24,
                                 shadowColor: '#0F172A',
-                                shadowOpacity: 0.05,
-                                shadowRadius: 10,
-                                shadowOffset: { width: 0, height: 4 },
-                                elevation: 2,
+                                shadowOpacity: 0.08,
+                                shadowRadius: 16,
+                                shadowOffset: { width: 0, height: 8 },
+                                elevation: 3,
                               }}
                             >
-                          {(() => {
-                            const brandImageOverride = FEATURED_BRAND_IMAGE_OVERRIDES[brand.title];
-
-                            return (
                               <Pressable
                                 onPress={() =>
                                   onOpenCategory?.({
@@ -1762,15 +2016,17 @@ export function StoreHomeScreen({
                                   })
                                 }
                                 style={({ pressed }) => ({
-                                  borderRadius: 20,
+                                  borderRadius: 24,
                                   backgroundColor: '#FFFFFF',
-                                  overflow: 'hidden',
                                   transform: [{ scale: pressed ? 0.985 : 1 }],
                                 })}
                               >
                                 <View
                                   style={{
-                                    height: 122,
+                                    height: 154,
+                                    borderTopLeftRadius: 24,
+                                    borderTopRightRadius: 24,
+                                    overflow: 'hidden',
                                     backgroundColor: '#F5F7FA',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -1781,17 +2037,27 @@ export function StoreHomeScreen({
                                       source={brandImageOverride}
                                       resizeMode="cover"
                                       accessibilityLabel={brand.title}
-                                      style={{ width: '100%', height: '100%' }}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        borderTopLeftRadius: 24,
+                                        borderTopRightRadius: 24,
+                                      }}
                                     />
                                   ) : brand.imageUrl ? (
                                     <Image
                                       source={{ uri: brand.imageUrl }}
                                       resizeMode="cover"
                                       accessibilityLabel={brand.title}
-                                      style={{ width: '100%', height: '100%' }}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        borderTopLeftRadius: 24,
+                                        borderTopRightRadius: 24,
+                                      }}
                                     />
                                   ) : (
-                                    <Text style={{ color: '#6B7280', fontSize: 24, fontWeight: '800' }}>
+                                    <Text style={{ color: '#6B7280', fontSize: 28, fontWeight: '800' }}>
                                       {getCategoryAvatarLabel(brand.title)}
                                     </Text>
                                   )}
@@ -1799,18 +2065,18 @@ export function StoreHomeScreen({
 
                                 <View
                                   style={{
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 10,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 12,
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    minHeight: 54,
+                                    minHeight: 58,
                                   }}
                                 >
                                   <Text
                                     numberOfLines={2}
                                     style={{
                                       color: '#111827',
-                                      fontSize: 16,
+                                      fontSize: 17,
                                       fontWeight: '800',
                                       textAlign: 'center',
                                     }}
@@ -1819,16 +2085,10 @@ export function StoreHomeScreen({
                                   </Text>
                                 </View>
                               </Pressable>
-                            );
-                          })()}
                             </View>
-                          ))}
-                          {row.length < 3 &&
-                            Array.from({ length: 3 - row.length }).map((_, spacerIndex) => (
-                              <View key={`featured-brand-spacer-${rowIndex}-${spacerIndex}`} style={{ width: brandCardWidth }} />
-                            ))}
-                        </View>
-                      ))}
+                          );
+                        })}
+                      </ScrollView>
                     </View>
                   </View>
                 )}
@@ -2192,6 +2452,25 @@ export function StoreHomeScreen({
                       </View>
                     )}
 
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 10,
+                        zIndex: 2,
+                      }}
+                    >
+                      <FavoriteToggleButton
+                        active={isFavorite(product.id)}
+                        loading={isFavoritePending(product.id)}
+                        onPress={(event) => {
+                          event?.stopPropagation();
+                          void toggleFavorite(favoriteInputFromStoreProduct(product));
+                        }}
+                        size={34}
+                      />
+                    </View>
+
                     <ProductImage product={product} height={166} />
 
                     <View
@@ -2281,7 +2560,26 @@ export function StoreHomeScreen({
                 >
                   <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
                     <View style={{ width: 112, padding: 10 }}>
-                      <ProductImage product={product} height={118} />
+                      <View style={{ position: 'relative' }}>
+                        <ProductImage product={product} height={118} />
+                        <View
+                          style={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                          }}
+                        >
+                          <FavoriteToggleButton
+                            active={isFavorite(product.id)}
+                            loading={isFavoritePending(product.id)}
+                            onPress={(event) => {
+                              event?.stopPropagation();
+                              void toggleFavorite(favoriteInputFromStoreProduct(product));
+                            }}
+                            size={32}
+                          />
+                        </View>
+                      </View>
                     </View>
 
                     <View
@@ -2474,6 +2772,7 @@ export function StoreCategoryScreen({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const { itemCount } = useCart();
+  const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     let isMounted = true;
@@ -2812,7 +3111,18 @@ export function StoreCategoryScreen({
                         justifyContent: 'space-between',
                       }}
                     >
-                      <View style={{ alignItems: 'flex-end' }}>
+                      <View style={{ width: '100%', flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                        <FavoriteToggleButton
+                          active={isFavorite(product.id)}
+                          loading={isFavoritePending(product.id)}
+                          onPress={(event) => {
+                            event?.stopPropagation();
+                            void toggleFavorite(favoriteInputFromStoreProduct(product));
+                          }}
+                          size={36}
+                        />
+
+                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
                         <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
                           {product.name}
                         </Text>
@@ -2825,6 +3135,7 @@ export function StoreCategoryScreen({
                         >
                           {product.description || 'מוצר מהקטלוג שלך'}
                         </Text>
+                      </View>
                       </View>
 
                       <View
@@ -2893,7 +3204,8 @@ export function StoreProductScreen({
 }) {
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
-  const { addItem, itemCount, getQuantity } = useCart();
+  const { addItem, itemCount, getQuantity, isMutating } = useCart();
+  const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
   const productQuantity = getQuantity(product.id);
 
   return (
@@ -2975,6 +3287,15 @@ export function StoreProductScreen({
                   </View>
                 )}
               </Pressable>
+
+              <FavoriteToggleButton
+                active={isFavorite(product.id)}
+                loading={isFavoritePending(product.id)}
+                onPress={() => {
+                  void toggleFavorite(favoriteInputFromStoreProduct(product));
+                }}
+                size={42}
+              />
             </View>
 
             <View
@@ -3130,17 +3451,26 @@ export function StoreProductScreen({
           </View>
 
           <Pressable
-            onPress={() => addItem(product)}
+            onPress={() => {
+              void addItem(product);
+            }}
+            disabled={isMutating || !product.availableForSale || !product.variantId}
             style={{
               borderRadius: 22,
-              backgroundColor: '#111827',
+              backgroundColor: isMutating || !product.availableForSale || !product.variantId ? '#475569' : '#111827',
               paddingVertical: 16,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
             <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900' }}>
-              {productQuantity ? `הוסף עוד לעגלה (${productQuantity})` : 'הוסף לעגלה'}
+              {isMutating
+                ? 'מעדכן עגלה...'
+                : !product.availableForSale || !product.variantId
+                  ? 'המוצר לא זמין כרגע לרכישה'
+                  : productQuantity
+                    ? `הוסף עוד לעגלה (${productQuantity})`
+                    : 'הוסף לעגלה'}
             </Text>
           </Pressable>
           </View>

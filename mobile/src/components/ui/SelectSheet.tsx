@@ -28,26 +28,30 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
       )}
       <Pressable
         onPress={() => setOpen(true)}
-        style={{
-          backgroundColor: colors.elevated,
-          borderColor: colors.border,
-          borderWidth: 1,
-          borderRadius: 14,
-          paddingHorizontal: 14,
-          paddingVertical: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
+        style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
       >
-        <ChevronDown size={18} color={colors.muted} />
-        <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
-          {value && selectedAvatarUrl !== undefined ? (
-            <Avatar size={24} uri={selectedAvatarUrl} name={selectedLabel} style={{ backgroundColor: '#fff' }} />
-          ) : null}
-          <Text style={{ color: value ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
-            {value ? selectedLabel : placeholder}
-          </Text>
+        <View
+          style={{
+            backgroundColor: colors.elevated,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <ChevronDown size={18} color={colors.muted} />
+          <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
+            {value && selectedAvatarUrl !== undefined ? (
+              <Avatar size={24} uri={selectedAvatarUrl} name={selectedLabel} style={{ backgroundColor: '#fff' }} />
+            ) : null}
+            <Text style={{ color: value ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
+              {value ? selectedLabel : placeholder}
+            </Text>
+          </View>
         </View>
       </Pressable>
 
@@ -64,34 +68,38 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
                   setOpen(false);
                   onChange(o.value);
                 }}
-                style={{
-                  backgroundColor: o.value === value ? colors.primary : colors.elevated,
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                  paddingHorizontal: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
+                style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
               >
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
-                  {o.avatarUrl !== undefined ? (
-                    <Avatar
-                      size={26}
-                      uri={o.avatarUrl ?? null}
-                      name={o.label ?? o.value}
-                      style={{ backgroundColor: o.value === value ? 'rgba(255,255,255,0.12)' : '#fff', borderColor: 'rgba(0,0,0,0.10)' }}
-                    />
-                  ) : null}
-                  <Text
-                    style={{
-                      color: o.value === value ? '#fff' : colors.text,
-                      fontWeight: '800',
-                      textAlign: 'right',
-                      flex: 1,
-                    }}
-                  >
-                    {o.label ?? o.value}
-                  </Text>
+                <View
+                  style={{
+                    backgroundColor: o.value === value ? colors.primary : colors.elevated,
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    borderWidth: 1,
+                    borderColor: o.value === value ? colors.primary : colors.border,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                    {o.avatarUrl !== undefined ? (
+                      <Avatar
+                        size={26}
+                        uri={o.avatarUrl ?? null}
+                        name={o.label ?? o.value}
+                        style={{ backgroundColor: o.value === value ? 'rgba(255,255,255,0.12)' : '#fff', borderColor: 'rgba(0,0,0,0.10)' }}
+                      />
+                    ) : null}
+                    <Text
+                      style={{
+                        color: o.value === value ? '#fff' : colors.text,
+                        fontWeight: '800',
+                        textAlign: 'right',
+                        flex: 1,
+                      }}
+                    >
+                      {o.label ?? o.value}
+                    </Text>
+                  </View>
                 </View>
               </Pressable>
             ))}

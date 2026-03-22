@@ -24,10 +24,42 @@ type LoginScreenProps = {
   onBackToStore: () => void;
 };
 
+function AuthModeButton({
+  title,
+  active,
+  onPress,
+}: {
+  title: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.94 : 1 })}>
+      <View
+        style={{
+          borderRadius: 14,
+          paddingVertical: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: active ? colors.primary : '#FFFFFF',
+          borderWidth: active ? 0 : 1,
+          borderColor: colors.border,
+        }}
+      >
+        <Text style={{ color: active ? '#FFFFFF' : colors.text, fontWeight: '900' }}>{title}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export function LoginScreen({ onBackToStore }: LoginScreenProps) {
-  const { signInWithPassword } = useAuth();
+  const { signInWithPassword, signUpCustomer } = useAuth();
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const inLogo = useSharedValue(0);
@@ -116,15 +148,43 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
   const onSubmit = async () => {
     try {
       setSubmitting(true);
-      await signInWithPassword({ phone, password });
+      if (mode === 'login') {
+        await signInWithPassword({ phone, password });
+        return;
+      }
+
+      if (!name.trim()) {
+        Toast.show({ type: 'error', text1: 'נא להזין שם מלא' });
+        return;
+      }
+
+      if (password.length < 4) {
+        Toast.show({ type: 'error', text1: 'הסיסמה חייבת להכיל לפחות 4 תווים' });
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        Toast.show({ type: 'error', text1: 'אימות הסיסמה אינו תואם' });
+        return;
+      }
+
+      await signUpCustomer({ name, phone, address, password });
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'שגיאה בהתחברות', text2: e?.message ?? 'Unknown error' });
+      Toast.show({
+        type: 'error',
+        text1: mode === 'login' ? 'שגיאה בהתחברות' : 'שגיאה בהרשמה',
+        text2: e?.message ?? 'Unknown error',
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const canSubmit = useMemo(() => phone.trim().length >= 3 && password.length >= 1 && !submitting, [phone, password, submitting]);
+  const canSubmit = useMemo(() => {
+    if (submitting) return false;
+    if (mode === 'login') return phone.trim().length >= 3 && password.length >= 1;
+    return name.trim().length >= 2 && phone.trim().length >= 3 && password.length >= 4 && confirmPassword.length >= 4;
+  }, [confirmPassword, mode, name, password, phone, submitting]);
 
   return (
     <Screen>
@@ -174,6 +234,32 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                 }}
               >
                 <View style={{ gap: 12 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row-reverse',
+                      gap: 10,
+                      padding: 4,
+                      borderRadius: 18,
+                      backgroundColor: colors.elevated,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <AuthModeButton title="התחברות" active={mode === 'login'} onPress={() => setMode('login')} />
+                    <AuthModeButton title="הרשמה ללקוח" active={mode === 'signup'} onPress={() => setMode('signup')} />
+                  </View>
+
+                  {mode === 'signup' && (
+                    <Input
+                      label="שם מלא"
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="ישראל ישראלי"
+                      textContentType="name"
+                      autoComplete="name"
+                    />
+                  )}
+
                   <Input
                     label="טלפון"
                     value={phone}
@@ -183,6 +269,16 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                     textContentType="telephoneNumber"
                     autoComplete="tel"
                   />
+                  {mode === 'signup' && (
+                    <Input
+                      label="כתובת"
+                      value={address}
+                      onChangeText={setAddress}
+                      placeholder="רחוב, עיר"
+                      textContentType="fullStreetAddress"
+                      autoComplete="street-address"
+                    />
+                  )}
                   <Input
                     label="סיסמה"
                     value={password}
@@ -192,9 +288,22 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                     textContentType="password"
                     autoComplete="password"
                   />
+                  {mode === 'signup' && (
+                    <Input
+                      label="אימות סיסמה"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      placeholder="••••••"
+                      secureTextEntry
+                      textContentType="password"
+                      autoComplete="password"
+                    />
+                  )}
 
                   <Button
-                    title={submitting ? 'מתחבר…' : 'התחבר'}
+                    title={
+                      submitting ? (mode === 'login' ? 'מתחבר…' : 'נרשם…') : mode === 'login' ? 'התחבר' : 'צור חשבון לקוח'
+                    }
                     onPress={onSubmit}
                     disabled={!canSubmit}
                     style={{
@@ -210,31 +319,59 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                     <View style={{ flex: 1 }}>
                       <Button title="חזרה לחנות" variant="secondary" onPress={onBackToStore} />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Pressable
-                        onPress={() =>
-                          Toast.show({
-                            type: 'info',
-                            text1: 'טיפ',
-                            text2: 'אם שכחת סיסמה — פנה למנהל מערכת לאיפוס.',
-                          })
-                        }
-                        style={{
-                          borderRadius: 18,
-                          paddingVertical: 14,
-                          alignItems: 'center',
-                          backgroundColor: 'rgba(37,99,235,0.10)',
-                          borderWidth: 1,
-                          borderColor: 'rgba(37,99,235,0.18)',
-                        }}
-                      >
-                        <Text style={{ color: colors.primary, fontWeight: '900' }}>שכחתי סיסמה</Text>
-                      </Pressable>
-                    </View>
+                    {mode === 'login' && (
+                      <View style={{ flex: 1 }}>
+                        <Pressable
+                          onPress={() =>
+                            Toast.show({
+                              type: 'info',
+                              text1: 'טיפ',
+                              text2: 'אם שכחת סיסמה — פנה למנהל מערכת לאיפוס.',
+                            })
+                          }
+                          style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
+                        >
+                          <View
+                            style={{
+                              borderRadius: 18,
+                              paddingVertical: 14,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: '#EEF4FF',
+                              borderWidth: 1,
+                              borderColor: '#C7D8FF',
+                            }}
+                          >
+                            <Text style={{ color: colors.primary, fontWeight: '900' }}>שכחתי סיסמה</Text>
+                          </View>
+                        </Pressable>
+                      </View>
+                    )}
+                    {mode === 'signup' && (
+                      <View style={{ flex: 1 }}>
+                        <View
+                          style={{
+                            borderRadius: 18,
+                            paddingVertical: 14,
+                            paddingHorizontal: 12,
+                            alignItems: 'center',
+                            backgroundColor: 'rgba(37,99,235,0.06)',
+                            borderWidth: 1,
+                            borderColor: 'rgba(37,99,235,0.14)',
+                          }}
+                        >
+                          <Text style={{ color: colors.primary, fontWeight: '800', textAlign: 'center', fontSize: 12 }}>
+                            ההרשמה יוצרת חשבון לקוח בלבד
+                          </Text>
+                        </View>
+                      </View>
+                    )}
                   </View>
 
                   <Text style={{ color: colors.muted, textAlign: 'center', fontSize: 12, fontWeight: '700' }}>
-                    ממשק בהיר • RTL • אנימציות חלקות
+                    {mode === 'login'
+                      ? 'ממשק בהיר • RTL • אנימציות חלקות'
+                      : 'חשבון לקוח • אהבתי • התחברות מהירה אחרי הרשמה'}
                   </Text>
                 </View>
               </Card>
