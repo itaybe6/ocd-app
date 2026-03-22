@@ -115,7 +115,6 @@ type ShopifyCollectionProductsQueryResponse = {
   }>;
 };
 
-<<<<<<< HEAD
 type ShopifyMenuQueryResponse = {
   data?: {
     menu: {
@@ -123,11 +122,15 @@ type ShopifyMenuQueryResponse = {
       title: string;
       items: ShopifyMenuItemNode[];
     } | null;
-=======
+  };
+  errors?: Array<{
+    message: string;
+  }>;
+};
+
 type ShopifyProductByHandleQueryResponse = {
   data?: {
     productByHandle: ShopifyProductNode | null;
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
   };
   errors?: Array<{
     message: string;

@@ -12,34 +12,12 @@ import {
   StoreCategoryScreen,
   StoreHomeScreen,
   StoreProductScreen,
-  type StoreProduct,
 } from '../screens/store/StoreHomeScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
-<<<<<<< HEAD
-
-type RootStackParamList = {
-  Store: undefined;
-  StoreCategory: {
-    categoryId: string;
-    categoryTitle: string;
-    categoryDescription?: string;
-    parentTitle?: string;
-  };
-  StoreProduct: {
-    product: StoreProduct;
-  };
-  StoreCart: undefined;
-  Login: undefined;
-  Admin: undefined;
-  Worker: undefined;
-  Customer: undefined;
-};
-=======
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -58,26 +36,6 @@ function CustomerEntryScreen() {
   return <CustomerDrawer />;
 }
 
-<<<<<<< HEAD
-function PublicStoreScreen({
-  navigation,
-}: NativeStackScreenProps<RootStackParamList, 'Store'>) {
-  return (
-    <StoreHomeScreen
-      onAdminPress={() => navigation.navigate('Login')}
-      onOpenCart={() => navigation.navigate('StoreCart')}
-      onOpenProduct={(product) => navigation.navigate('StoreProduct', { product })}
-      onOpenCategory={(category) =>
-        navigation.navigate('StoreCategory', {
-          categoryId: category.id,
-          categoryTitle: category.title,
-          categoryDescription: category.description,
-          parentTitle: category.parentTitle,
-        })
-      }
-    />
-  );
-=======
 function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
   const { user } = useAuth();
 
@@ -85,6 +43,15 @@ function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamLi
     return (
       <StoreHomeScreen
         onAdminPress={() => navigation.navigate('Login')}
+        onOpenCart={() => navigation.navigate('StoreCart')}
+        onOpenCategory={(category) =>
+          navigation.navigate('StoreCategory', {
+            categoryId: category.id,
+            categoryTitle: category.title,
+            categoryDescription: category.description,
+            parentTitle: category.parentTitle,
+          })
+        }
         onProductPress={(handle) => navigation.navigate('Product', { handle })}
       />
     );
@@ -93,7 +60,6 @@ function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamLi
   if (user.role === 'admin') return <AdminEntryScreen />;
   if (user.role === 'worker') return <WorkerEntryScreen />;
   return <CustomerEntryScreen />;
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
@@ -179,25 +145,11 @@ export function RootNavigator() {
         key={user ? `role:${user.role}` : 'anon'}
         screenOptions={{ headerShown: false }}
       >
-<<<<<<< HEAD
-        {!user ? (
-          <>
-            <Stack.Screen name="Store" component={PublicStoreScreen} />
-            <Stack.Screen name="StoreCategory" component={StoreCategoryRoute} />
-            <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
-            <Stack.Screen name="StoreCart" component={StoreCartRoute} />
-            <Stack.Screen name="Login" component={LoginRoute} />
-          </>
-        ) : user.role === 'admin' ? (
-          <Stack.Screen name="Admin" component={AdminEntryScreen} />
-        ) : user.role === 'worker' ? (
-          <Stack.Screen name="Worker" component={WorkerEntryScreen} />
-        ) : (
-          <Stack.Screen name="Customer" component={CustomerEntryScreen} />
-        )}
-=======
         <Stack.Screen name="Main" component={MainEntryScreen} />
         <Stack.Screen name="Login" component={LoginRoute} />
+        <Stack.Screen name="StoreCategory" component={StoreCategoryRoute} />
+        <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
+        <Stack.Screen name="StoreCart" component={StoreCartRoute} />
         <Stack.Screen
           name="Product"
           component={ProductScreen}
@@ -210,7 +162,6 @@ export function RootNavigator() {
             contentStyle: { backgroundColor: colors.bg },
           }}
         />
->>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
       </Stack.Navigator>
     </NavigationContainer>
   );

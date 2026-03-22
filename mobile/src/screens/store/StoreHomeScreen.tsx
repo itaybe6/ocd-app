@@ -718,9 +718,18 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
 
 export function StoreHomeScreen({
   onAdminPress,
+  onOpenCart,
+  onOpenCategory,
   onProductPress,
 }: {
   onAdminPress: () => void;
+  onOpenCart?: () => void;
+  onOpenCategory?: (category: {
+    id: string;
+    title: string;
+    description?: string;
+    parentTitle?: string;
+  }) => void;
   onProductPress?: (handle: string) => void;
 }) {
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
@@ -1198,7 +1207,7 @@ export function StoreHomeScreen({
                   {categoryPreviewProducts.map((product) => (
                     <Pressable
                       key={`preview-${product.id}`}
-                      onPress={() => onOpenProduct?.(product)}
+                      onPress={() => onProductPress?.(product.handle)}
                       style={{
                         width: '48%',
                         borderRadius: 18,
@@ -1610,6 +1619,8 @@ export function StoreHomeScreen({
               >
                 <Text style={{ color: '#111827', fontWeight: '800' }}>לא נמצאו מוצרים לחיפוש הזה</Text>
               </View>
+            )}
+              </>
             )}
           </View>
         </ScrollView>
