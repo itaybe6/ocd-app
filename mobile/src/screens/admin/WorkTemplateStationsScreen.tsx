@@ -3,7 +3,19 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CheckCircle2, Circle, Clock, MapPin, Pencil, Plus, Search, Trash2, User, Users } from 'lucide-react-native';
+import {
+  CheckCircle2,
+  Circle,
+  Clock,
+  MapPin,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  User,
+  Users,
+  X,
+} from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Avatar } from '../../components/ui/Avatar';
 import { colors } from '../../theme/colors';
@@ -20,6 +32,11 @@ type Station = {
 };
 
 type UserLite = { id: string; name: string; role: 'customer' | 'worker'; avatar_url?: string | null };
+
+const BG = '#F2F2F7';
+const CARD_BG = '#FFFFFF';
+const LABEL_COLOR = '#8E8E93';
+const SEPARATOR = '#E5E5EA';
 
 export function WorkTemplateStationsScreen({
   navigation,
@@ -97,21 +114,16 @@ export function WorkTemplateStationsScreen({
     });
   }, []);
 
-  const deleteStation = useCallback((stationId: string, order: number) => {
-    Alert.alert(
-      `מחיקת תחנה #${order}`,
-      'האם אתה בטוח שברצונך למחוק תחנה זו? לא ניתן לבטל פעולה זו.',
-      [
+  const deleteStation = useCallback(
+    (stationId: string, order: number) => {
+      Alert.alert(`מחיקת תחנה #${order}`, 'האם אתה בטוח שברצונך למחוק תחנה זו? לא ניתן לבטל פעולה זו.', [
         { text: 'ביטול', style: 'cancel' },
         {
           text: 'מחק',
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase
-                .from('template_stations')
-                .delete()
-                .eq('id', stationId);
+              const { error } = await supabase.from('template_stations').delete().eq('id', stationId);
               if (error) throw error;
               Toast.show({ type: 'success', text1: 'התחנה נמחקה בהצלחה' });
               await fetchStations();
@@ -120,9 +132,10 @@ export function WorkTemplateStationsScreen({
             }
           },
         },
-      ]
-    );
-  }, [fetchStations]);
+      ]);
+    },
+    [fetchStations]
+  );
 
   const bulkDelete = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -137,10 +150,7 @@ export function WorkTemplateStationsScreen({
           onPress: async () => {
             try {
               const ids = Array.from(selectedIds);
-              const { error } = await supabase
-                .from('template_stations')
-                .delete()
-                .in('id', ids);
+              const { error } = await supabase.from('template_stations').delete().in('id', ids);
               if (error) throw error;
               Toast.show({ type: 'success', text1: `${ids.length} תחנות נמחקו בהצלחה` });
               setSelectedIds(new Set());
@@ -166,48 +176,64 @@ export function WorkTemplateStationsScreen({
   }, [searchQuery, stations, userNameById]);
 
   return (
-    <Screen padded={false}>
+    <Screen padded={false} backgroundColor={BG} safeAreaEdges={['bottom', 'left', 'right']}>
+
       {/* ─── Header ─── */}
-      <View style={s.headerWrap}>
-        <View style={s.titleRow}>
-          <View style={s.titleRight}>
-            <Text style={s.title}>תחנות בתבנית</Text>
-            <View style={s.dayBadge}>
-              <Text style={s.dayBadgeText}>יום {day}</Text>
+      <View style={s.header}>
+        {/* Top row: title + meta */}
+        <View style={s.headerTop}>
+          <View style={s.headerMeta}>
+            <View style={s.countPill}>
+              <Text style={s.countNum}>{filteredStations.length}</Text>
+              <Text style={s.countLabel}> תחנות</Text>
             </View>
           </View>
-          <View style={s.countBadge}>
-            <Text style={s.countBadgeText}>{filteredStations.length}</Text>
-            <Text style={s.countBadgeLabel}>תחנות</Text>
+
+          <View style={s.headerTitleGroup}>
+            <View style={s.dayPill}>
+              <Text style={s.dayPillText}>יום {day}</Text>
+            </View>
+            <Text style={s.headerTitle}>תחנות בתבנית</Text>
           </View>
         </View>
 
+        {/* Search + edit row */}
         <View style={s.searchRow}>
           <Pressable
             onPress={toggleEditMode}
-            style={({ pressed }) => [pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]}
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, transform: pressed ? [{ scale: 0.96 }] : [] })}
           >
-            <View style={[s.editModeBtn, isEditMode && s.editModeBtnActive]}>
+            <View style={[s.editBtn, isEditMode && s.editBtnActive]}>
               {isEditMode ? (
-                <Text style={s.editModeBtnTextActive}>ביטול</Text>
+                <>
+                  <X size={12} color={LABEL_COLOR} strokeWidth={2.5} />
+                  <Text style={s.editBtnTextActive}>ביטול</Text>
+                </>
               ) : (
                 <>
-                  <Pencil size={13} color={colors.primary} />
-                  <Text style={s.editModeBtnText}>עריכה</Text>
+                  <Pencil size={12} color={colors.primary} strokeWidth={2.5} />
+                  <Text style={s.editBtnText}>עריכה</Text>
                 </>
               )}
             </View>
           </Pressable>
 
-          <View style={s.searchBox}>
-            <Search size={16} color={colors.muted} />
+          <View style={s.searchWrap}>
+            <Search size={15} color={LABEL_COLOR} />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="חיפוש לפי לקוח או עובד..."
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={LABEL_COLOR}
               style={s.searchInput}
             />
+            {!!searchQuery && (
+              <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                <View style={s.searchClear}>
+                  <X size={9} color="#fff" strokeWidth={3} />
+                </View>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -220,7 +246,7 @@ export function WorkTemplateStationsScreen({
         contentContainerStyle={s.listContent}
         refreshing={loading}
         onRefresh={refresh}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const customer = item.customer_id ? userById.get(item.customer_id) ?? null : null;
           const worker = item.worker_id ? userById.get(item.worker_id) ?? null : null;
           const isSelected = selectedIds.has(item.id);
@@ -228,112 +254,126 @@ export function WorkTemplateStationsScreen({
           return (
             <Pressable
               onPress={() => isEditMode && toggleSelect(item.id)}
-              style={({ pressed }) => [pressed && isEditMode && { opacity: 0.8 }]}
+              onLongPress={() => {
+                if (!isEditMode) {
+                  setIsEditMode(true);
+                  toggleSelect(item.id);
+                }
+              }}
+              style={({ pressed }) => [{ opacity: pressed && isEditMode ? 0.75 : pressed ? 0.97 : 1 }]}
             >
-              <View style={[s.card, isSelected && s.cardSelected]}>
-                {/* Colored left accent strip */}
-                <View style={[s.cardAccent, isSelected && s.cardAccentSelected]} />
+              <View style={[s.card, isSelected && s.cardSelected, index === 0 && s.cardFirst]}>
+                {/* Selection indicator */}
+                {isEditMode && (
+                  <View style={s.selectionCol}>
+                    {isSelected ? (
+                      <CheckCircle2 size={24} color={colors.primary} strokeWidth={2} />
+                    ) : (
+                      <Circle size={24} color={SEPARATOR} strokeWidth={2} />
+                    )}
+                  </View>
+                )}
 
-                <View style={s.cardInner}>
-                  {/* Card header: order badge + title + time */}
-                  <View style={s.cardHeader}>
-                    <View style={s.cardHeaderRight}>
-                      {isEditMode ? (
-                        isSelected
-                          ? <CheckCircle2 size={22} color={colors.primary} />
-                          : <Circle size={22} color={colors.muted} />
-                      ) : (
-                        <View style={s.orderBadge}>
-                          <Text style={s.orderBadgeText}>{item.order}</Text>
+                <View style={s.cardContent}>
+                  <View style={[s.cardBody, isEditMode && s.cardBodyEditing]}>
+                    {/* ── Card top row: order + title + time ── */}
+                    <View style={s.cardTopRow}>
+                      <View style={s.timePill}>
+                        <Clock size={12} color={colors.primary} strokeWidth={2.5} />
+                        <Text style={s.timePillText}>{item.scheduled_time}</Text>
+                      </View>
+                      <View style={s.cardTitleGroup}>
+                        <Text style={s.cardTitle}>תחנה #{item.order}</Text>
+                        <View style={s.orderCircle}>
+                          <Text style={s.orderCircleText}>{item.order}</Text>
                         </View>
-                      )}
-                      <Text style={s.cardTitle}>תחנה #{item.order}</Text>
-                    </View>
-                    <View style={s.timeBadge}>
-                      <Clock size={13} color={colors.muted} />
-                      <Text style={s.timeBadgeText}>{item.scheduled_time}</Text>
-                    </View>
-                  </View>
-
-                  {/* Divider */}
-                  <View style={s.divider} />
-
-                  {/* Customer row */}
-                  <View style={[s.personRow, s.customerRow]}>
-                    <View style={s.personRowLeft}>
-                      <View style={[s.roleIcon, s.roleIconNeutral]}>
-                        <User size={14} color={colors.muted} />
                       </View>
-                      <Text style={s.roleLabel}>לקוח</Text>
                     </View>
-                    <View style={s.personInfo}>
-                      {customer ? (
-                        <>
-                          <Avatar size={32} uri={customer.avatar_url ?? null} name={customer.name} />
-                          <Text style={s.personName} numberOfLines={1}>{customer.name}</Text>
-                        </>
-                      ) : (
-                        <>
-                          <View style={s.emptyAvatar}>
-                            <User size={15} color="#94A3B8" />
-                          </View>
-                          <Text style={s.emptyName}>לא נבחר</Text>
-                        </>
-                      )}
-                    </View>
-                  </View>
 
-                  {/* Worker row */}
-                  <View style={[s.personRow, s.workerRow]}>
-                    <View style={s.personRowLeft}>
-                      <View style={[s.roleIcon, s.roleIconNeutralDark]}>
-                        <Users size={14} color={colors.muted} />
+                    {/* ── Divider ── */}
+                    <View style={s.sep} />
+
+                    {/* ── Person rows ── */}
+                    <View style={s.personsWrap}>
+                      {/* Customer */}
+                      <View style={s.personRow}>
+                        <View style={s.personRight}>
+                          {customer ? (
+                            <>
+                              <Avatar size={34} uri={customer.avatar_url ?? null} name={customer.name} />
+                              <Text style={s.personName} numberOfLines={1}>{customer.name}</Text>
+                            </>
+                          ) : (
+                            <>
+                              <View style={s.emptyCircle}>
+                                <User size={14} color={LABEL_COLOR} />
+                              </View>
+                              <Text style={s.personEmpty}>לא נבחר</Text>
+                            </>
+                          )}
+                        </View>
+                        <View style={s.roleTag}>
+                          <User size={11} color={colors.primary} strokeWidth={2.5} />
+                          <Text style={s.roleTagText}>לקוח</Text>
+                        </View>
                       </View>
-                      <Text style={s.roleLabel}>עובד</Text>
-                    </View>
-                    <View style={s.personInfo}>
-                      {worker ? (
-                        <>
-                          <Avatar size={32} uri={worker.avatar_url ?? null} name={worker.name} />
-                          <Text style={s.personName} numberOfLines={1}>{worker.name}</Text>
-                        </>
-                      ) : (
-                        <>
-                          <View style={s.emptyAvatar}>
-                            <Users size={15} color="#94A3B8" />
-                          </View>
-                          <Text style={s.emptyName}>לא נבחר</Text>
-                        </>
-                      )}
+
+                      <View style={s.innerSep} />
+
+                      {/* Worker */}
+                      <View style={s.personRow}>
+                        <View style={s.personRight}>
+                          {worker ? (
+                            <>
+                              <Avatar size={34} uri={worker.avatar_url ?? null} name={worker.name} />
+                              <Text style={s.personName} numberOfLines={1}>{worker.name}</Text>
+                            </>
+                          ) : (
+                            <>
+                              <View style={[s.emptyCircle, s.emptyCircleWorker]}>
+                                <Users size={14} color="#8B5CF6" />
+                              </View>
+                              <Text style={s.personEmpty}>לא נבחר</Text>
+                            </>
+                          )}
+                        </View>
+                        <View style={[s.roleTag, s.roleTagWorker]}>
+                          <Users size={11} color="#8B5CF6" strokeWidth={2.5} />
+                          <Text style={[s.roleTagText, s.roleTagTextWorker]}>עובד</Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
 
-                  {/* Action buttons footer — hidden in edit mode */}
+                  {/* ── Footer actions (hidden in edit mode) ── */}
                   {!isEditMode && (
-                    <>
-                      <View style={[s.divider, { marginTop: 10, marginBottom: 0 }]} />
-                      <View style={s.cardFooter}>
-                        <Pressable
-                          onPress={() => deleteStation(item.id, item.order)}
-                          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-                        >
-                          <View style={s.deleteBtn}>
-                            <Trash2 size={15} color={colors.danger} />
-                            <Text style={s.deleteBtnText}>מחק</Text>
-                          </View>
-                        </Pressable>
-
+                    <View style={s.cardFooter}>
+                      <View style={s.footerHalf}>
                         <Pressable
                           onPress={() => navigation.navigate('WorkTemplateStationEdit', { templateId, day, stationId: item.id })}
-                          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+                          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
                         >
-                          <View style={s.editBtn}>
-                            <Pencil size={15} color={colors.primary} />
-                            <Text style={s.editBtnText}>עריכה</Text>
+                          <View style={s.footerAction}>
+                            <Pencil size={13} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={s.footerActionEditText}>עריכה</Text>
                           </View>
                         </Pressable>
                       </View>
-                    </>
+
+                      <View style={s.footerDivider} />
+
+                      <View style={s.footerHalf}>
+                        <Pressable
+                          onPress={() => deleteStation(item.id, item.order)}
+                          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+                        >
+                          <View style={s.footerAction}>
+                            <Trash2 size={13} color={colors.danger} strokeWidth={2.5} />
+                            <Text style={s.footerActionDeleteText}>מחק</Text>
+                          </View>
+                        </Pressable>
+                      </View>
+                    </View>
                   )}
                 </View>
               </View>
@@ -342,8 +382,8 @@ export function WorkTemplateStationsScreen({
         }}
         ListEmptyComponent={
           <View style={s.emptyState}>
-            <View style={s.emptyIcon}>
-              <MapPin size={32} color={colors.primary} />
+            <View style={s.emptyIconWrap}>
+              <MapPin size={30} color={colors.primary} strokeWidth={1.8} />
             </View>
             <Text style={s.emptyTitle}>אין תחנות עדיין</Text>
             <Text style={s.emptySubtitle}>לחץ על הוסף תחנה כדי להתחיל</Text>
@@ -360,7 +400,7 @@ export function WorkTemplateStationsScreen({
             style={({ pressed }) => [pressed && s.fabPressed]}
           >
             <View style={[s.fab, s.fabDanger, selectedIds.size === 0 && s.fabDisabled]}>
-              <Trash2 size={20} color="#fff" />
+              <Trash2 size={18} color="#fff" strokeWidth={2.5} />
               <Text style={s.fabText}>
                 {selectedIds.size > 0 ? `מחק ${selectedIds.size} תחנות` : 'בחר תחנות למחיקה'}
               </Text>
@@ -372,7 +412,7 @@ export function WorkTemplateStationsScreen({
             style={({ pressed }) => [pressed && s.fabPressed]}
           >
             <View style={s.fab}>
-              <Plus size={22} color="#fff" />
+              <Plus size={20} color="#fff" strokeWidth={2.5} />
               <Text style={s.fabText}>הוסף תחנה</Text>
             </View>
           </Pressable>
@@ -383,104 +423,113 @@ export function WorkTemplateStationsScreen({
 }
 
 const s = StyleSheet.create({
-  /* ── Header ── */
-  headerWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 2,
-    paddingBottom: 6,
-    backgroundColor: colors.elevated,
+  /* ══ Header ══ */
+  header: {
+    backgroundColor: CARD_BG,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: SEPARATOR,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  titleRow: {
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  titleRight: {
+  headerTitleGroup: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
   },
-  title: {
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.text,
-    fontSize: 20,
+    letterSpacing: -0.4,
+  },
+  dayPill: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  dayPillText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: -0.1,
+  },
+  headerMeta: {
+    alignItems: 'flex-start',
+  },
+  countPill: {
+    flexDirection: 'row-reverse',
+    alignItems: 'baseline',
+    backgroundColor: BG,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: SEPARATOR,
+  },
+  countNum: {
+    color: colors.primary,
     fontWeight: '900',
-    letterSpacing: -0.3,
+    fontSize: 17,
+    letterSpacing: -0.5,
+  },
+  countLabel: {
+    color: LABEL_COLOR,
+    fontWeight: '600',
+    fontSize: 12,
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
+    gap: 10,
   },
-  editModeBtn: {
+  editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(37,99,235,0.07)',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: 'rgba(37,99,235,0.15)',
   },
-  editModeBtnActive: {
-    backgroundColor: 'rgba(100,116,139,0.08)',
-    borderColor: colors.border,
+  editBtnActive: {
+    backgroundColor: 'rgba(142,142,147,0.1)',
+    borderColor: SEPARATOR,
   },
-  editModeBtnText: {
+  editBtnText: {
     color: colors.primary,
     fontWeight: '700',
     fontSize: 13,
   },
-  editModeBtnTextActive: {
-    color: colors.muted,
+  editBtnTextActive: {
+    color: LABEL_COLOR,
     fontWeight: '700',
     fontSize: 13,
   },
-  dayBadge: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingHorizontal: 11,
-    paddingVertical: 4,
-  },
-  dayBadgeText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  countBadge: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.bg,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  countBadgeText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  countBadgeLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  searchBox: {
+  searchWrap: {
     flex: 1,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    backgroundColor: colors.bg,
+    backgroundColor: BG,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: SEPARATOR,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     gap: 8,
   },
   searchInput: {
@@ -490,67 +539,83 @@ const s = StyleSheet.create({
     fontSize: 14,
     padding: 0,
   },
+  searchClear: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: LABEL_COLOR,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
-  /* ── List ── */
+  /* ══ List ══ */
   listContent: {
-    gap: 12,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 120,
+    gap: 10,
   },
 
-  /* ── Card ── */
+  /* ══ Card ══ */
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: CARD_BG,
+    borderRadius: 20,
     flexDirection: 'row',
-    overflow: 'hidden',
+    alignItems: 'stretch',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+    overflow: 'hidden',
   },
+  cardFirst: {},
   cardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(37,99,235,0.04)',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  cardAccent: {
-    width: 5,
-    backgroundColor: colors.primary,
-  },
-  cardAccentSelected: {
-    backgroundColor: colors.primary,
-    width: 6,
-  },
-  cardInner: {
-    flex: 1,
+  selectionCol: {
+    justifyContent: 'center',
     paddingHorizontal: 14,
-    paddingTop: 13,
-    paddingBottom: 4,
+    backgroundColor: 'rgba(37,99,235,0.03)',
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: SEPARATOR,
   },
-  cardHeader: {
+  cardContent: {
+    flex: 1,
+  },
+  cardBody: {
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+  },
+  cardBodyEditing: {
+    paddingHorizontal: 14,
+  },
+
+  /* Card top row */
+  cardTopRow: {
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 11,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  cardHeaderRight: {
+  cardTitleGroup: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 9,
   },
-  orderBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(37,99,235,0.12)',
+  orderCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(37,99,235,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  orderBadgeText: {
+  orderCircleText: {
     color: colors.primary,
     fontWeight: '900',
     fontSize: 13,
@@ -558,171 +623,173 @@ const s = StyleSheet.create({
   cardTitle: {
     color: colors.text,
     fontWeight: '800',
-    fontSize: 15,
+    fontSize: 16,
+    letterSpacing: -0.2,
   },
-  timeBadge: {
+  timePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.bg,
+    backgroundColor: 'rgba(37,99,235,0.07)',
     borderRadius: 20,
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  timeBadgeText: {
-    color: colors.muted,
+  timePillText: {
+    color: colors.primary,
     fontWeight: '700',
     fontSize: 13,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: 10,
+    letterSpacing: 0.2,
   },
 
-  /* ── Person rows ── */
+  /* Separators */
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: SEPARATOR,
+    marginBottom: 10,
+  },
+  innerSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: SEPARATOR,
+    marginHorizontal: 4,
+    marginVertical: 2,
+  },
+
+  /* Person rows */
+  personsWrap: {
+    gap: 0,
+    marginBottom: 4,
+  },
   personRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 10,
-    paddingHorizontal: 10,
     paddingVertical: 8,
-    marginBottom: 6,
   },
-  customerRow: {
-    backgroundColor: 'rgba(100,116,139,0.06)',
-  },
-  workerRow: {
-    backgroundColor: 'rgba(100,116,139,0.10)',
-    marginBottom: 0,
-  },
-  personRowLeft: {
+  personRight: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 7,
-  },
-  roleIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roleIconNeutral: {
-    backgroundColor: 'rgba(100,116,139,0.12)',
-  },
-  roleIconNeutralDark: {
-    backgroundColor: 'rgba(71,85,105,0.16)',
-  },
-  roleLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  personInfo: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 1,
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
   },
   personName: {
     color: colors.text,
     fontWeight: '700',
     fontSize: 14,
     textAlign: 'right',
+    flexShrink: 1,
   },
-  emptyAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+  personEmpty: {
+    color: LABEL_COLOR,
+    fontWeight: '500',
+    fontSize: 13,
+    textAlign: 'right',
+  },
+  emptyCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.12)',
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyName: {
-    color: '#94A3B8',
-    fontWeight: '600',
-    fontSize: 13,
-    textAlign: 'right',
+  emptyCircleWorker: {
+    backgroundColor: 'rgba(139,92,246,0.06)',
+    borderColor: 'rgba(139,92,246,0.14)',
   },
-
-  /* ── Card footer actions ── */
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    paddingVertical: 10,
-  },
-  editBtn: {
-    flexDirection: 'row',
+  roleTag: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 6,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1.5,
-    borderColor: '#BFDBFE',
+    gap: 4,
+    backgroundColor: 'rgba(37,99,235,0.07)',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    marginLeft: 10,
+    minWidth: 52,
+    justifyContent: 'center',
   },
-  editBtnText: {
+  roleTagWorker: {
+    backgroundColor: 'rgba(139,92,246,0.07)',
+  },
+  roleTagText: {
     color: colors.primary,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 11,
   },
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1.5,
-    borderColor: '#FECACA',
-  },
-  deleteBtnText: {
-    color: colors.danger,
-    fontWeight: '700',
-    fontSize: 13,
+  roleTagTextWorker: {
+    color: '#8B5CF6',
   },
 
-  /* ── Empty state ── */
+  /* Card footer */
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: SEPARATOR,
+  },
+  footerHalf: {
+    flex: 1,
+  },
+  footerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+  },
+  footerActionEditText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  footerDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: SEPARATOR,
+    marginVertical: 8,
+  },
+  footerActionDeleteText: {
+    color: colors.danger,
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+
+  /* ══ Empty state ══ */
   emptyState: {
     alignItems: 'center',
-    paddingTop: 60,
-    gap: 14,
+    paddingTop: 72,
+    gap: 12,
   },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  emptyIconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: 'rgba(37,99,235,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 4,
   },
   emptyTitle: {
     color: colors.text,
-    textAlign: 'center',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
+    letterSpacing: -0.3,
   },
   emptySubtitle: {
-    color: colors.muted,
-    textAlign: 'center',
+    color: LABEL_COLOR,
     fontSize: 14,
+    fontWeight: '500',
   },
 
-  /* ── FAB ── */
+  /* ══ FAB ══ */
   fabWrap: {
     position: 'absolute',
-    bottom: 28,
+    bottom: 30,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -731,32 +798,30 @@ const s = StyleSheet.create({
   fab: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 9,
     backgroundColor: colors.primary,
-    borderRadius: 30,
-    paddingHorizontal: 26,
-    paddingVertical: 16,
+    borderRadius: 32,
+    paddingHorizontal: 28,
+    paddingVertical: 17,
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.40,
-    shadowRadius: 18,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.38,
+    shadowRadius: 20,
+    elevation: 14,
   },
   fabDanger: {
     backgroundColor: colors.danger,
     shadowColor: colors.danger,
   },
-  fabDisabled: {
-    opacity: 0.5,
-  },
+  fabDisabled: { opacity: 0.45 },
   fabPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.97 }],
+    opacity: 0.93,
+    transform: [{ scale: 0.975 }],
   },
   fabText: {
     color: '#fff',
-    fontWeight: '900',
+    fontWeight: '800',
     fontSize: 15,
-    letterSpacing: 0.3,
+    letterSpacing: -0.1,
   },
 });

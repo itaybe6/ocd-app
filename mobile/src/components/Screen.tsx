@@ -1,12 +1,13 @@
 import React from 'react';
 import { Platform, StatusBar, View, type StatusBarStyle, type ViewProps } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 
 type ScreenProps = ViewProps & {
   padded?: boolean;
   backgroundColor?: string;
   statusBarStyle?: StatusBarStyle;
+  safeAreaEdges?: Edge[];
 };
 
 export function Screen({
@@ -15,10 +16,11 @@ export function Screen({
   children,
   backgroundColor = colors.bg,
   statusBarStyle = 'dark-content',
+  safeAreaEdges,
   ...rest
 }: ScreenProps) {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={safeAreaEdges}>
       {Platform.OS === 'android' ? (
         <StatusBar barStyle={statusBarStyle} backgroundColor={backgroundColor} />
       ) : (

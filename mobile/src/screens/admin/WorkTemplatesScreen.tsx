@@ -81,9 +81,9 @@ export function WorkTemplatesScreen({ navigation }: NativeStackScreenProps<WorkT
   }, [templateCandidates, templateCounts]);
 
   return (
-    <Screen>
-      <View>
+    <Screen safeAreaEdges={['bottom']}>
         <FlatList
+          style={{ flex: 1 }}
           data={templatesForGrid}
           keyExtractor={(i) => i.id}
           numColumns={2}
@@ -136,7 +136,6 @@ export function WorkTemplatesScreen({ navigation }: NativeStackScreenProps<WorkT
             );
           }}
         />
-      </View>
     </Screen>
   );
 }

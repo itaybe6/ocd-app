@@ -1,11 +1,19 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Card } from '../../components/ui/Card';
+import {
+  CalendarDays,
+  CalendarCheck2,
+  ChevronLeft,
+  ClipboardList,
+  Layers,
+  Plus,
+  X,
+} from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { ModalSheet } from '../../components/ModalSheet';
+import { ModalDialog } from '../../components/ModalDialog';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
@@ -17,7 +25,18 @@ type Template = { id: string; day: number };
 type WorkSchedule = { id: string; date: string; template_id: string; created_at?: string };
 type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
 type ServicePoint = { id: string; customer_id: string; refill_amount: number };
-type Job = { id: string; customer_id?: string | null; worker_id: string; date: string; status: 'pending' | 'completed' };
+
+const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'] as const;
+
+function formatDateHebrew(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const dayName = HEBREW_DAYS[d.getDay()];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `יום ${dayName}, ${dd}/${mm}/${yyyy}`;
+}
 
 function combine(dateYmd: string, timeHm: string): string {
   const d = new Date(`${dateYmd}T${timeHm}:00`);
@@ -37,8 +56,14 @@ export function WorkScheduleScreen() {
 
   const templateOptions = useMemo(
     () => templates.map((t) => ({ value: t.id, label: `יום ${t.day}` })),
-    [templates]
+    [templates],
   );
+
+  const templateMap = useMemo(() => {
+    const m = new Map<string, Template>();
+    for (const t of templates) m.set(t.id, t);
+    return m;
+  }, [templates]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -71,7 +96,7 @@ export function WorkScheduleScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchAll();
-    }, [fetchAll])
+    }, [fetchAll]),
   );
 
   const assignTemplate = async () => {
@@ -115,7 +140,6 @@ export function WorkScheduleScreen() {
         spByCustomer.get(sp.customer_id)!.push(sp);
       }
 
-      // create/update jobs + ensure job_service_points (idempotent)
       for (const st of validStations) {
         const jobDate = combine(date.trim(), st.scheduled_time || '09:00');
         const { data: existing, error: existingErr } = await supabase
@@ -227,54 +251,435 @@ export function WorkScheduleScreen() {
     }
   };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchAll} />
-        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>קווי עבודה</Text>
-      </View>
-
-      <View style={{ marginTop: 12, gap: 10 }}>
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>שיוך תבנית לתאריך</Text>
-          <View style={{ gap: 10 }}>
-            <Input label="תאריך (yyyy-MM-dd)" value={date} onChangeText={setDate} />
-            <SelectSheet label="תבנית" value={templateId} placeholder="בחר תבנית…" options={templateOptions} onChange={setTemplateId} />
-            <Button title="שייך תבנית + צור משימות" onPress={assignTemplate} />
+  const listHeader = useMemo(
+    () => (
+      <View style={{ gap: 20, marginTop: 4 }}>
+        {/* ── Assignment Form ─────────────────────────────────── */}
+        <View style={st.formCard}>
+          <View style={st.formHeaderRow}>
+            <View style={st.formIconBubble}>
+              <Plus size={16} color="#fff" strokeWidth={2.5} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={st.formTitle}>שיוך תבנית לתאריך</Text>
+              <Text style={st.formSubtitle}>בחר תאריך ותבנית ליצירת משימות</Text>
+            </View>
           </View>
-        </Card>
 
-        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>שיוכים קיימים</Text>
-        <FlatList
-          data={schedules}
-          keyExtractor={(i) => i.id}
-          contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
-          renderItem={({ item }) => (
-            <Pressable onPress={() => setSelectedSchedule(item)}>
-              <Card>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.date}</Text>
-                <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>template_id: {item.template_id}</Text>
-              </Card>
-            </Pressable>
-          )}
-          ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין שיוכים.</Text>}
-        />
-      </View>
+          <View style={st.formDivider} />
 
-      <ModalSheet visible={!!selectedSchedule} onClose={() => setSelectedSchedule(null)}>
-        {!!selectedSchedule && (
           <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>שיוך</Text>
-            <Card>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{selectedSchedule.date}</Text>
-              <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>template_id: {selectedSchedule.template_id}</Text>
-            </Card>
-            <Button title="הסר תבנית (ימחק pending jobs ליום)" variant="danger" onPress={() => removeTemplate(selectedSchedule)} />
-            <Button title="סגור" variant="secondary" onPress={() => setSelectedSchedule(null)} />
+            <Input label="תאריך (yyyy-MM-dd)" value={date} onChangeText={setDate} />
+            <SelectSheet
+              label="תבנית"
+              value={templateId}
+              placeholder="בחר תבנית…"
+              options={templateOptions}
+              onChange={setTemplateId}
+            />
+            <Button
+              title="שייך תבנית + צור משימות"
+              onPress={assignTemplate}
+              disabled={!date.trim() || !templateId}
+              style={{ borderRadius: 14 }}
+            />
           </View>
+        </View>
+
+        {/* ── Section Header ──────────────────────────────────── */}
+        <View style={st.sectionHeader}>
+          <View style={st.sectionIconWrap}>
+            <ClipboardList size={14} color={colors.primary} strokeWidth={2.2} />
+          </View>
+          <Text style={st.sectionLabel}>שיוכים קיימים</Text>
+          <View style={st.countBadge}>
+            <Text style={st.countText}>{schedules.length}</Text>
+          </View>
+        </View>
+      </View>
+    ),
+    [schedules.length, date, templateId, templateOptions],
+  );
+
+  const renderScheduleCard = ({ item }: { item: WorkSchedule }) => {
+    const tpl = templateMap.get(item.template_id);
+    const dayLabel = tpl ? `יום ${tpl.day}` : null;
+
+    return (
+      <Pressable
+        onPress={() => setSelectedSchedule(item)}
+        style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}
+      >
+        <View style={st.card}>
+          <View style={st.cardInner}>
+            <View style={st.cardIconWrap}>
+              <CalendarCheck2 size={18} color={colors.primary} strokeWidth={2} />
+            </View>
+            <View style={st.cardContent}>
+              <Text style={st.cardTitle}>{formatDateHebrew(item.date)}</Text>
+              <View style={st.cardMetaRow}>
+                <Layers size={12} color={colors.muted} strokeWidth={2} />
+                <Text style={st.cardMeta}>
+                  {dayLabel ? `תבנית ${dayLabel}` : 'תבנית משויכת'}
+                </Text>
+              </View>
+            </View>
+            <ChevronLeft size={18} color={colors.muted} strokeWidth={2} />
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <FlatList
+        data={schedules}
+        keyExtractor={(i) => i.id}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={st.listContent}
+        refreshing={loading}
+        onRefresh={fetchAll}
+        ListHeaderComponent={listHeader}
+        renderItem={renderScheduleCard}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ListEmptyComponent={
+          <View style={st.emptyWrap}>
+            <View style={st.emptyIcon}>
+              <CalendarDays size={28} color={colors.muted} strokeWidth={1.5} />
+            </View>
+            <Text style={st.emptyTitle}>אין שיוכים</Text>
+            <Text style={st.emptySubtitle}>שייך תבנית לתאריך כדי ליצור קו עבודה</Text>
+          </View>
+        }
+        ListFooterComponent={<View style={{ height: 40 }} />}
+      />
+
+      {/* ── Detail Dialog ─────────────────────────────────────── */}
+      <ModalDialog
+        visible={!!selectedSchedule}
+        onClose={() => setSelectedSchedule(null)}
+        containerStyle={st.dialogContainer}
+      >
+        {!!selectedSchedule && (
+          <>
+            {/* Header */}
+            <View style={st.dialogHeader}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, flex: 1 }}>
+                <View style={st.dialogIconBubble}>
+                  <CalendarCheck2 size={18} color="#fff" strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={st.dialogTitle}>פרטי שיוך</Text>
+                  <Text style={st.dialogSubtitle}>{formatDateHebrew(selectedSchedule.date)}</Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={() => setSelectedSchedule(null)}
+                hitSlop={8}
+                style={({ pressed }) => [st.dialogCloseBtn, pressed && { opacity: 0.6 }]}
+              >
+                <X size={16} color={colors.muted} strokeWidth={2.5} />
+              </Pressable>
+            </View>
+
+            {/* Body */}
+            <View style={st.dialogBody}>
+              {/* Details Card */}
+              <View style={st.dialogDetailsCard}>
+                <View style={st.detailRow}>
+                  <Text style={st.detailLabel}>תאריך</Text>
+                  <Text style={st.detailValue}>{selectedSchedule.date}</Text>
+                </View>
+                <View style={st.detailDivider} />
+                <View style={st.detailRow}>
+                  <Text style={st.detailLabel}>תבנית</Text>
+                  <View style={st.templateBadge}>
+                    <Layers size={12} color={colors.primary} strokeWidth={2} />
+                    <Text style={st.templateBadgeText}>
+                      {templateMap.get(selectedSchedule.template_id)
+                        ? `יום ${templateMap.get(selectedSchedule.template_id)!.day}`
+                        : selectedSchedule.template_id.slice(0, 8)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Actions */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="סגור"
+                    variant="secondary"
+                    onPress={() => setSelectedSchedule(null)}
+                    style={{ borderRadius: 14 }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="הסר שיוך"
+                    variant="danger"
+                    onPress={() => removeTemplate(selectedSchedule)}
+                    style={{ borderRadius: 14 }}
+                  />
+                </View>
+              </View>
+            </View>
+          </>
         )}
-      </ModalSheet>
+      </ModalDialog>
     </View>
   );
 }
 
+const st = StyleSheet.create({
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+
+  formCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    gap: 0,
+  },
+  formHeaderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  formIconBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  formTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  formSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+    marginTop: 1,
+  },
+  formDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 14,
+  },
+
+  sectionHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  sectionIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(37,99,235,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.muted,
+    letterSpacing: 0.4,
+    textAlign: 'right',
+  },
+  countBadge: {
+    backgroundColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  countText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.muted,
+  },
+
+  card: {
+    backgroundColor: colors.elevated,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    elevation: 2,
+  },
+  cardInner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  cardIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(37,99,235,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardContent: {
+    flex: 1,
+    gap: 4,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  cardMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardMeta: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  emptySubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  dialogContainer: {
+    padding: 0,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: colors.bg,
+  },
+  dialogHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.elevated,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dialogIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  dialogSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+  dialogCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dialogBody: {
+    padding: 18,
+    gap: 16,
+  },
+  dialogDetailsCard: {
+    backgroundColor: colors.elevated,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+  },
+
+  detailRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'left',
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+
+  templateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(37,99,235,0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  templateBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+});

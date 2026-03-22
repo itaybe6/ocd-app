@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react-native';
+import { Eye, Pencil, Plus, RefreshCw, Search, Trash2, Users, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
@@ -20,8 +20,8 @@ const base64Lookup = (() => {
   t.fill(-1);
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   for (let i = 0; i < alphabet.length; i++) t[alphabet.charCodeAt(i)] = i;
-  t['-'.charCodeAt(0)] = 62; // URL-safe
-  t['_'.charCodeAt(0)] = 63; // URL-safe
+  t['-'.charCodeAt(0)] = 62;
+  t['_'.charCodeAt(0)] = 63;
   return t;
 })();
 
@@ -88,9 +88,11 @@ function emptyUser(): Partial<UserRow> {
   return { role: 'customer', name: '', phone: '', password: '' };
 }
 
+
 export function UsersScreen() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<UserRole | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [mutating, setMutating] = useState(false);
 
@@ -116,14 +118,16 @@ export function UsersScreen() {
   const [scents, setScents] = useState<ScentRow[]>([]);
 
   const filtered = useMemo(() => {
+    let list = users;
+    if (roleFilter) list = list.filter((u) => u.role === roleFilter);
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) =>
+    if (!q) return list;
+    return list.filter((u) =>
       u.name?.toLowerCase().includes(q) ||
       u.phone?.toLowerCase().includes(q) ||
       u.role?.toLowerCase().includes(q)
     );
-  }, [users, query]);
+  }, [users, query, roleFilter]);
 
   const stats = useMemo(() => {
     const admin = users.filter((u) => u.role === 'admin').length;
@@ -194,7 +198,6 @@ export function UsersScreen() {
     setAvatarLocalUri(null);
     setAvatarBase64(null);
     if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
-    // Keep anchor during the closing animation so it "returns" to the opening button.
     clearEditAnchorTimer.current = setTimeout(() => setEditAnchor(null), EDIT_WINDOW_DURATION_MS + 40);
   };
 
@@ -390,8 +393,8 @@ export function UsersScreen() {
           const msg = String(res.error?.message ?? res.error);
           const code = String(res.error?.code ?? '');
           const ignorable =
-            code === '42P01' || // undefined_table
-            code === '42703' || // undefined_column
+            code === '42P01' ||
+            code === '42703' ||
             msg.includes('does not exist') ||
             msg.includes('column') && msg.includes('does not exist') ||
             msg.includes('relation') && msg.includes('does not exist');
@@ -400,7 +403,6 @@ export function UsersScreen() {
       };
 
       if (u.role === 'customer') {
-        // jobs -> job_service_points
         const jobsRes = await supabase.from('jobs').select('id').eq('customer_id', u.id);
         if (jobsRes.error) throw jobsRes.error;
         const jobIds = (jobsRes.data ?? []).map((r: any) => r.id);
@@ -412,9 +414,7 @@ export function UsersScreen() {
         }
 
         await tryOp(supabase.from('service_points').delete().eq('customer_id', u.id));
-
         await tryOp(supabase.from('installation_jobs').delete().eq('customer_id', u.id));
-        // Special jobs are not necessarily tied to a customer in the original spec.
         await tryOp(supabase.from('template_stations').delete().eq('customer_id', u.id));
       }
 
@@ -439,149 +439,147 @@ export function UsersScreen() {
 
   const busy = refreshing || mutating || avatarBusy;
 
+  const renderUserCard = ({ item }: { item: UserRow }) => {
+    return (
+      <View style={[s.userCard, s.shadowSm]}>
+        <View style={s.userCardInner}>
+          <View style={s.userActions}>
+            <TouchableOpacity
+              onPress={() => cascadeDelete(item)}
+              activeOpacity={0.5}
+              disabled={mutating}
+              style={[s.actionBtn, s.actionBtnRed, mutating && { opacity: 0.3 }]}
+            >
+              <Trash2 size={18} color="#FF3B30" />
+            </TouchableOpacity>
+
+            {item.role === 'customer' ? (
+              <TouchableOpacity
+                onPressIn={(e) => setPointsAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+                onPress={() => fetchServicePoints(item)}
+                activeOpacity={0.5}
+                style={[s.actionBtn, s.actionBtnTeal]}
+              >
+                <Eye size={18} color="#5AC8FA" />
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+              activeOpacity={0.5}
+              style={[s.actionBtn, s.actionBtnBlue]}
+            >
+              <Pencil size={18} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={s.userInfo}>
+            <Avatar size={44} uri={item.avatar_url ?? null} name={item.name} style={s.userAvatar} />
+            <Text style={s.userName} numberOfLines={1}>{item.name}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
-    <View style={styles.screen}>
+    <View style={s.screen}>
       <FlatList
-        style={styles.list}
+        style={s.list}
         data={filtered}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchUsers} tintColor={colors.primary} />}
+        contentContainerStyle={s.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchUsers} tintColor={A.blue} />}
         ListHeaderComponent={
-          <View style={{ gap: 12 }}>
-            <View style={[styles.hero, styles.shadowMd]}>
-              <View style={styles.heroTopRow}>
-                <View style={styles.heroActionsRow}>
-                  <Pressable
+          <View style={{ gap: 10 }}>
+            {/* ── Hero Card ── */}
+            <View style={[s.hero, s.shadowMd]}>
+              <View style={s.heroHeader}>
+                <View style={s.heroActions}>
+                  <TouchableOpacity
                     onPress={(e) => openCreate({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="הוסף משתמש"
-                    style={({ pressed }) => [styles.fabBtn, pressed && { opacity: 0.9 }]}
+                    activeOpacity={0.7}
+                    style={s.fabBtn}
                   >
-                    <Plus size={17} color="#fff" />
-                  </Pressable>
-                  <Pressable
+                    <Plus size={18} color="#fff" strokeWidth={2.5} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     onPress={fetchUsers}
                     hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="רענון"
-                    style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }, refreshing && { opacity: 0.5 }]}
+                    activeOpacity={0.5}
                     disabled={refreshing}
+                    style={[s.refreshBtn, refreshing && { opacity: 0.4 }]}
                   >
-                    <RefreshCw size={17} color={IOS.muted} />
-                  </Pressable>
+                    <RefreshCw size={16} color={A.muted} />
+                  </TouchableOpacity>
                 </View>
-
-                <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={styles.heroTitle}>ניהול משתמשים</Text>
-                  <Text style={styles.heroSubtitle}>{filtered.length} תוצאות · סה״כ {stats.total}</Text>
+                <View style={s.heroTitleBlock}>
+                  <View style={s.heroIconCircle}>
+                    <Users size={20} color={A.blue} />
+                  </View>
+                  <View>
+                    <Text style={s.heroTitle}>משתמשים</Text>
+                    <Text style={s.heroSubtitle}>
+                      {filtered.length === stats.total
+                        ? `${stats.total} משתמשים`
+                        : `${filtered.length} מתוך ${stats.total}`}
+                      {roleFilter ? '  ·  לחץ שוב לאיפוס' : ''}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.searchWrap}>
-                <Search size={18} color="rgba(60,60,67,0.62)" />
+              {/* Search */}
+              <View style={s.searchBar}>
+                {!!query.trim() && (
+                  <Pressable onPress={() => setQuery('')} hitSlop={10} style={s.searchClear} accessibilityLabel="נקה חיפוש">
+                    <X size={13} color="#fff" strokeWidth={2.5} />
+                  </Pressable>
+                )}
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="חיפוש לפי שם, טלפון או תפקיד"
-                  placeholderTextColor="rgba(60,60,67,0.55)"
-                  style={styles.searchInput}
+                  placeholder="חיפוש שם, טלפון או תפקיד…"
+                  placeholderTextColor={A.placeholder}
+                  style={s.searchInput}
                   autoCorrect={false}
                   autoCapitalize="none"
                   returnKeyType="search"
                 />
-                {!!query.trim() && (
-                  <Pressable
-                    onPress={() => setQuery('')}
-                    hitSlop={10}
-                    style={styles.clearBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="נקה חיפוש"
-                  >
-                    <X size={14} color="#fff" />
-                  </Pressable>
-                )}
+                <Search size={17} color={A.mutedIcon} />
               </View>
 
-              <View style={styles.statsRow}>
-                <StatPill label="מנהלים" value={stats.admin} />
-                <StatPill label="עובדים" value={stats.worker} />
-                <StatPill label="לקוחות" value={stats.customer} />
+              {/* Stats / Filters */}
+              <View style={s.statsRow}>
+                <StatPill label="מנהלים" value={stats.admin} color="#5856D6" active={roleFilter === 'admin'} onPress={() => setRoleFilter((p) => p === 'admin' ? null : 'admin')} />
+                <StatPill label="עובדים" value={stats.worker} color="#007AFF" active={roleFilter === 'worker'} onPress={() => setRoleFilter((p) => p === 'worker' ? null : 'worker')} />
+                <StatPill label="לקוחות" value={stats.customer} color="#34C759" active={roleFilter === 'customer'} onPress={() => setRoleFilter((p) => p === 'customer' ? null : 'customer')} />
               </View>
             </View>
 
+            {/* Loading */}
             {refreshing && !users.length ? (
-              <Card style={[styles.loadingCard, styles.shadowSm]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <ActivityIndicator color={colors.primary} />
-                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>טוען משתמשים…</Text>
-                    <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 4 }}>זה אמור לקחת כמה שניות</Text>
-                  </View>
+              <View style={[s.loadingCard, s.shadowSm]}>
+                <ActivityIndicator color={A.blue} size="small" />
+                <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                  <Text style={s.loadingTitle}>טוען משתמשים…</Text>
+                  <Text style={s.loadingSubtitle}>זה אמור לקחת כמה שניות</Text>
                 </View>
-              </Card>
+              </View>
             ) : null}
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={[styles.userCell, styles.shadowSm]}>
-            <View style={styles.userRow}>
-              <View style={styles.actionsCol}>
-                {item.role === 'customer' ? (
-                  <Pressable
-                    onPressIn={(e) => setPointsAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
-                    onPress={() => fetchServicePoints(item)}
-                    hitSlop={8}
-                    style={styles.actionIconBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="נקודות שירות"
-                  >
-                    <Eye size={18} color="#8E8E93" />
-                  </Pressable>
-                ) : null}
-
-                <Pressable
-                  onPress={() => cascadeDelete(item)}
-                  hitSlop={8}
-                  disabled={mutating}
-                  style={[styles.actionIconBtn, mutating && { opacity: 0.4 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="מחיקה"
-                >
-                  <Trash2 size={18} color="#FF3B30" />
-                </Pressable>
-
-                <Pressable
-                  onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
-                  hitSlop={8}
-                  style={styles.actionIconBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="עריכה"
-                >
-                  <Pencil size={18} color="#007AFF" />
-                </Pressable>
-              </View>
-
-              <View style={styles.userMain}>
-                <Avatar size={42} uri={item.avatar_url ?? null} name={item.name} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.userName} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        )}
+        renderItem={renderUserCard}
         ListEmptyComponent={
           !refreshing ? (
-            <Card style={[styles.emptyCard, styles.shadowSm]}>
-              <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>לא מצאנו משתמשים</Text>
-              <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6 }}>
-                נסה לשנות פילטר/חיפוש או לרענן את הרשימה.
-              </Text>
-              <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
+            <View style={[s.emptyCard, s.shadowSm]}>
+              <View style={s.emptyIconCircle}>
+                <Search size={28} color={A.muted} />
+              </View>
+              <Text style={s.emptyTitle}>לא מצאנו משתמשים</Text>
+              <Text style={s.emptySubtitle}>נסה לשנות את החיפוש או לרענן את הרשימה</Text>
+              <View style={s.emptyActions}>
                 <Button title="רענון" fullWidth={false} style={{ flex: 1 }} onPress={fetchUsers} disabled={refreshing} />
                 <Button
                   title="משתמש חדש"
@@ -592,63 +590,39 @@ export function UsersScreen() {
                   disabled={busy}
                 />
               </View>
-            </Card>
+            </View>
           ) : null
         }
       />
 
+      {/* ── Edit / Create Modal ── */}
       <AnchoredWindow visible={editOpen} anchor={editAnchor} onClose={closeEdit} showCloseEye={false} durationMs={EDIT_WINDOW_DURATION_MS}>
         <View style={{ flex: 1 }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingBottom: 10,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border,
-              marginBottom: 10,
-            }}
-          >
-            <Pressable
-              onPress={closeEdit}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: 'rgba(255,255,255,0.06)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              hitSlop={10}
-            >
-              <X size={18} color={colors.text} />
-            </Pressable>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+          <View style={s.modalHeader}>
+            <TouchableOpacity onPress={closeEdit} activeOpacity={0.5} style={s.modalCloseBtn} hitSlop={10}>
+              <X size={18} color={A.text} />
+            </TouchableOpacity>
+            <Text style={s.modalTitle}>
               {isEditExisting ? 'עריכת משתמש' : 'משתמש חדש'}
             </Text>
           </View>
 
-          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 14 }}>
+          <ScrollView contentContainerStyle={s.modalBody} showsVerticalScrollIndicator={false}>
             {(editing.role ?? 'customer') !== 'customer' ? (
-              <Card style={{ padding: 12 }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <Avatar size={56} uri={avatarLocalUri ?? editing.avatar_url ?? null} name={editing.name ?? ''} />
+              <View style={s.avatarSection}>
+                <View style={s.avatarSectionInner}>
+                  <Avatar size={60} uri={avatarLocalUri ?? editing.avatar_url ?? null} name={editing.name ?? ''} />
                   <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תמונת משתמש</Text>
-                    <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right', fontWeight: '700' }}>
-                      מוצג בלוח בקרה ובמשימות
-                    </Text>
+                    <Text style={s.avatarSectionTitle}>תמונת משתמש</Text>
+                    <Text style={s.avatarSectionSub}>מוצג בלוח בקרה ובמשימות</Text>
                   </View>
                 </View>
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <View style={s.avatarSectionBtns}>
                   <Button
                     title={avatarBusy ? 'טוען…' : 'בחר תמונה'}
                     fullWidth={false}
                     style={{ flex: 1 }}
-                    disabled={avatarBusy || loading}
+                    disabled={avatarBusy}
                     onPress={pickAvatar}
                   />
                   <Button
@@ -656,11 +630,11 @@ export function UsersScreen() {
                     variant="secondary"
                     fullWidth={false}
                     style={{ flex: 1 }}
-                    disabled={avatarBusy || loading}
+                    disabled={avatarBusy}
                     onPress={clearAvatar}
                   />
                 </View>
-              </Card>
+              </View>
             ) : null}
             <Input label="שם" value={editing.name ?? ''} onChangeText={(v) => setEditing((p) => ({ ...p, name: v }))} />
             <Input
@@ -694,78 +668,50 @@ export function UsersScreen() {
                 keyboardType="numeric"
               />
             ) : null}
-            <Button title="שמור" onPress={saveUser} />
-            <Button
-              title="סגור"
-              variant="secondary"
-              onPress={closeEdit}
-            />
+            <View style={{ marginTop: 6 }}>
+              <Button title="שמור" onPress={saveUser} />
+            </View>
+            <Button title="סגור" variant="secondary" onPress={closeEdit} />
           </ScrollView>
         </View>
       </AnchoredWindow>
 
+      {/* ── Service Points Modal ── */}
       <AnchoredWindow visible={pointsOpen} anchor={pointsAnchor} onClose={() => setPointsOpen(false)} showCloseEye={false}>
         <View style={{ flex: 1 }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingBottom: 10,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border,
-            }}
-          >
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-              <Pressable
+          <View style={s.modalHeader}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <TouchableOpacity
                 onPress={() => setAddPointOpen((p) => !p)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: 'rgba(255,255,255,0.06)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                activeOpacity={0.5}
+                style={s.modalHeaderBtn}
                 hitSlop={10}
               >
-                <Plus size={18} color={colors.text} />
-              </Pressable>
-              <Pressable
+                <Plus size={17} color={A.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={() => setPointsOpen(false)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: 'rgba(255,255,255,0.06)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                activeOpacity={0.5}
+                style={s.modalHeaderBtn}
                 hitSlop={10}
               >
-                <X size={18} color={colors.text} />
-              </Pressable>
+                <X size={17} color={A.text} />
+              </TouchableOpacity>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>נקודות ריח</Text>
-              <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right', fontWeight: '700' }}>
-                {pointsUser?.name}
-              </Text>
+              <Text style={s.modalTitle}>נקודות ריח</Text>
+              <Text style={s.modalSubtitle}>{pointsUser?.name}</Text>
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 14, paddingTop: 12 }}>
+          <ScrollView contentContainerStyle={s.modalBody} showsVerticalScrollIndicator={false}>
             {addPointOpen ? (
-              <Card>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <View style={s.pointAddCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <Pressable onPress={() => setAddPointOpen(false)} hitSlop={10}>
-                    <Text style={{ color: colors.muted, fontWeight: '900' }}>ביטול</Text>
+                    <Text style={{ color: A.muted, fontWeight: '700', fontSize: 14 }}>ביטול</Text>
                   </Pressable>
-                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>הוספת נקודה</Text>
+                  <Text style={{ color: A.text, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>הוספת נקודה</Text>
                 </View>
                 <PointEditor
                   devices={devices}
@@ -775,42 +721,44 @@ export function UsersScreen() {
                     setAddPointOpen(false);
                   }}
                 />
-              </Card>
+              </View>
             ) : null}
 
             {points.length ? (
               <View style={{ gap: 10 }}>
                 {points.map((item) => (
-                  <Card key={item.id}>
+                  <View key={item.id} style={s.pointCard}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <View style={{ gap: 10 }}>
+                      <View style={{ gap: 8 }}>
                         {editingPointId === item.id ? (
-                          <Pressable onPress={cancelEditPoint} style={{ paddingVertical: 6 }} hitSlop={10}>
-                            <Text style={{ color: colors.muted, fontWeight: '900' }}>ביטול</Text>
+                          <Pressable onPress={cancelEditPoint} style={{ paddingVertical: 4 }} hitSlop={10}>
+                            <Text style={{ color: A.muted, fontWeight: '700', fontSize: 13 }}>ביטול</Text>
                           </Pressable>
                         ) : (
-                          <Pressable onPress={() => startEditPoint(item)} style={{ paddingVertical: 6 }} hitSlop={10}>
-                            <Text style={{ color: colors.primary, fontWeight: '900' }}>עריכה</Text>
+                          <Pressable onPress={() => startEditPoint(item)} style={{ paddingVertical: 4 }} hitSlop={10}>
+                            <Text style={{ color: A.blue, fontWeight: '700', fontSize: 13 }}>עריכה</Text>
                           </Pressable>
                         )}
-                        <Pressable onPress={() => deletePoint(item.id)} style={{ paddingVertical: 6 }} hitSlop={10}>
-                          <Text style={{ color: colors.danger, fontWeight: '900' }}>מחק</Text>
+                        <Pressable onPress={() => deletePoint(item.id)} style={{ paddingVertical: 4 }} hitSlop={10}>
+                          <Text style={{ color: A.red, fontWeight: '700', fontSize: 13 }}>מחק</Text>
                         </Pressable>
                       </View>
 
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>
-                          מכשיר: {item.device_type}
+                        <Text style={{ color: A.text, fontWeight: '700', fontSize: 15, textAlign: 'right' }}>
+                          {item.device_type}
                         </Text>
-                        <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                          ניחוח: {item.scent_type} • מילוי: {item.refill_amount}
+                        <Text style={{ color: A.muted, marginTop: 3, textAlign: 'right', fontSize: 13 }}>
+                          {item.scent_type} · מילוי: {item.refill_amount}
                         </Text>
                         {item.notes ? (
-                          <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>{item.notes}</Text>
+                          <Text style={{ color: A.muted, marginTop: 4, textAlign: 'right', fontSize: 13, fontStyle: 'italic' }}>
+                            {item.notes}
+                          </Text>
                         ) : null}
 
                         {editingPointId === item.id ? (
-                          <View style={{ gap: 10, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
+                          <View style={{ gap: 10, marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: A.separator }}>
                             <SelectSheet
                               label="מכשיר"
                               value={editDeviceType}
@@ -822,7 +770,7 @@ export function UsersScreen() {
                               label="ניחוח"
                               value={editScentType}
                               placeholder="בחר ניחוח…"
-                              options={scents.map((s) => ({ value: s.name, label: s.name }))}
+                              options={scents.map((sc) => ({ value: sc.name, label: sc.name }))}
                               onChange={setEditScentType}
                             />
                             <Button title="שמור שינויים" onPress={() => saveEditPoint(item)} />
@@ -830,16 +778,16 @@ export function UsersScreen() {
                         ) : null}
                       </View>
                     </View>
-                  </Card>
+                  </View>
                 ))}
               </View>
             ) : (
-              <Card>
-                <Text style={{ color: colors.muted, textAlign: 'right', fontWeight: '800' }}>אין נקודות ריח עדיין.</Text>
-                <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 4 }}>
-                  לחץ על כפתור הפלוס כדי להוסיף נקודה.
+              <View style={s.pointEmptyCard}>
+                <Text style={{ color: A.muted, textAlign: 'right', fontWeight: '700', fontSize: 14 }}>אין נקודות ריח עדיין</Text>
+                <Text style={{ color: A.mutedIcon, textAlign: 'right', marginTop: 4, fontSize: 13 }}>
+                  לחץ על + כדי להוסיף נקודה חדשה
                 </Text>
-              </Card>
+              </View>
             )}
           </ScrollView>
         </View>
@@ -849,22 +797,45 @@ export function UsersScreen() {
 }
 
 function formatIls(amount: number, missing?: boolean) {
-  if (missing) return 'מחיר: —';
+  if (missing) return '—';
   const safe = Number.isFinite(amount) ? amount : 0;
   try {
-    const fmt = new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(safe);
-    return `מחיר: ${fmt}`;
+    return new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(safe);
   } catch {
-    return `מחיר: ₪${Math.round(safe).toLocaleString('he-IL')}`;
+    return `₪${Math.round(safe).toLocaleString('he-IL')}`;
   }
 }
 
-function StatPill({ label, value }: { label: string; value: number }) {
+const STAT_ACTIVE_BG: Record<string, string> = {
+  '#5856D6': '#EEEDFB',
+  '#007AFF': '#E5F1FF',
+  '#34C759': '#E8F9ED',
+};
+const STAT_ACTIVE_BORDER: Record<string, string> = {
+  '#5856D6': '#C8C6F0',
+  '#007AFF': '#A3CDFF',
+  '#34C759': '#A0E4B4',
+};
+
+function StatPill({ label, value, color, active, onPress }: { label: string; value: number; color: string; active: boolean; onPress: () => void }) {
+  const activeBg = STAT_ACTIVE_BG[color] ?? '#F0F0F5';
+  const activeBorder = STAT_ACTIVE_BORDER[color] ?? '#D0D0D8';
+
   return (
-    <View style={styles.statPill}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.6}
+      style={[
+        s.statPill,
+        active && { backgroundColor: activeBg, borderColor: activeBorder },
+      ]}
+    >
+      <Text style={[s.statValue, active && { color }]}>{value}</Text>
+      <View style={s.statLabelRow}>
+        <Text style={[s.statLabel, active && { color, fontWeight: '700' as const }]}>{label}</Text>
+        <View style={[s.statDot, { backgroundColor: color }]} />
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -886,7 +857,7 @@ function PointEditor({
     () => devices.map((d) => ({ value: d.name, label: `${d.name}${d.refill_amount ? ` (${d.refill_amount})` : ''}` })),
     [devices]
   );
-  const scentOptions = useMemo(() => scents.map((s) => ({ value: s.name, label: s.name })), [scents]);
+  const scentOptions = useMemo(() => scents.map((sc) => ({ value: sc.name, label: sc.name })), [scents]);
 
   return (
     <View style={{ gap: 10 }}>
@@ -929,139 +900,323 @@ function PointEditor({
   );
 }
 
-// Apple HIG color constants
-const IOS = {
+/* ─────────── Apple-Inspired Design Tokens ─────────── */
+const A = {
   bg: '#F2F2F7',
   card: '#FFFFFF',
   text: '#1C1C1E',
   muted: '#8E8E93',
+  mutedIcon: '#AEAEB2',
+  placeholder: '#9D9DA3',
   blue: '#007AFF',
   red: '#FF3B30',
-  separator: 'rgba(60,60,67,0.10)',
-  segmentedBg: 'rgba(118,118,128,0.12)',
+  separator: '#EBEBF0',
+  fill: '#F0F0F5',
+  fillSecondary: '#E8E8ED',
 } as const;
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: IOS.bg, paddingTop: 12 },
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: A.bg },
   list: { flex: 1 },
-  listContent: { gap: 8, paddingBottom: 32, paddingHorizontal: 16 },
+  listContent: { gap: 8, paddingBottom: 40, paddingHorizontal: 16, paddingTop: 12 },
 
   shadowSm: {
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
   shadowMd: {
     shadowColor: '#000',
     shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    elevation: 3,
   },
 
+  /* ── Hero ── */
   hero: {
-    borderRadius: 26,
-    padding: 16,
-    backgroundColor: IOS.card,
+    borderRadius: 22,
+    padding: 18,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: IOS.separator,
+    borderColor: '#EBEBF0',
   },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  heroActionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  heroTitle: { color: IOS.text, fontSize: 26, fontWeight: '750', textAlign: 'right' },
-  heroSubtitle: { color: IOS.muted, marginTop: 4, textAlign: 'right', fontWeight: '500', fontSize: 13 },
-
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: IOS.segmentedBg,
-  },
-  fabBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: IOS.blue,
-    shadowColor: IOS.blue,
-    shadowOpacity: 0.24,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
-  },
-
-  statsRow: { marginTop: 14, flexDirection: 'row', gap: 8 },
-  statPill: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: IOS.separator,
-    backgroundColor: IOS.card,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexDirection: 'row-reverse',
+  heroHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
   },
-  statValue: { fontWeight: '800', fontSize: 18, color: IOS.text },
-  statLabel: { fontWeight: '600', fontSize: 12, color: IOS.muted },
+  heroTitleBlock: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  heroIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#EBF5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTitle: {
+    color: '#1C1C1E',
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'right',
+    letterSpacing: -0.4,
+  },
+  heroSubtitle: {
+    color: '#8E8E93',
+    marginTop: 2,
+    textAlign: 'right',
+    fontWeight: '500',
+    fontSize: 13,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  fabBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    shadowColor: '#007AFF',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  refreshBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F0F5',
+  },
 
-  searchWrap: {
+  /* ── Search ── */
+  searchBar: {
     marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: IOS.segmentedBg,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    backgroundColor: '#E8E8ED',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 40,
   },
-  searchInput: { flex: 1, color: IOS.text, fontSize: 15, textAlign: 'right', paddingVertical: 0 },
-  clearBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  searchInput: {
+    flex: 1,
+    color: '#1C1C1E',
+    fontSize: 15,
+    textAlign: 'right',
+    paddingVertical: 0,
+    fontWeight: '400',
+  },
+  searchClear: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: IOS.muted,
+    backgroundColor: '#8E8E93',
   },
 
-  loadingCard: { borderRadius: 16, borderWidth: 0 },
-  emptyCard: { borderRadius: 16, marginTop: 4, borderWidth: 0 },
-
-  userCell: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
+  /* ── Stats ── */
+  statsRow: { marginTop: 14, flexDirection: 'row', gap: 8 },
+  statPill: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: '#F0F0F5',
+    borderWidth: 1.5,
+    borderColor: '#F0F0F5',
     paddingVertical: 10,
-    backgroundColor: IOS.card,
-    borderWidth: 1,
-    borderColor: IOS.separator,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 2,
   },
-  userRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 14 },
-  userMain: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
-  userName: { color: IOS.text, fontWeight: '600', fontSize: 17, textAlign: 'right', flexShrink: 1 },
-  userMeta: { color: IOS.muted, fontSize: 13, textAlign: 'right' },
-  rolePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: IOS.separator,
-    backgroundColor: IOS.segmentedBg,
-  },
-  rolePillText: { color: IOS.text, fontWeight: '700', fontSize: 12 },
+  statValue: { fontWeight: '800', fontSize: 20, color: A.text, letterSpacing: -0.4 },
+  statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  statLabel: { fontWeight: '600', fontSize: 12, color: A.muted },
+  statDot: { width: 7, height: 7, borderRadius: 3.5 },
 
-  actionsCol: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actionIconBtn: {
+  /* ── User Card ── */
+  userCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EBEBF0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  userCardInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  userInfo: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  userAvatar: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  userName: {
+    flex: 1,
+    color: A.text,
+    fontWeight: '600',
+    fontSize: 16,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  userActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnBlue: {
+    backgroundColor: '#EBF5FF',
+  },
+  actionBtnTeal: {
+    backgroundColor: '#E8F7FD',
+  },
+  actionBtnRed: {
+    backgroundColor: '#FFF0EF',
+  },
+
+  /* ── Loading ── */
+  loadingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    backgroundColor: A.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: A.separator,
+  },
+  loadingTitle: { color: A.text, fontWeight: '700', fontSize: 15, textAlign: 'right' },
+  loadingSubtitle: { color: A.muted, textAlign: 'right', marginTop: 3, fontSize: 13 },
+
+  /* ── Empty ── */
+  emptyCard: {
+    backgroundColor: A.card,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: A.separator,
+    marginTop: 8,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: A.fill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: { color: A.text, fontWeight: '800', fontSize: 17, textAlign: 'center' },
+  emptySubtitle: { color: A.muted, textAlign: 'center', marginTop: 6, fontSize: 14, lineHeight: 20 },
+  emptyActions: { marginTop: 16, flexDirection: 'row', gap: 10, width: '100%' },
+
+  /* ── Modal shared ── */
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: A.separator,
+    marginBottom: 4,
+  },
+  modalTitle: {
+    color: A.text,
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  modalSubtitle: {
+    color: A.muted,
+    marginTop: 2,
+    textAlign: 'right',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  modalCloseBtn: {
     width: 34,
     height: 34,
+    borderRadius: 17,
+    backgroundColor: A.fillSecondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+  modalHeaderBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: A.fillSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBody: { gap: 10, paddingBottom: 20, paddingTop: 10 },
 
+  /* ── Avatar section in edit modal ── */
+  avatarSection: {
+    backgroundColor: A.fill,
+    borderRadius: 16,
+    padding: 14,
+  },
+  avatarSectionInner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  avatarSectionTitle: { color: A.text, fontWeight: '800', textAlign: 'right', fontSize: 15 },
+  avatarSectionSub: { color: A.muted, marginTop: 3, textAlign: 'right', fontWeight: '600', fontSize: 13 },
+  avatarSectionBtns: { flexDirection: 'row', gap: 10, marginTop: 12 },
+
+  /* ── Points ── */
+  pointAddCard: {
+    backgroundColor: A.fill,
+    borderRadius: 16,
+    padding: 14,
+  },
+  pointCard: {
+    backgroundColor: A.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: A.separator,
+  },
+  pointEmptyCard: {
+    backgroundColor: A.fill,
+    borderRadius: 16,
+    padding: 20,
+  },
+});

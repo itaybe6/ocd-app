@@ -433,6 +433,13 @@ export function WorkTemplateStationEditScreen({
             {/* Customer */}
             <Pressable onPress={() => setPickerKind('customer')} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
               <View style={s.personRow}>
+                {customer && <View style={s.selectedDot} />}
+                <View style={s.personInfo}>
+                  <Text style={s.personRole}>לקוח</Text>
+                  <Text style={[s.personName, customer ? null : s.personNameEmpty]} numberOfLines={1}>
+                    {customer?.name ?? 'בחר לקוח...'}
+                  </Text>
+                </View>
                 {customer ? (
                   <Avatar size={42} uri={customer.avatar_url ?? null} name={customer.name} />
                 ) : (
@@ -440,13 +447,6 @@ export function WorkTemplateStationEditScreen({
                     <User size={19} color={colors.primary} strokeWidth={1.8} />
                   </View>
                 )}
-                <View style={s.personInfo}>
-                  <Text style={s.personRole}>לקוח</Text>
-                  <Text style={[s.personName, customer ? null : s.personNameEmpty]} numberOfLines={1}>
-                    {customer?.name ?? 'בחר לקוח...'}
-                  </Text>
-                </View>
-                {customer && <View style={s.selectedDot} />}
               </View>
             </Pressable>
 
@@ -455,6 +455,13 @@ export function WorkTemplateStationEditScreen({
             {/* Worker */}
             <Pressable onPress={() => setPickerKind('worker')} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
               <View style={s.personRow}>
+                {worker && <View style={[s.selectedDot, s.selectedDotWorker]} />}
+                <View style={s.personInfo}>
+                  <Text style={s.personRole}>עובד</Text>
+                  <Text style={[s.personName, worker ? null : s.personNameEmpty]} numberOfLines={1}>
+                    {worker?.name ?? 'בחר עובד...'}
+                  </Text>
+                </View>
                 {worker ? (
                   <Avatar size={42} uri={worker.avatar_url ?? null} name={worker.name} />
                 ) : (
@@ -462,13 +469,6 @@ export function WorkTemplateStationEditScreen({
                     <Users size={19} color="#8B5CF6" strokeWidth={1.8} />
                   </View>
                 )}
-                <View style={s.personInfo}>
-                  <Text style={s.personRole}>עובד</Text>
-                  <Text style={[s.personName, worker ? null : s.personNameEmpty]} numberOfLines={1}>
-                    {worker?.name ?? 'בחר עובד...'}
-                  </Text>
-                </View>
-                {worker && <View style={[s.selectedDot, s.selectedDotWorker]} />}
               </View>
             </Pressable>
           </View>
@@ -565,7 +565,7 @@ const s = StyleSheet.create({
     elevation: 2,
   },
   personRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,

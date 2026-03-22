@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Image, Text, View, Pressable, StyleSheet } from 'react-native';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -18,6 +18,7 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { useAuth } from '../state/AuthContext';
+import { AdminHeader } from '../components/AdminHeader';
 import { DashboardScreen } from '../screens/admin/DashboardScreen';
 import { UsersScreen } from '../screens/admin/UsersScreen';
 import { JobsScreen } from '../screens/admin/JobsScreen';
@@ -61,21 +62,11 @@ const D = {
   white: '#FFFFFF',
 } as const;
 
-const ADMIN_HEADER_LOGO = require('../../assets/logopng/OCDLOGO-04.png');
-
 const Drawer = createDrawerNavigator<AdminDrawerParamList>();
 
 type LucideIcon = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 type Item = { key: keyof AdminDrawerParamList; label: string; icon: LucideIcon };
 type Section = { title: string; items: Item[] };
-
-function AdminHeaderTitle() {
-  return (
-    <View pointerEvents="none" style={styles.headerTitleWrap}>
-      <Image source={ADMIN_HEADER_LOGO} resizeMode="contain" style={styles.headerLogo} />
-    </View>
-  );
-}
 
 /* ─── Single navigation row ─── */
 function DrawerNavItem({
@@ -266,12 +257,9 @@ export function AdminDrawer() {
     <Drawer.Navigator
       drawerContent={(p) => <AdminDrawerContent {...p} />}
       screenOptions={{
-        headerStyle: { backgroundColor: '#FFFFFF' },
-        headerTintColor: '#0F172A',
-        headerTitleStyle: { fontWeight: '900' },
-        headerTitle: () => <AdminHeaderTitle />,
-        headerTitleAlign: 'center',
-        headerTitleContainerStyle: styles.headerTitleContainer,
+        header: ({ navigation }) => (
+          <AdminHeader onMenuPress={() => (navigation as any).openDrawer()} />
+        ),
         sceneStyle: { backgroundColor: '#F6F7FB' },
         drawerPosition: 'right',
         drawerType: 'front',
@@ -296,22 +284,6 @@ export function AdminDrawer() {
 const styles = StyleSheet.create({
   scroll: { backgroundColor: D.bg },
   scrollContent: {},
-
-  headerTitleContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  headerTitleWrap: {
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerLogo: {
-    width: 176,
-    height: 40,
-  },
 
   /* Header */
   header: {

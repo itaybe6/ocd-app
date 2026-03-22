@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, Text, View, Image, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarDays, Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react-native';
+import { CalendarDays, Clock, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2, Wrench, Zap } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Card } from '../../components/ui/Card';
@@ -685,14 +685,17 @@ export function JobsScreen() {
 
   const ui = useMemo(
     () => ({
-      surface: '#FAFAFC',
+      surface: '#F2F2F7',
       surfaceLow: '#FFFFFF',
-      surfaceContainerLow: '#F3F4F6',
-      surfaceContainerHigh: '#EEF0F3',
-      outline: 'rgba(15,23,42,0.10)',
-      text: '#0F172A',
-      muted: '#64748B',
-      primary: '#0F172A', // neutral “ink” accent
+      surfaceContainerLow: 'rgba(120,120,128,0.12)',
+      surfaceContainerHigh: 'rgba(120,120,128,0.08)',
+      outline: 'rgba(60,60,67,0.10)',
+      text: '#1C1C1E',
+      muted: '#8E8E93',
+      primary: '#007AFF',
+      secondary: '#3C3C43',
+      tertiary: '#8E8E93',
+      fill: 'rgba(120,120,128,0.12)',
     }),
     []
   );
@@ -702,8 +705,8 @@ export function JobsScreen() {
 
   const statusMeta = (s: JobStatus) =>
     s === 'completed'
-      ? { label: 'הושלם', bg: 'rgba(34,197,94,0.16)', fg: '#166534' }
-      : { label: 'ממתין', bg: 'rgba(249,115,22,0.16)', fg: '#9A3412' };
+      ? { label: 'הושלם', bg: 'rgba(52,199,89,0.10)', fg: '#248A3D' }
+      : { label: 'ממתין', bg: 'rgba(255,149,0,0.10)', fg: '#C93400' };
 
   const stats = useMemo(() => {
     const base = filtered;
@@ -733,300 +736,408 @@ export function JobsScreen() {
         sections={sections}
         keyExtractor={(item) => `${item.kind}:${item.id}`}
         stickySectionHeadersEnabled={false}
-        style={{ marginTop: 4 }}
-        contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 16, paddingTop: 12 }}
+        style={{ marginTop: 0 }}
+        contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16, paddingTop: 16 }}
         ListHeaderComponent={
-          <View style={{ gap: 14, marginBottom: 16 }}>
-            {/* Stats bento (neutral) */}
+          <View style={{ gap: 20, marginBottom: 12 }}>
+            {/* Stats */}
             <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
               {[
-                { label: 'הושלמו', value: stats.completed },
-                { label: 'ממתינות', value: stats.pending },
                 { label: 'סה״כ', value: stats.total },
+                { label: 'ממתינות', value: stats.pending },
+                { label: 'הושלמו', value: stats.completed },
               ].map((x) => (
                 <View
                   key={x.label}
                   style={{
                     flex: 1,
-                    backgroundColor: ui.surfaceContainerHigh,
-                    borderRadius: 18,
-                    paddingVertical: 14,
+                    backgroundColor: 'rgba(0,122,255,0.08)',
+                    borderRadius: 16,
+                    paddingVertical: 16,
                     paddingHorizontal: 14,
-                    borderWidth: 1,
-                    borderColor: ui.outline,
                   }}
                 >
-                  <Text style={{ color: ui.muted, fontWeight: '800', fontSize: 12, textAlign: 'right' }}>{x.label}</Text>
-                  <Text style={{ color: ui.text, fontWeight: '900', fontSize: 24, textAlign: 'right', marginTop: 6 }}>
+                  <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 12, textAlign: 'right', opacity: 0.8 }}>
+                    {x.label}
+                  </Text>
+                  <Text style={{
+                    color: '#007AFF',
+                    fontWeight: '800',
+                    fontSize: 28,
+                    textAlign: 'right',
+                    marginTop: 6,
+                    letterSpacing: -1,
+                  }}>
                     {x.value}
                   </Text>
                 </View>
               ))}
             </View>
 
-            {/* Action row */}
-            <View style={{ gap: 10 }}>
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-start' }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flex: 1 }}>
-
-                  {/* Inline search (always visible) */}
-                  <View
-                    style={{
-                      flex: 1,
-                      flexDirection: 'row-reverse',
-                      alignItems: 'center',
-                      gap: 10,
-                      backgroundColor: ui.surfaceContainerLow,
-                      borderRadius: 18,
-                      paddingHorizontal: 12,
-                      paddingVertical: 10,
-                      borderWidth: 1,
-                      borderColor: ui.outline,
-                    }}
-                  >
-                    <Search size={16} color="#9CA3AF" />
-                    <Input
-                      label={undefined}
-                      value={filters.q}
-                      onChangeText={(v) => setFilters((p) => ({ ...p, q: v }))}
-                      placeholder="חיפוש…"
-                      style={{
-                        flex: 1,
-                        borderWidth: 0,
-                        paddingVertical: 0,
-                        paddingHorizontal: 0,
-                        backgroundColor: 'transparent',
-                        fontSize: 14,
-                      }}
-                    />
-                  </View>
-
-                  {/* Filter button */}
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setFiltersOpen(true)}
-                    hitSlop={8}
-                  >
-                    {({ pressed }) => (
-                      <View
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 18,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: ui.surfaceContainerHigh,
-                          borderWidth: 1,
-                          borderColor: ui.outline,
-                          opacity: pressed ? 0.82 : 1,
-                          transform: [{ scale: pressed ? 0.93 : 1 }],
-                          shadowColor: '#000',
-                          shadowOpacity: 0.06,
-                          shadowRadius: 14,
-                          shadowOffset: { width: 0, height: 10 },
-                          elevation: 3,
-                        }}
-                      >
-                        <Entypo name="sound-mix" size={18} color={ui.text} />
-                      </View>
-                    )}
-                  </Pressable>
-
-                  {/* Add job button */}
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setCreateOpen(true)}
-                    hitSlop={8}
-                  >
-                    {({ pressed }) => (
-                      <View
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 18,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: ui.text,
-                          opacity: pressed ? 0.82 : 1,
-                          transform: [{ scale: pressed ? 0.93 : 1 }],
-                          shadowColor: '#000',
-                          shadowOpacity: 0.14,
-                          shadowRadius: 16,
-                          shadowOffset: { width: 0, height: 12 },
-                          elevation: 5,
-                        }}
-                      >
-                        <Plus size={18} color="#FFFFFF" strokeWidth={2.5} />
-                      </View>
-                    )}
-                  </Pressable>
-
-                </View>
+            {/* Search + Actions */}
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <View
+                style={{
+                  flex: 1,
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  gap: 8,
+                  backgroundColor: ui.fill,
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                  height: 44,
+                }}
+              >
+                <Search size={16} color={ui.tertiary} />
+                <Input
+                  label={undefined}
+                  value={filters.q}
+                  onChangeText={(v) => setFilters((p) => ({ ...p, q: v }))}
+                  placeholder="חיפוש…"
+                  style={{
+                    flex: 1,
+                    borderWidth: 0,
+                    paddingVertical: 0,
+                    paddingHorizontal: 0,
+                    backgroundColor: 'transparent',
+                    fontSize: 15,
+                  }}
+                />
               </View>
 
-              {isFiltersActive && (
-                <Text style={{ color: ui.muted, fontWeight: '700', fontSize: 12, textAlign: 'right' }}>
-                  {filtered.length} משימות • סינון פעיל
-                </Text>
-              )}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setFiltersOpen(true)}
+                hitSlop={8}
+              >
+                {({ pressed }) => (
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: isFiltersActive ? '#007AFF' : ui.fill,
+                      opacity: pressed ? 0.7 : 1,
+                    }}
+                  >
+                    <Entypo name="sound-mix" size={18} color={isFiltersActive ? '#FFFFFF' : ui.secondary} />
+                  </View>
+                )}
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setCreateOpen(true)}
+                hitSlop={8}
+              >
+                {({ pressed }) => (
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#007AFF',
+                      opacity: pressed ? 0.7 : 1,
+                      shadowColor: '#007AFF',
+                      shadowOpacity: 0.3,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 4,
+                    }}
+                  >
+                    <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
+                  </View>
+                )}
+              </Pressable>
             </View>
+
+            {isFiltersActive && (
+              <View style={{
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: 'rgba(0,122,255,0.08)',
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                alignSelf: 'flex-end',
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#007AFF' }} />
+                <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 13 }}>
+                  {filtered.length} תוצאות
+                </Text>
+              </View>
+            )}
           </View>
         }
         renderSectionHeader={({ section }) => (
-          <View style={{ paddingVertical: 8 }}>
-            <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{section.title}</Text>
+          <View style={{
+            paddingTop: 20,
+            paddingBottom: 10,
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <Text style={{
+              color: ui.text,
+              fontWeight: '800',
+              fontSize: 20,
+              textAlign: 'right',
+              letterSpacing: -0.4,
+            }}>
+              {section.title}
+            </Text>
+            <View style={{
+              backgroundColor: ui.fill,
+              borderRadius: 10,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}>
+              <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 12 }}>
+                {section.data.length}
+              </Text>
+            </View>
           </View>
         )}
-        renderItem={({ item }) => (
-          <JobCard
-            kind={item.kind}
-            title=""
-            primaryNode={
-              <View style={{ gap: 12 }}>
-                {/* Row 1: avatar · worker name · status badge (left) */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 11 }}>
-                  <Avatar
-                    size={42}
-                    uri={userAvatarMap.get(item.worker_id) ?? null}
-                    name={userMap.get(item.worker_id) ?? ''}
-                    style={{ backgroundColor: ui.surfaceContainerHigh }}
-                  />
-                  <Text
-                    style={{
-                      color: ui.text,
-                      fontWeight: '700',
-                      fontSize: 16,
-                      textAlign: 'right',
-                      flex: 1,
-                      letterSpacing: -0.4,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
-                  </Text>
-                  {/* Status pill — floats to the left */}
-                  <View
-                    style={{
-                      backgroundColor: item.status === 'completed' ? 'rgba(34,197,94,0.12)' : 'rgba(249,115,22,0.11)',
-                      borderColor: item.status === 'completed' ? 'rgba(34,197,94,0.32)' : 'rgba(249,115,22,0.32)',
-                      borderWidth: 1,
-                      borderRadius: 20,
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                    }}
-                  >
-                    <Text style={{
-                      color: item.status === 'completed' ? '#15803D' : '#C2410C',
-                      fontWeight: '800',
-                      fontSize: 11,
-                      letterSpacing: 0.1,
+        renderItem={({ item }) => {
+          const kindMeta = item.kind === 'installation'
+            ? { label: 'התקנה', color: '#AF52DE', bg: 'rgba(175,82,222,0.10)', icon: <Wrench size={13} color="#AF52DE" /> }
+            : item.kind === 'special'
+              ? { label: 'מיוחדת', color: '#FF9500', bg: 'rgba(255,149,0,0.10)', icon: <Zap size={13} color="#FF9500" /> }
+              : { label: 'ריח', color: '#007AFF', bg: 'rgba(0,122,255,0.10)', icon: <Droplets size={13} color="#007AFF" /> };
+
+          return (
+            <JobCard
+              kind={item.kind}
+              title=""
+              primaryNode={
+                <View style={{ gap: 14 }}>
+                  {/* Kind badge + Status */}
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      gap: 5,
+                      backgroundColor: kindMeta.bg,
+                      borderRadius: 8,
+                      paddingHorizontal: 9,
+                      paddingVertical: 4,
                     }}>
-                      {item.status === 'completed' ? 'הושלם' : 'ממתין'}
+                      {kindMeta.icon}
+                      <Text style={{ color: kindMeta.color, fontWeight: '700', fontSize: 12 }}>
+                        {kindMeta.label}
+                      </Text>
+                    </View>
+                    <View style={{
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: item.status === 'completed' ? 'rgba(52,199,89,0.10)' : 'rgba(255,149,0,0.10)',
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}>
+                      <View style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: 3.5,
+                        backgroundColor: item.status === 'completed' ? '#34C759' : '#FF9500',
+                      }} />
+                      <Text style={{
+                        color: item.status === 'completed' ? '#248A3D' : '#C93400',
+                        fontWeight: '700',
+                        fontSize: 12,
+                      }}>
+                        {item.status === 'completed' ? 'הושלם' : 'ממתין'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Worker + Customer */}
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                    <Avatar
+                      size={44}
+                      uri={userAvatarMap.get(item.worker_id) ?? null}
+                      name={userMap.get(item.worker_id) ?? ''}
+                      style={{ borderWidth: 2, borderColor: 'rgba(0,0,0,0.04)' }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: ui.text,
+                          fontWeight: '700',
+                          fontSize: 16,
+                          textAlign: 'right',
+                          letterSpacing: -0.3,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
+                      </Text>
+                      {!!item.customer_id && (
+                        <Text
+                          style={{
+                            color: ui.secondary,
+                            fontWeight: '500',
+                            fontSize: 14,
+                            textAlign: 'right',
+                            marginTop: 2,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Notes */}
+                  {!!item.notes && (
+                    <Text
+                      style={{
+                        color: ui.tertiary,
+                        fontSize: 13,
+                        lineHeight: 19,
+                        textAlign: 'right',
+                        fontWeight: '400',
+                      }}
+                      numberOfLines={2}
+                    >
+                      {item.notes}
+                    </Text>
+                  )}
+                </View>
+              }
+              description={null}
+              onOriginRect={(r) => { detailsOriginRectRef.current = r; }}
+              onPress={() => openDetails(item)}
+              faded={item.status === 'completed'}
+              style={{ marginBottom: 10 }}
+              actions={
+                <>
+                  {item.kind === 'regular' && item.status === 'pending' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="בצע"
+                      onPress={(e) => { e.stopPropagation?.(); openJob(item, { mode: 'execute' }); }}
+                      style={({ pressed }) => [{ opacity: pressed ? 0.55 : 1 }]}
+                    >
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 13,
+                        backgroundColor: 'rgba(0,122,255,0.10)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <Rocket size={18} color="#007AFF" />
+                      </View>
+                    </Pressable>
+                  ) : null}
+                  <JobCardAction
+                    label="ערוך"
+                    onPress={() => openEdit(item)}
+                    onOriginRect={(r) => { editOriginRectRef.current = r; }}
+                  >
+                    <Pencil size={18} color={ui.secondary} />
+                  </JobCardAction>
+                  <JobCardAction
+                    label="מחק"
+                    variant="danger"
+                    onPress={() => {
+                      Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
+                        { text: 'ביטול', style: 'cancel' },
+                        { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
+                      ]);
+                    }}
+                  >
+                    <Trash2 size={18} color="#FF3B30" />
+                  </JobCardAction>
+                </>
+              }
+              chips={
+                <>
+                  {item.order_number != null && (
+                    <View style={{
+                      backgroundColor: ui.fill,
+                      borderRadius: 8,
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                    }}>
+                      <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 11 }}>
+                        #{item.order_number}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={{
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    gap: 4,
+                    backgroundColor: ui.fill,
+                    borderRadius: 8,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                  }}>
+                    <Clock size={11} color={ui.tertiary} />
+                    <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 11 }}>
+                      {yyyyMmDd(item.date)}
                     </Text>
                   </View>
-                </View>
-
-                {/* Row 2: customer name */}
-                {!!item.customer_id && (
-                  <Text
-                    style={{
-                      color: ui.text,
-                      fontWeight: '600',
-                      fontSize: 15,
-                      textAlign: 'right',
-                      letterSpacing: -0.2,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}
-                  </Text>
-                )}
-              </View>
-            }
-            description={item.notes ?? null}
-            onOriginRect={(r) => { detailsOriginRectRef.current = r; }}
-            onPress={() => openDetails(item)}
-            faded={item.status === 'completed'}
-            style={{ marginBottom: 12 }}
-            actions={
-              <>
-                <JobCardAction
-                  label="ערוך"
-                  onPress={() => openEdit(item)}
-                  onOriginRect={(r) => { editOriginRectRef.current = r; }}
-                >
-                  <Pencil size={20} color="#414755" />
-                </JobCardAction>
-                <JobCardAction
-                  label="מחק"
-                  variant="danger"
-                  onPress={() => {
-                    Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
-                      { text: 'ביטול', style: 'cancel' },
-                      { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
-                    ]);
-                  }}
-                >
-                  <Trash2 size={20} color={colors.danger} />
-                </JobCardAction>
-              </>
-            }
-            chips={
-              <>
-                {item.order_number != null ? <JobChip text={`#${item.order_number}`} muted /> : null}
-                <JobChip text={tagChipText(item.kind)} accent="neutral" />
-                <JobChip text={yyyyMmDd(item.date)} muted />
-                {item.kind === 'regular' && item.status === 'pending' ? (
-                  <Pressable onPress={(e) => { e.stopPropagation?.(); openJob(item, { mode: 'execute' }); }}>
-                    {({ pressed }) => (
-                      <View style={{
-                        backgroundColor: ui.text,
-                        borderRadius: 14,
-                        paddingHorizontal: 14,
-                        paddingVertical: 7,
-                        opacity: pressed ? 0.78 : 1,
-                        transform: [{ scale: pressed ? 0.97 : 1 }],
-                      }}>
-                        <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>בצע</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                ) : null}
-              </>
-            }
-          />
-        )}
-        ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
+                </>
+              }
+            />
+          );
+        }}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', paddingVertical: 48, gap: 12 }}>
+            <View style={{
+              width: 64,
+              height: 64,
+              borderRadius: 20,
+              backgroundColor: ui.fill,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <Droplets size={28} color={ui.tertiary} />
+            </View>
+            <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 16, textAlign: 'center' }}>
+              אין משימות
+            </Text>
+            <Text style={{ color: ui.tertiary, fontWeight: '400', fontSize: 14, textAlign: 'center' }}>
+              הוסף משימה חדשה כדי להתחיל
+            </Text>
+          </View>
+        }
       />
 
       <ModalSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)}>
         <View style={{ gap: 0, paddingBottom: 8 }}>
 
-          {/* ── Header ── */}
-          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', letterSpacing: -0.4 }}>סינון</Text>
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <Text style={{ color: ui.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 }}>סינון</Text>
             <Pressable
               onPress={() => setFilters({ date: '', status: '', tag: '', q: '' })}
               style={({ pressed }) => ({
                 paddingHorizontal: 14,
                 paddingVertical: 7,
-                borderRadius: 20,
-                backgroundColor: pressed ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)',
-                borderWidth: 1,
-                borderColor: 'rgba(239,68,68,0.22)',
+                borderRadius: 10,
+                backgroundColor: pressed ? 'rgba(255,59,48,0.12)' : 'rgba(255,59,48,0.08)',
               })}
             >
-              <Text style={{ color: '#DC2626', fontWeight: '800', fontSize: 13 }}>נקה הכל</Text>
+              <Text style={{ color: '#FF3B30', fontWeight: '600', fontSize: 14 }}>נקה הכל</Text>
             </Pressable>
           </View>
 
-          {/* ── Status chips ── */}
-          <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 12, textAlign: 'right', marginBottom: 8 }}>סטטוס</Text>
-          <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 18 }}>
+          <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 13, textAlign: 'right', marginBottom: 10 }}>סטטוס</Text>
+          <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 20 }}>
             {[
-              { value: '' as const, label: 'הכל', bg: 'rgba(99,102,241,0.10)', activeBg: '#6366F1', border: 'rgba(99,102,241,0.25)', fg: '#6366F1' },
-              { value: 'pending' as const, label: 'ממתין', bg: 'rgba(249,115,22,0.10)', activeBg: '#F97316', border: 'rgba(249,115,22,0.25)', fg: '#EA580C' },
-              { value: 'completed' as const, label: 'הושלם', bg: 'rgba(34,197,94,0.10)', activeBg: '#22C55E', border: 'rgba(34,197,94,0.25)', fg: '#16A34A' },
+              { value: '' as const, label: 'הכל', color: '#007AFF', bg: 'rgba(0,122,255,0.10)' },
+              { value: 'pending' as const, label: 'ממתין', color: '#FF9500', bg: 'rgba(255,149,0,0.10)' },
+              { value: 'completed' as const, label: 'הושלם', color: '#34C759', bg: 'rgba(52,199,89,0.10)' },
             ].map((opt) => {
               const active = filters.status === opt.value;
               return (
@@ -1036,15 +1147,13 @@ export function JobsScreen() {
                 >
                   {({ pressed }) => (
                     <View style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 9,
-                      borderRadius: 22,
-                      backgroundColor: active ? opt.activeBg : opt.bg,
-                      borderWidth: 1.5,
-                      borderColor: active ? opt.activeBg : opt.border,
-                      opacity: pressed ? 0.82 : 1,
+                      paddingHorizontal: 18,
+                      paddingVertical: 10,
+                      borderRadius: 12,
+                      backgroundColor: active ? opt.color : opt.bg,
+                      opacity: pressed ? 0.7 : 1,
                     }}>
-                      <Text style={{ color: active ? '#FFFFFF' : opt.fg, fontWeight: '800', fontSize: 13 }}>{opt.label}</Text>
+                      <Text style={{ color: active ? '#FFFFFF' : opt.color, fontWeight: '600', fontSize: 14 }}>{opt.label}</Text>
                     </View>
                   )}
                 </Pressable>
@@ -1052,13 +1161,12 @@ export function JobsScreen() {
             })}
           </View>
 
-          {/* ── Kind chips ── */}
-          <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 12, textAlign: 'right', marginBottom: 8 }}>סוג משימה</Text>
-          <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 18 }}>
+          <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 13, textAlign: 'right', marginBottom: 10 }}>סוג משימה</Text>
+          <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 20 }}>
             {[
-              { value: '' as const, label: 'הכל', bg: 'rgba(99,102,241,0.10)', activeBg: '#6366F1', border: 'rgba(99,102,241,0.25)', fg: '#6366F1' },
-              { value: 'smell' as const, label: 'ריח', bg: 'rgba(0,88,188,0.08)', activeBg: '#0058BC', border: 'rgba(0,88,188,0.22)', fg: '#0058BC' },
-              { value: 'other' as const, label: 'אחרת', bg: 'rgba(234,88,12,0.08)', activeBg: '#EA580C', border: 'rgba(234,88,12,0.22)', fg: '#EA580C' },
+              { value: '' as const, label: 'הכל', color: '#007AFF', bg: 'rgba(0,122,255,0.10)' },
+              { value: 'smell' as const, label: 'ריח', color: '#007AFF', bg: 'rgba(0,122,255,0.10)' },
+              { value: 'other' as const, label: 'אחרת', color: '#FF9500', bg: 'rgba(255,149,0,0.10)' },
             ].map((opt) => {
               const active = filters.tag === opt.value;
               return (
@@ -1068,15 +1176,13 @@ export function JobsScreen() {
                 >
                   {({ pressed }) => (
                     <View style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 9,
-                      borderRadius: 22,
-                      backgroundColor: active ? opt.activeBg : opt.bg,
-                      borderWidth: 1.5,
-                      borderColor: active ? opt.activeBg : opt.border,
-                      opacity: pressed ? 0.82 : 1,
+                      paddingHorizontal: 18,
+                      paddingVertical: 10,
+                      borderRadius: 12,
+                      backgroundColor: active ? opt.color : opt.bg,
+                      opacity: pressed ? 0.7 : 1,
                     }}>
-                      <Text style={{ color: active ? '#FFFFFF' : opt.fg, fontWeight: '800', fontSize: 13 }}>{opt.label}</Text>
+                      <Text style={{ color: active ? '#FFFFFF' : opt.color, fontWeight: '600', fontSize: 14 }}>{opt.label}</Text>
                     </View>
                   )}
                 </Pressable>
@@ -1084,21 +1190,18 @@ export function JobsScreen() {
             })}
           </View>
 
-          {/* ── Date ── */}
-          <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 12, textAlign: 'right', marginBottom: 8 }}>תאריך</Text>
+          <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 13, textAlign: 'right', marginBottom: 10 }}>תאריך</Text>
           <View style={{
             flexDirection: 'row-reverse',
             alignItems: 'center',
             gap: 10,
-            backgroundColor: '#F3F4F6',
-            borderRadius: 16,
+            backgroundColor: ui.fill,
+            borderRadius: 12,
             paddingHorizontal: 14,
-            paddingVertical: 11,
-            marginBottom: 22,
-            borderWidth: 1,
-            borderColor: 'rgba(0,0,0,0.06)',
+            paddingVertical: 12,
+            marginBottom: 24,
           }}>
-            <CalendarDays size={17} color="#9CA3AF" />
+            <CalendarDays size={17} color={ui.tertiary} />
             <Input
               label={undefined}
               value={filters.date}
@@ -1115,34 +1218,31 @@ export function JobsScreen() {
             />
           </View>
 
-          {/* ── Footer count + close ── */}
           <View style={{
             flexDirection: 'row-reverse',
             alignItems: 'center',
             justifyContent: 'space-between',
-            paddingTop: 4,
+            paddingTop: 16,
             borderTopWidth: 1,
-            borderTopColor: 'rgba(0,0,0,0.06)',
+            borderTopColor: ui.outline,
           }}>
-            <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 13 }}>
+            <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 14 }}>
               {filtered.length} תוצאות
             </Text>
-            <Pressable
-              onPress={() => setFiltersOpen(false)}
-            >
+            <Pressable onPress={() => setFiltersOpen(false)}>
               {({ pressed }) => (
                 <View style={{
                   paddingHorizontal: 28,
                   paddingVertical: 12,
-                  borderRadius: 22,
-                  backgroundColor: pressed ? 'rgba(0,88,188,0.88)' : '#0058BC',
-                  shadowColor: '#0058BC',
-                  shadowOpacity: 0.28,
-                  shadowRadius: 10,
+                  borderRadius: 14,
+                  backgroundColor: pressed ? 'rgba(0,122,255,0.85)' : '#007AFF',
+                  shadowColor: '#007AFF',
+                  shadowOpacity: 0.25,
+                  shadowRadius: 8,
                   shadowOffset: { width: 0, height: 4 },
                   elevation: 4,
                 }}>
-                  <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 15 }}>הצג תוצאות</Text>
+                  <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 16 }}>הצג תוצאות</Text>
                 </View>
               )}
             </Pressable>
@@ -1173,37 +1273,42 @@ export function JobsScreen() {
               {/* Title row + pills */}
               <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', flexWrap: 'wrap', gap: 8, flex: 1 }}>
-                  <Text style={{ color: ui.text, fontSize: 18, fontWeight: '900', textAlign: 'right', letterSpacing: -0.3 }}>
+                  <Text style={{ color: ui.text, fontSize: 18, fontWeight: '800', textAlign: 'right', letterSpacing: -0.4 }}>
                     {tagLabel(selected.kind)} - #{selected.order_number ?? '—'}
                   </Text>
                   <View
                     style={{
-                      backgroundColor: 'rgba(99,102,241,0.10)',
-                      borderColor: 'rgba(99,102,241,0.20)',
-                      borderWidth: 1,
+                      backgroundColor: selected.kind === 'installation' ? 'rgba(175,82,222,0.10)' : selected.kind === 'special' ? 'rgba(255,149,0,0.10)' : 'rgba(0,122,255,0.10)',
                       paddingHorizontal: 10,
                       paddingVertical: 4,
-                      borderRadius: 10,
+                      borderRadius: 8,
                     }}
                   >
-                    <Text style={{ color: '#4F46E5', fontWeight: '900', fontSize: 11 }}>{tagChipText(selected.kind)}</Text>
+                    <Text style={{ color: selected.kind === 'installation' ? '#AF52DE' : selected.kind === 'special' ? '#FF9500' : '#007AFF', fontWeight: '700', fontSize: 12 }}>{tagChipText(selected.kind)}</Text>
                   </View>
                 </View>
 
                 <View
                   style={{
-                    backgroundColor: selected.status === 'completed' ? 'rgba(34,197,94,0.10)' : 'rgba(248,113,113,0.10)',
-                    borderColor: selected.status === 'completed' ? 'rgba(34,197,94,0.18)' : 'rgba(248,113,113,0.18)',
-                    borderWidth: 1,
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    gap: 6,
+                    backgroundColor: selected.status === 'completed' ? 'rgba(52,199,89,0.10)' : 'rgba(255,149,0,0.10)',
                     paddingHorizontal: 12,
                     paddingVertical: 6,
-                    borderRadius: 999,
+                    borderRadius: 10,
                   }}
                 >
+                  <View style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 3.5,
+                    backgroundColor: selected.status === 'completed' ? '#34C759' : '#FF9500',
+                  }} />
                   <Text
                     style={{
-                      color: selected.status === 'completed' ? '#15803D' : '#B91C1C',
-                      fontWeight: '900',
+                      color: selected.status === 'completed' ? '#248A3D' : '#C93400',
+                      fontWeight: '700',
                       fontSize: 12,
                     }}
                   >
@@ -1213,30 +1318,38 @@ export function JobsScreen() {
               </View>
 
               {/* Customer */}
-              <Text style={{ color: '#2563EB', fontWeight: '800', textAlign: 'right' }} numberOfLines={2}>
+              <Text style={{ color: '#007AFF', fontWeight: '600', textAlign: 'right', fontSize: 15 }} numberOfLines={2}>
                 {selected.customer_id ? `לקוח: ${userMap.get(selected.customer_id) ?? selected.customer_id.slice(0, 6)}` : 'לקוח: —'}
               </Text>
 
               {/* Worker */}
               <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
                 <Avatar
-                  size={34}
+                  size={36}
                   uri={userAvatarMap.get(selected.worker_id) ?? null}
                   name={userMap.get(selected.worker_id) ?? ''}
-                  style={{ backgroundColor: '#fff' }}
+                  style={{ borderWidth: 2, borderColor: 'rgba(0,0,0,0.04)' }}
                 />
-                <Text style={{ color: ui.muted, textAlign: 'right', fontWeight: '800', flex: 1 }} numberOfLines={1}>
+                <Text style={{ color: ui.secondary, textAlign: 'right', fontWeight: '600', flex: 1, fontSize: 15 }} numberOfLines={1}>
                   {userMap.get(selected.worker_id) ?? selected.worker_id.slice(0, 6)}
                 </Text>
               </View>
 
               {/* Actions */}
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: ui.outline }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
                   <Pressable onPress={() => openEdit(selected)} hitSlop={10}>
                     {({ pressed }) => (
-                      <View style={{ opacity: pressed ? 0.6 : 1 }}>
-                        <Pencil size={20} color={ui.muted} />
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        backgroundColor: ui.fill,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: pressed ? 0.6 : 1,
+                      }}>
+                        <Pencil size={18} color={ui.secondary} />
                       </View>
                     )}
                   </Pressable>
@@ -1250,8 +1363,16 @@ export function JobsScreen() {
                     hitSlop={10}
                   >
                     {({ pressed }) => (
-                      <View style={{ opacity: pressed ? 0.6 : 1 }}>
-                        <Trash2 size={20} color="#B91C1C" />
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        backgroundColor: 'rgba(255,59,48,0.08)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: pressed ? 0.6 : 1,
+                      }}>
+                        <Trash2 size={18} color="#FF3B30" />
                       </View>
                     )}
                   </Pressable>
@@ -1261,15 +1382,19 @@ export function JobsScreen() {
                   <Pressable
                     onPress={() => openJob(selected, { mode: 'execute' })}
                     style={({ pressed }) => ({
-                      backgroundColor: '#0B2E5E',
-                      borderRadius: 16,
-                      paddingHorizontal: 18,
+                      backgroundColor: '#007AFF',
+                      borderRadius: 14,
+                      paddingHorizontal: 20,
                       paddingVertical: 12,
-                      opacity: pressed ? 0.86 : 1,
-                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                      opacity: pressed ? 0.7 : 1,
+                      shadowColor: '#007AFF',
+                      shadowOpacity: 0.3,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 4,
                     })}
                   >
-                    <Text style={{ color: '#FFFFFF', fontWeight: '900', textAlign: 'right' }}>בצע משימה</Text>
+                    <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15, textAlign: 'right' }}>בצע משימה</Text>
                   </Pressable>
                 ) : (
                   <View />
@@ -1808,83 +1933,246 @@ export function JobsScreen() {
         </View>
       </OriginWindow>
 
-      <ModalSheet visible={execOpen} onClose={closeExec}>
+      <ModalSheet visible={execOpen} onClose={closeExec} containerStyle={{ maxHeight: screenHeight * 0.82 }}>
         {!!execJob && (
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
+            contentContainerStyle={{ paddingBottom: 34 }}
           >
             {/* Header */}
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ gap: 3 }}>
-                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right', letterSpacing: -0.4 }}>
-                  ביצוע משימה
-                </Text>
-                <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                  #{execJob.order_number ?? '—'} • {execJob.status === 'completed' ? 'הושלם' : 'ממתין'}
-                </Text>
-              </View>
-              <Pressable onPress={closeExec} hitSlop={12}>
-                {({ pressed }) => (
-                  <View style={{
-                    width: 36, height: 36, borderRadius: 12,
-                    backgroundColor: pressed ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.06)',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <Text style={{ fontSize: 16, color: colors.muted, fontWeight: '800' }}>✕</Text>
+            <View style={{ paddingBottom: 20 }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Text style={{ color: '#1C1C1E', fontSize: 24, fontWeight: '800', textAlign: 'right', letterSpacing: -0.6 }}>
+                    ביצוע משימה
+                  </Text>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                    {execJob.order_number != null && (
+                      <View style={{
+                        backgroundColor: 'rgba(120,120,128,0.08)',
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                      }}>
+                        <Text style={{ color: '#8E8E93', fontWeight: '700', fontSize: 13 }}>
+                          #{execJob.order_number}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      gap: 5,
+                      backgroundColor: execJob.status === 'completed' ? 'rgba(52,199,89,0.12)' : 'rgba(255,149,0,0.12)',
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}>
+                      <View style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: execJob.status === 'completed' ? '#34C759' : '#FF9500',
+                      }} />
+                      <Text style={{
+                        color: execJob.status === 'completed' ? '#248A3D' : '#C93400',
+                        fontWeight: '600',
+                        fontSize: 13,
+                      }}>
+                        {execJob.status === 'completed' ? 'הושלם' : 'ממתין'}
+                      </Text>
+                    </View>
                   </View>
-                )}
-              </Pressable>
+                </View>
+
+                <Pressable onPress={closeExec} hitSlop={12}>
+                  {({ pressed }) => (
+                    <View style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: pressed ? 'rgba(120,120,128,0.20)' : 'rgba(120,120,128,0.12)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Text style={{ fontSize: 14, color: '#3C3C43', fontWeight: '600', marginTop: -1 }}>✕</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+
+              <View style={{ height: 1, backgroundColor: 'rgba(60,60,67,0.08)' }} />
             </View>
 
             {/* Service points */}
             {execPoints.length === 0 ? (
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>אין נקודות שירות.</Text>
+              <View style={{ alignItems: 'center', paddingVertical: 40, gap: 12 }}>
+                <View style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  backgroundColor: 'rgba(120,120,128,0.08)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Droplets size={24} color="#8E8E93" />
+                </View>
+                <Text style={{ color: '#8E8E93', fontWeight: '500', fontSize: 15, textAlign: 'center' }}>
+                  אין נקודות שירות
+                </Text>
+              </View>
             ) : (
-              <View style={{ gap: 10 }}>
-                {execPoints.map((item) => {
+              <View style={{ gap: 12 }}>
+                <Text style={{ color: '#8E8E93', fontWeight: '600', fontSize: 13, textAlign: 'right', marginBottom: 2, paddingHorizontal: 2 }}>
+                  נקודות שירות ({execPoints.length})
+                </Text>
+
+                {execPoints.map((item, idx) => {
                   const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
                   const previewUri = item.localImageUri ?? currentImageUrl ?? null;
                   const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
+                  const hasImage = !!item.image_url;
+
                   return (
                     <View
                       key={item.id}
                       style={{
-                        backgroundColor: colors.card,
+                        backgroundColor: '#FFFFFF',
                         borderRadius: 16,
                         borderWidth: 1,
-                        borderColor: colors.border,
-                        padding: 14,
-                        gap: 10,
+                        borderColor: 'rgba(60,60,67,0.06)',
+                        shadowColor: '#000',
+                        shadowOpacity: 0.04,
+                        shadowRadius: 12,
+                        shadowOffset: { width: 0, height: 4 },
+                        elevation: 1,
+                        overflow: 'hidden',
                       }}
                     >
-                      <Text style={{ color: colors.text, fontWeight: '800', fontSize: 15, textAlign: 'right' }} numberOfLines={2}>
-                        {item.sp?.device_type ?? `נקודה ${item.service_point_id.slice(0, 6)}`}
-                      </Text>
-                      <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>
-                        ניחוח: {item.sp?.scent_type ?? '—'} • מילוי: {refill ?? '—'}
-                      </Text>
-
-                      {!!previewUri && (
-                        <Image
-                          source={{ uri: previewUri }}
-                          style={{ width: '100%', height: 160, borderRadius: 12 }}
-                          resizeMode="cover"
-                        />
-                      )}
-
-                      <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                        <View style={{ flex: 1 }}>
-                          <Button title="בחר תמונה" variant="secondary" onPress={() => pickExecImage(item.id)} />
+                      {/* Card header */}
+                      <View style={{
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: 14,
+                        paddingBottom: 12,
+                      }}>
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <Text style={{ color: '#1C1C1E', fontWeight: '700', fontSize: 16, textAlign: 'right', letterSpacing: -0.2 }} numberOfLines={1}>
+                            {item.sp?.device_type ?? `נקודה ${item.service_point_id.slice(0, 6)}`}
+                          </Text>
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
+                            <Droplets size={12} color="#8E8E93" />
+                            <Text style={{ color: '#8E8E93', fontSize: 13, fontWeight: '500', textAlign: 'right' }}>
+                              {item.sp?.scent_type ?? '—'} · {refill ?? '—'} מ״ל
+                            </Text>
+                          </View>
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Button
-                            title={item.uploading ? 'מעלה…' : 'העלה'}
-                            disabled={!!item.uploading}
-                            onPress={() => uploadExecPoint(item)}
+
+                        {hasImage && (
+                          <View style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            backgroundColor: 'rgba(52,199,89,0.12)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            <Text style={{ fontSize: 14 }}>✓</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Image preview */}
+                      {!!previewUri ? (
+                        <View style={{ marginHorizontal: 14, marginBottom: 12 }}>
+                          <Image
+                            source={{ uri: previewUri }}
+                            style={{
+                              width: '100%',
+                              height: 180,
+                              borderRadius: 12,
+                              backgroundColor: 'rgba(120,120,128,0.08)',
+                            }}
+                            resizeMode="cover"
                           />
                         </View>
+                      ) : (
+                        <View style={{
+                          marginHorizontal: 14,
+                          marginBottom: 12,
+                          height: 100,
+                          borderRadius: 12,
+                          backgroundColor: 'rgba(120,120,128,0.04)',
+                          borderWidth: 1.5,
+                          borderColor: 'rgba(120,120,128,0.08)',
+                          borderStyle: 'dashed',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                        }}>
+                          <Eye size={20} color="#C7C7CC" />
+                          <Text style={{ color: '#C7C7CC', fontSize: 13, fontWeight: '500' }}>
+                            טרם הועלתה תמונה
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Action buttons */}
+                      <View style={{
+                        flexDirection: 'row-reverse',
+                        gap: 8,
+                        paddingHorizontal: 14,
+                        paddingBottom: 14,
+                      }}>
+                        <Pressable
+                          onPress={() => pickExecImage(item.id)}
+                          style={{ flex: 1 }}
+                        >
+                          {({ pressed }) => (
+                            <View style={{
+                              flexDirection: 'row-reverse',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6,
+                              backgroundColor: pressed ? 'rgba(120,120,128,0.16)' : 'rgba(120,120,128,0.08)',
+                              borderRadius: 12,
+                              paddingVertical: 11,
+                            }}>
+                              <Eye size={15} color="#3C3C43" />
+                              <Text style={{ color: '#3C3C43', fontWeight: '600', fontSize: 14 }}>
+                                בחר תמונה
+                              </Text>
+                            </View>
+                          )}
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => uploadExecPoint(item)}
+                          disabled={!!item.uploading}
+                          style={{ flex: 1, opacity: item.uploading ? 0.6 : 1 }}
+                        >
+                          {({ pressed }) => (
+                            <View style={{
+                              flexDirection: 'row-reverse',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6,
+                              backgroundColor: item.uploading
+                                ? 'rgba(0,122,255,0.06)'
+                                : pressed
+                                  ? 'rgba(0,122,255,0.18)'
+                                  : 'rgba(0,122,255,0.10)',
+                              borderRadius: 12,
+                              paddingVertical: 11,
+                            }}>
+                              <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 14 }}>
+                                {item.uploading ? 'מעלה…' : 'העלה'}
+                              </Text>
+                            </View>
+                          )}
+                        </Pressable>
                       </View>
                     </View>
                   );
@@ -1893,11 +2181,56 @@ export function JobsScreen() {
             )}
 
             {/* Complete button */}
-            <Button
-              title={execJob.status === 'completed' ? 'כבר הושלם ✓' : 'סיים משימה'}
-              disabled={execJob.status === 'completed'}
-              onPress={completeExecJob}
-            />
+            <View style={{ marginTop: 24 }}>
+              {execJob.status === 'completed' ? (
+                <View style={{
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: 'rgba(52,199,89,0.10)',
+                  borderRadius: 14,
+                  paddingVertical: 16,
+                }}>
+                  <View style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: '#34C759',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>✓</Text>
+                  </View>
+                  <Text style={{ color: '#248A3D', fontWeight: '700', fontSize: 16 }}>
+                    המשימה הושלמה
+                  </Text>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={completeExecJob}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    backgroundColor: pressed ? 'rgba(0,122,255,0.85)' : '#007AFF',
+                    borderRadius: 14,
+                    paddingVertical: 16,
+                    shadowColor: '#007AFF',
+                    shadowOpacity: 0.3,
+                    shadowRadius: 10,
+                    shadowOffset: { width: 0, height: 6 },
+                    elevation: 4,
+                  })}
+                >
+                  <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                  <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 17, letterSpacing: -0.2 }}>
+                    סיים משימה
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </ScrollView>
         )}
       </ModalSheet>
