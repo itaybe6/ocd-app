@@ -718,19 +718,10 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
 
 export function StoreHomeScreen({
   onAdminPress,
-  onOpenCategory,
-  onOpenCart,
-  onOpenProduct,
+  onProductPress,
 }: {
   onAdminPress: () => void;
-  onOpenCategory?: (category: {
-    id: string;
-    title: string;
-    description?: string;
-    parentTitle?: string;
-  }) => void;
-  onOpenCart?: () => void;
-  onOpenProduct?: (product: StoreProduct) => void;
+  onProductPress?: (handle: string) => void;
 }) {
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
@@ -1388,12 +1379,14 @@ export function StoreHomeScreen({
               {featuredProducts.map((product) => (
                 <Pressable
                   key={product.id}
-                  onPress={() => onOpenProduct?.(product)}
-                  style={{
+                  onPress={() => onProductPress?.(product.handle)}
+                  style={({ pressed }) => ({
                     width: 156,
                     borderRadius: 18,
                     backgroundColor: '#FFFFFF',
-                  }}
+                    opacity: pressed ? 0.95 : 1,
+                    transform: [{ scale: pressed ? 0.99 : 1 }],
+                  })}
                 >
                   <View
                     style={{
@@ -1456,11 +1449,27 @@ export function StoreHomeScreen({
                   <Text style={{ color: '#B1B6C1', fontSize: 11 }}>all products from your Shopify store</Text>
                 </View>
 
-                <View style={{ gap: 12 }}>
-                  {visibleProducts.map((product) => (
-                    <Pressable
-                      key={`list-${product.id}`}
-                      onPress={() => onOpenProduct?.(product)}
+            <View style={{ gap: 12 }}>
+              {visibleProducts.map((product) => (
+                <Pressable
+                  key={`list-${product.id}`}
+                  onPress={() => onProductPress?.(product.handle)}
+                  style={({ pressed }) => ({
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: '#EEF0F3',
+                    overflow: 'hidden',
+                    opacity: pressed ? 0.96 : 1,
+                    transform: [{ scale: pressed ? 0.995 : 1 }],
+                  })}
+                >
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
+                    <View style={{ width: 112, padding: 10 }}>
+                      <ProductImage product={product} height={118} />
+                    </View>
+
+                    <View
                       style={{
                         backgroundColor: '#FFFFFF',
                         borderRadius: 18,
@@ -1469,42 +1478,26 @@ export function StoreHomeScreen({
                         overflow: 'hidden',
                       }}
                     >
-                      <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
-                        <View style={{ width: 112, padding: 10 }}>
-                          <ProductImage product={product} height={118} />
-                        </View>
-
-                        <View
-                          style={{
-                            flex: 1,
-                            paddingHorizontal: 12,
-                            paddingVertical: 14,
-                            alignItems: 'flex-end',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
-                            {product.name}
-                          </Text>
-                          <Text style={{ color: '#8D94A1', fontSize: 11, marginTop: 4, textAlign: 'right' }}>
-                            {product.subtitle}
-                          </Text>
-                          <Text
-                            numberOfLines={2}
-                            style={{ color: '#6B7280', fontSize: 12, marginTop: 8, textAlign: 'right' }}
-                          >
-                            {product.description || 'מוצר מהקטלוג שלך'}
-                          </Text>
-                          <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 10 }}>
-                            {formatPrice(product.price)}
-                          </Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              </>
-            )}
+                      <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
+                        {product.name}
+                      </Text>
+                      <Text style={{ color: '#8D94A1', fontSize: 11, marginTop: 4, textAlign: 'right' }}>
+                        {product.subtitle}
+                      </Text>
+                      <Text
+                        numberOfLines={2}
+                        style={{ color: '#6B7280', fontSize: 12, marginTop: 8, textAlign: 'right' }}
+                      >
+                        {product.description || 'מוצר מהקטלוג שלך'}
+                      </Text>
+                      <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 10 }}>
+                        {formatPrice(product.price)}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
 
             <View style={{ alignItems: 'flex-end', gap: 4, marginTop: 4 }}>
               <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>מומלץ במיוחד עבורך</Text>

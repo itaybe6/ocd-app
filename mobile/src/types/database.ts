@@ -8,6 +8,7 @@ export type UserRow = {
   name: string;
   address?: string | null;
   price?: number | null;
+  avatar_url?: string | null;
   created_at?: string;
 };
 

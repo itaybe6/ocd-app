@@ -1,6 +1,7 @@
-import React from 'react';
-import { Pressable, Text, View, type ViewStyle } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, Text, View, type GestureResponderEvent, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
+import type { OriginRect } from '../OriginWindow';
 
 export type JobCardStatus = 'pending' | 'completed';
 export type JobCardKind = 'regular' | 'installation' | 'special';
@@ -28,29 +29,47 @@ function kindAccentColor(kind?: JobCardKind): string {
 export function JobCardAction({
   label,
   onPress,
+  onPressIn,
+  onOriginRect,
   disabled,
   children,
   variant = 'neutral',
 }: {
   label: string;
   onPress: () => void;
+  onPressIn?: (e: GestureResponderEvent) => void;
+  onOriginRect?: (rect: { x: number; y: number; width: number; height: number; borderRadius: number }) => void;
   disabled?: boolean;
   variant?: 'neutral' | 'danger';
   children: React.ReactNode;
 }) {
+  // ref must be on the inner View (not Pressable) for measureInWindow to work reliably
+  const innerRef = useRef<View>(null);
+
+  const captureOriginRect = () => {
+    if (!onOriginRect) return;
+    innerRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        onOriginRect({ x, y, width, height, borderRadius: 13 });
+      }
+    });
+  };
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        {
-          opacity: disabled ? 0.28 : pressed ? 0.55 : 1,
-        },
-      ]}
+      onPressIn={(e) => {
+        captureOriginRect();
+        onPressIn?.(e);
+      }}
+      style={({ pressed }) => [{ opacity: disabled ? 0.28 : pressed ? 0.55 : 1 }]}
     >
       <View
+        ref={innerRef}
+        collapsable={false}
         style={{
           width: 40,
           height: 40,
@@ -73,12 +92,13 @@ export function JobChip({
 }: {
   text: string;
   muted?: boolean;
-  accent?: 'blue' | 'purple' | 'orange';
+  accent?: 'blue' | 'purple' | 'orange' | 'neutral';
 }) {
   const accentMap = {
     blue:   { bg: 'rgba(0,88,188,0.09)',   fg: '#0058BC', border: 'rgba(0,88,188,0.22)' },
     purple: { bg: 'rgba(124,58,237,0.09)', fg: '#6D28D9', border: 'rgba(124,58,237,0.22)' },
     orange: { bg: 'rgba(234,88,12,0.09)',  fg: '#C2410C', border: 'rgba(234,88,12,0.22)' },
+    neutral:{ bg: 'rgba(15,23,42,0.05)',   fg: '#475569', border: 'rgba(15,23,42,0.10)' },
   };
   const c = accent ? accentMap[accent] : null;
 
@@ -111,8 +131,10 @@ export function JobCard({
   title,
   status,
   primaryText,
+  primaryNode,
   description,
   onPress,
+  onOriginRect,
   actions,
   chips,
   faded,
@@ -122,14 +144,28 @@ export function JobCard({
   title: string;
   status?: JobCardStatus;
   primaryText?: string;
+  primaryNode?: React.ReactNode;
   description?: string | null;
   onPress?: () => void;
+  onOriginRect?: (rect: OriginRect) => void;
   actions?: React.ReactNode;
   chips?: React.ReactNode;
   faded?: boolean;
   kind?: JobCardKind;
   style?: ViewStyle;
 }) {
+  const hasTitle = !!title?.trim();
+  const outerRef = useRef<View>(null);
+
+  const captureOriginRect = () => {
+    if (!onOriginRect) return;
+    outerRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        onOriginRect({ x, y, width, height, borderRadius: 20 });
+      }
+    });
+  };
+
   const shadow: ViewStyle = {
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -142,55 +178,62 @@ export function JobCard({
 
   const inner = (
     <View>
-      <View
-        style={{
-          flexDirection: 'row-reverse',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 8,
-        }}
-      >
-        <Text
+      {(hasTitle || !!status) && (
+        <View
           style={{
-            color: colors.text,
-            fontWeight: '800',
-            fontSize: 15,
-            textAlign: 'right',
-            flex: 1,
-            letterSpacing: -0.3,
+            flexDirection: 'row-reverse',
+            justifyContent: hasTitle ? 'space-between' : 'flex-end',
+            alignItems: 'flex-start',
+            gap: 8,
+            marginBottom: (!!primaryNode || !!primaryText || !!description) ? 10 : 0,
           }}
-          numberOfLines={1}
         >
-          {title}
-        </Text>
-        {status ? (
-          <View
-            style={{
-              backgroundColor: statusMeta(status).bg,
-              borderColor: statusMeta(status).border,
-              borderWidth: 1,
-              borderRadius: 20,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <Text style={{ color: statusMeta(status).fg, fontWeight: '700', fontSize: 11 }}>
-              {statusMeta(status).label}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {(!!primaryText || !!description) && (
-        <View style={{ gap: 4, marginTop: 8 }}>
-          {!!primaryText && (
+          {hasTitle ? (
             <Text
-              style={{ color: accentColor, fontWeight: '700', fontSize: 13, textAlign: 'right' }}
+              style={{
+                color: colors.text,
+                fontWeight: '800',
+                fontSize: 16,
+                textAlign: 'right',
+                flex: 1,
+                letterSpacing: -0.3,
+              }}
               numberOfLines={1}
             >
-              {primaryText}
+              {title}
             </Text>
-          )}
+          ) : null}
+          {status ? (
+            <View
+              style={{
+                backgroundColor: statusMeta(status).bg,
+                borderColor: statusMeta(status).border,
+                borderWidth: 1,
+                borderRadius: 20,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ color: statusMeta(status).fg, fontWeight: '700', fontSize: 11 }}>
+                {statusMeta(status).label}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+
+      {(!!primaryNode || !!primaryText || !!description) && (
+        <View style={{ gap: 4 }}>
+          {!!primaryNode
+            ? primaryNode
+            : !!primaryText && (
+                <Text
+                  style={{ color: accentColor, fontWeight: '700', fontSize: 13, textAlign: 'right' }}
+                  numberOfLines={1}
+                >
+                  {primaryText}
+                </Text>
+              )}
           {!!description && (
             <Text
               style={{
@@ -212,12 +255,13 @@ export function JobCard({
 
   return (
     <View
+      ref={outerRef}
+      collapsable={false}
       style={[
         shadow,
         {
           backgroundColor: '#FFFFFF',
           borderRadius: 20,
-          overflow: 'hidden',
           borderWidth: 1,
           borderColor: 'rgba(0,0,0,0.06)',
           opacity: faded ? 0.72 : 1,
@@ -225,22 +269,13 @@ export function JobCard({
         style,
       ]}
     >
-      {kind && (
-        <View
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 4,
-            backgroundColor: accentColor,
-          }}
-        />
-      )}
-
-      <View style={{ padding: 16, paddingRight: kind ? 20 : 16 }}>
+      <View style={{ padding: 16 }}>
         {onPress ? (
-          <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}>
+          <Pressable
+            onPress={onPress}
+            onPressIn={captureOriginRect}
+            style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+          >
             {inner}
           </Pressable>
         ) : (

@@ -20,4 +20,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export const JOB_IMAGES_BUCKET = 'job-images' as const;
+export const USER_AVATARS_BUCKET = 'user-avatars' as const;
 

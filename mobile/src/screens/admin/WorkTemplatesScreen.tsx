@@ -1,83 +1,48 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
-import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '../../components/Screen';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { ModalSheet } from '../../components/ModalSheet';
-import { SelectSheet } from '../../components/ui/SelectSheet';
 import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
-import { useLoading } from '../../state/LoadingContext';
+import { ensureWorkTemplates28, templateDay, type WorkTemplateLite } from '../../lib/workTemplates';
+import type { WorkTemplatesStackParamList } from '../../navigation/workTemplatesTypes';
 
-type Template = { id: string; day_of_month: number };
-type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
-type UserLite = { id: string; name: string; role: 'customer' | 'worker' };
+type Template = { id: string; day: number };
+type TemplateForGrid = { id: string; day: number };
 
-export function WorkTemplatesScreen() {
-  const { setIsLoading } = useLoading();
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [stations, setStations] = useState<Station[]>([]);
-  const [users, setUsers] = useState<UserLite[]>([]);
+export function WorkTemplatesScreen({ navigation }: NativeStackScreenProps<WorkTemplatesStackParamList, 'WorkTemplatesHome'>) {
+  const [templateCandidates, setTemplateCandidates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const [editStation, setEditStation] = useState<Station | null>(null);
-  const [stationCustomerId, setStationCustomerId] = useState('');
-  const [stationWorkerId, setStationWorkerId] = useState('');
-  const [stationTime, setStationTime] = useState('09:00');
-
-  const customerOptions = useMemo(
-    () => users.filter((u) => u.role === 'customer').map((u) => ({ value: u.id, label: u.name })),
-    [users]
-  );
-  const workerOptions = useMemo(
-    () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name })),
-    [users]
-  );
+  const [templateCounts, setTemplateCounts] = useState<Record<string, number>>({});
 
   const ensureTemplates = async () => {
-    const { data, error } = await supabase.from('work_templates').select('id, day_of_month').order('day_of_month');
-    if (error) throw error;
-    const existing = (data ?? []) as Template[];
-    const existingDays = new Set(existing.map((t) => t.day_of_month));
-    const missing = Array.from({ length: 28 }, (_, i) => i + 1).filter((d) => !existingDays.has(d));
-    if (missing.length) {
-      const { error: insErr } = await supabase.from('work_templates').insert(missing.map((d) => ({ day_of_month: d })));
-      if (insErr) throw insErr;
-      const { data: again, error: againErr } = await supabase.from('work_templates').select('id, day_of_month').order('day_of_month');
-      if (againErr) throw againErr;
-      setTemplates((again ?? []) as Template[]);
-      setSelectedTemplateId((prev) => prev || ((again ?? [])[0]?.id ?? ''));
-      return;
+    const { templates: raw } = await ensureWorkTemplates28();
+    const normalized = (raw ?? [])
+      .map((t: WorkTemplateLite) => ({ id: t.id, day: templateDay(t) }))
+      .filter((t): t is Template => typeof t.day === 'number' && t.day >= 1 && t.day <= 28)
+      .sort((a, b) => a.day - b.day);
+
+    setTemplateCandidates(normalized);
+  };
+
+  const fetchTemplateCounts = async (templateIds: string[]) => {
+    if (!templateIds.length) return;
+    const { data, error } = await supabase.from('template_stations').select('template_id').in('template_id', templateIds);
+    if (error) return;
+    const counts: Record<string, number> = {};
+    for (const row of (data ?? []) as any[]) {
+      const tid = row.template_id as string | undefined;
+      if (!tid) continue;
+      counts[tid] = (counts[tid] ?? 0) + 1;
     }
-    setTemplates(existing);
-    setSelectedTemplateId((prev) => prev || (existing[0]?.id ?? ''));
-  };
-
-  const fetchUsers = async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role').in('role', ['customer', 'worker']).order('name');
-    if (!error) setUsers((data ?? []) as any);
-  };
-
-  const fetchStations = async (templateId: string) => {
-    const { data, error } = await supabase
-      .from('template_stations')
-      .select('id, template_id, "order", customer_id, worker_id, scheduled_time')
-      .eq('template_id', templateId)
-      .order('order', { ascending: true });
-    if (error) throw error;
-    setStations((data ?? []) as any);
+    setTemplateCounts(counts);
   };
 
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      await Promise.all([ensureTemplates(), fetchUsers()]);
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'טעינה נכשלה', text2: e?.message ?? 'Unknown error' });
+      await ensureTemplates();
     } finally {
       setLoading(false);
     }
@@ -90,130 +55,88 @@ export function WorkTemplatesScreen() {
   );
 
   useEffect(() => {
-    if (!selectedTemplateId) return;
-    fetchStations(selectedTemplateId).catch((e: any) => Toast.show({ type: 'error', text1: 'טעינת תחנות נכשלה', text2: e?.message ?? 'Unknown error' }));
-  }, [selectedTemplateId]);
+    fetchTemplateCounts(templateCandidates.map((t) => t.id)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateCandidates.length]);
 
-  const addStation = async () => {
-    if (!selectedTemplateId) return;
-    try {
-      setIsLoading(true);
-      const nextOrder = (stations[stations.length - 1]?.order ?? 0) + 1;
-      const { error } = await supabase.from('template_stations').insert({
-        template_id: selectedTemplateId,
-        order: nextOrder,
-        scheduled_time: '09:00',
-        customer_id: null,
-        worker_id: null,
-      });
-      if (error) throw error;
-      await fetchStations(selectedTemplateId);
-      Toast.show({ type: 'success', text1: 'נוספה תחנה' });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'הוספה נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
+  const templatesForGrid: TemplateForGrid[] = useMemo(() => {
+    // Deduplicate by day (1..28). If multiple templates exist for same day, pick the one with most stations.
+    // Tie-breaker: lowest id to keep stable.
+    const best = new Map<number, TemplateForGrid>();
+    for (const t of templateCandidates) {
+      const current = best.get(t.day);
+      if (!current) {
+        best.set(t.day, { id: t.id, day: t.day });
+        continue;
+      }
+      const cCount = templateCounts[current.id] ?? 0;
+      const tCount = templateCounts[t.id] ?? 0;
+      if (tCount > cCount) {
+        best.set(t.day, { id: t.id, day: t.day });
+      } else if (tCount === cCount && String(t.id) < String(current.id)) {
+        best.set(t.day, { id: t.id, day: t.day });
+      }
     }
-  };
-
-  const openEdit = (s: Station) => {
-    setEditStation(s);
-    setStationCustomerId(s.customer_id ?? '');
-    setStationWorkerId(s.worker_id ?? '');
-    setStationTime(s.scheduled_time ?? '09:00');
-  };
-
-  const saveStation = async () => {
-    if (!editStation) return;
-    try {
-      setIsLoading(true);
-      const { error } = await supabase
-        .from('template_stations')
-        .update({
-          customer_id: stationCustomerId || null,
-          worker_id: stationWorkerId || null,
-          scheduled_time: stationTime.trim() || '09:00',
-        })
-        .eq('id', editStation.id);
-      if (error) throw error;
-      setEditStation(null);
-      await fetchStations(editStation.template_id);
-      Toast.show({ type: 'success', text1: 'עודכן' });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const deleteStation = async (s: Station) => {
-    try {
-      setIsLoading(true);
-      const { error } = await supabase.from('template_stations').delete().eq('id', s.id);
-      if (error) throw error;
-      await fetchStations(s.template_id);
-      Toast.show({ type: 'success', text1: 'נמחק' });
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'מחיקה נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    return Array.from(best.values()).sort((a, b) => a.day - b.day);
+  }, [templateCandidates, templateCounts]);
 
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={refresh} />
-        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>תבניות עבודה</Text>
-      </View>
-
-      <View style={{ marginTop: 12, gap: 10 }}>
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>בחר תבנית</Text>
-          <SelectSheet
-            label="יום בחודש (1..28)"
-            value={selectedTemplateId}
-            options={templates.map((t) => ({ value: t.id, label: String(t.day_of_month) }))}
-            onChange={setSelectedTemplateId}
-          />
-          <View style={{ marginTop: 10 }}>
-            <Button title="הוסף תחנה" variant="secondary" onPress={addStation} />
-          </View>
-        </Card>
-
+      <View>
         <FlatList
-          data={stations}
+          data={templatesForGrid}
           keyExtractor={(i) => i.id}
+          numColumns={2}
+          columnWrapperStyle={{ gap: 10 }}
           contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
-          renderItem={({ item }) => (
-            <Pressable onPress={() => openEdit(item)}>
-              <Card>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תחנה #{item.order}</Text>
-                <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>
-                  שעה: {item.scheduled_time} • לקוח: {item.customer_id ?? '—'} • עובד: {item.worker_id ?? '—'}
-                </Text>
-              </Card>
-            </Pressable>
-          )}
-          ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין תחנות.</Text>}
+          refreshing={loading}
+          onRefresh={refresh}
+          renderItem={({ item }) => {
+            const count = templateCounts[item.id] ?? 0;
+            return (
+              <Pressable
+                style={{ flex: 1 }}
+                onPress={() => navigation.navigate('WorkTemplateStations', { templateId: item.id, day: item.day })}
+              >
+                {({ pressed }) => (
+                  <View
+                    style={{
+                      flex: 1,
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                      borderRadius: 18,
+                      padding: 14,
+                      minHeight: 92,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                      shadowColor: '#0F172A',
+                      shadowOpacity: 0.06,
+                      shadowRadius: 14,
+                      shadowOffset: { width: 0, height: 8 },
+                      elevation: 2,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: colors.text, fontSize: 26, fontWeight: '900' }}>{item.day}</Text>
+                      <View
+                        style={{
+                          backgroundColor: 'rgba(37, 99, 235, 0.10)',
+                          borderRadius: 999,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                        }}
+                      >
+                        <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 12 }}>{count} תחנות</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: colors.muted, marginTop: 10, textAlign: 'right' }}>תבנית {item.day}</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          }}
         />
       </View>
-
-      <ModalSheet visible={!!editStation} onClose={() => setEditStation(null)}>
-        {!!editStation && (
-          <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-              עריכת תחנה #{editStation.order}
-            </Text>
-            <SelectSheet label="לקוח" value={stationCustomerId} placeholder="בחר לקוח…" options={customerOptions} onChange={setStationCustomerId} />
-            <SelectSheet label="עובד" value={stationWorkerId} placeholder="בחר עובד…" options={workerOptions} onChange={setStationWorkerId} />
-            <Input label="שעה (HH:mm)" value={stationTime} onChangeText={setStationTime} placeholder="09:00" />
-            <Button title="שמור" onPress={saveStation} />
-            <Button title="מחק תחנה" variant="danger" onPress={() => deleteStation(editStation)} />
-            <Button title="סגור" variant="secondary" onPress={() => setEditStation(null)} />
-          </View>
-        )}
-      </ModalSheet>
     </Screen>
   );
 }

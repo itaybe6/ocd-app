@@ -1,18 +1,55 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Plus, X } from 'lucide-react-native';
-import { ModalSheet } from '../../components/ModalSheet';
-import { Screen } from '../../components/Screen';
+import { Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { supabase } from '../../lib/supabase';
+import { Avatar } from '../../components/ui/Avatar';
+import { supabase, USER_AVATARS_BUCKET } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import type { UserRole } from '../../types/database';
+
+const base64Lookup = (() => {
+  const t = new Int16Array(256);
+  t.fill(-1);
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < alphabet.length; i++) t[alphabet.charCodeAt(i)] = i;
+  t['-'.charCodeAt(0)] = 62; // URL-safe
+  t['_'.charCodeAt(0)] = 63; // URL-safe
+  return t;
+})();
+
+function decodeBase64ToBytes(b64: string): Uint8Array {
+  const clean = (b64 || '').replace(/[\r\n\s]+/g, '');
+  if (!clean) return new Uint8Array(0);
+  const pad = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  const outLen = Math.floor((clean.length * 3) / 4) - pad;
+  const out = new Uint8Array(outLen);
+
+  let outIdx = 0;
+  for (let i = 0; i < clean.length; i += 4) {
+    const c1 = base64Lookup[clean.charCodeAt(i)] ?? -1;
+    const c2 = base64Lookup[clean.charCodeAt(i + 1)] ?? -1;
+    const c3ch = clean.charAt(i + 2);
+    const c4ch = clean.charAt(i + 3);
+    const c3 = c3ch === '=' ? 0 : base64Lookup[clean.charCodeAt(i + 2)] ?? -1;
+    const c4 = c4ch === '=' ? 0 : base64Lookup[clean.charCodeAt(i + 3)] ?? -1;
+    if (c1 < 0 || c2 < 0 || c3 < 0 || c4 < 0) continue;
+
+    const triple = (c1 << 18) | (c2 << 12) | (c3 << 6) | c4;
+    if (outIdx < outLen) out[outIdx++] = (triple >> 16) & 0xff;
+    if (outIdx < outLen && c3ch !== '=') out[outIdx++] = (triple >> 8) & 0xff;
+    if (outIdx < outLen && c4ch !== '=') out[outIdx++] = triple & 0xff;
+  }
+
+  return out;
+}
 
 type UserRow = {
   id: string;
@@ -22,6 +59,7 @@ type UserRow = {
   name: string;
   address?: string | null;
   price?: number | null;
+  avatar_url?: string | null;
   created_at?: string;
 };
 
@@ -44,6 +82,8 @@ const roleOptions = [
   { value: 'customer', label: 'customer' },
 ] as const;
 
+const EDIT_WINDOW_DURATION_MS = 320;
+
 function emptyUser(): Partial<UserRow> {
   return { role: 'customer', name: '', phone: '', password: '' };
 }
@@ -56,7 +96,12 @@ export function UsersScreen() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<UserRow>>(emptyUser());
+  const [avatarLocalUri, setAvatarLocalUri] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [editAnchor, setEditAnchor] = useState<WindowAnchor | null>(null);
   const isEditExisting = !!editing.id;
+  const clearEditAnchorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [pointsOpen, setPointsOpen] = useState(false);
   const [pointsUser, setPointsUser] = useState<UserRow | null>(null);
@@ -97,7 +142,7 @@ export function UsersScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('users')
-        .select('id, phone, password, role, name, address, price, created_at')
+        .select('id, phone, password, role, name, address, price, avatar_url, created_at')
         .order('created_at', { ascending: false });
       if (error) throw error;
       setUsers((data ?? []) as UserRow[]);
@@ -115,14 +160,90 @@ export function UsersScreen() {
     }, [fetchUsers, fetchLookups])
   );
 
-  const openCreate = () => {
+  useEffect(() => {
+    return () => {
+      if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
+      clearEditAnchorTimer.current = null;
+    };
+  }, []);
+
+  const openCreate = (anchor?: WindowAnchor | null) => {
+    if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing(emptyUser());
+    setAvatarLocalUri(null);
+    setAvatarBase64(null);
+    setEditAnchor(anchor ?? null);
     setEditOpen(true);
   };
 
-  const openEdit = (u: UserRow) => {
+  const openEdit = (u: UserRow, anchor?: WindowAnchor | null) => {
+    if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
     setEditing({ ...u, password: u.password ?? '' });
+    setAvatarLocalUri(null);
+    setAvatarBase64(null);
+    setEditAnchor(anchor ?? null);
     setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setAvatarLocalUri(null);
+    setAvatarBase64(null);
+    if (clearEditAnchorTimer.current) clearTimeout(clearEditAnchorTimer.current);
+    // Keep anchor during the closing animation so it "returns" to the opening button.
+    clearEditAnchorTimer.current = setTimeout(() => setEditAnchor(null), EDIT_WINDOW_DURATION_MS + 40);
+  };
+
+  const pickAvatar = async () => {
+    try {
+      setAvatarBusy(true);
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Toast.show({ type: 'error', text1: 'אין הרשאה לגלריה' });
+        return;
+      }
+
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+      if (res.canceled || !res.assets?.length) return;
+
+      const pickedUri = res.assets[0].uri;
+      const out = await ImageManipulator.manipulateAsync(
+        pickedUri,
+        [{ resize: { width: 256, height: 256 } }],
+        { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      setAvatarLocalUri(out.uri);
+      setAvatarBase64(out.base64 ?? null);
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'בחירת תמונה נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const clearAvatar = () => {
+    setAvatarLocalUri(null);
+    setAvatarBase64(null);
+    setEditing((p) => ({ ...p, avatar_url: null }));
+  };
+
+  const uploadUserAvatar = async (userId: string, b64: string): Promise<string> => {
+    const bytes = decodeBase64ToBytes(b64);
+    if (!bytes.length) throw new Error('Avatar file is empty');
+    const path = `avatars/${userId}.jpg`;
+    const { error } = await supabase.storage.from(USER_AVATARS_BUCKET).upload(path, bytes, {
+      upsert: true,
+      contentType: 'image/jpeg',
+      cacheControl: '3600',
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from(USER_AVATARS_BUCKET).getPublicUrl(path);
+    return `${data.publicUrl}?v=${Date.now()}`;
   };
 
   const saveUser = async () => {
@@ -132,7 +253,7 @@ export function UsersScreen() {
       role: (editing.role ?? 'customer') as UserRole,
       name: (editing.name ?? '').trim(),
       address: (editing.address ?? null) || null,
-      price: editing.role === 'customer' ? (editing.price ?? null) : null,
+      price: (editing.role ?? 'customer') === 'customer' ? (editing.price ?? null) : null,
     };
     if (!payload.phone || !payload.name) {
       Toast.show({ type: 'error', text1: 'חסר שם/טלפון' });
@@ -140,16 +261,32 @@ export function UsersScreen() {
     }
 
     try {
+      const wantsAvatar = payload.role === 'admin' || payload.role === 'worker';
       if (isEditExisting) {
-        const { error } = await supabase.from('users').update(payload).eq('id', editing.id!);
+        let avatarUrl: string | null = wantsAvatar ? (editing.avatar_url ?? null) : null;
+        if (avatarBase64 && wantsAvatar) {
+          avatarUrl = await uploadUserAvatar(editing.id!, avatarBase64);
+        }
+        const { error } = await supabase.from('users').update({ ...payload, avatar_url: avatarUrl }).eq('id', editing.id!);
         if (error) throw error;
+        if (wantsAvatar && !avatarUrl) {
+          await supabase.storage.from(USER_AVATARS_BUCKET).remove([`avatars/${editing.id!}.jpg`]);
+        }
         Toast.show({ type: 'success', text1: 'עודכן' });
       } else {
-        const { error } = await supabase.from('users').insert(payload);
+        const { data, error } = await supabase.from('users').insert({ ...payload, avatar_url: null }).select('id').single();
         if (error) throw error;
+        const newId = (data as any)?.id as string;
+        if (newId && avatarBase64 && wantsAvatar) {
+          const avatarUrl = await uploadUserAvatar(newId, avatarBase64);
+          const { error: uErr } = await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', newId);
+          if (uErr) throw uErr;
+        }
         Toast.show({ type: 'success', text1: 'נוצר' });
       }
       setEditOpen(false);
+      setAvatarLocalUri(null);
+      setAvatarBase64(null);
       await fetchUsers();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שמירה נכשלה', text2: e?.message ?? 'Unknown error' });
@@ -297,30 +434,164 @@ export function UsersScreen() {
   };
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button title="הוסף משתמש" fullWidth={false} onPress={openCreate} />
-          <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>משתמשים</Text>
-        </View>
+        {/* iOS-like header */}
+        <View
+          style={{
+            backgroundColor: colors.card,
+            borderRadius: 20,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: 'rgba(60,60,67,0.12)',
+            shadowColor: '#000',
+            shadowOpacity: 0.06,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 2,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Pressable
+              onPress={(e) => openCreate({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="הוסף משתמש"
+              style={({ pressed }) => [
+                {
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: 'rgba(60,60,67,0.16)',
+                  shadowColor: colors.primary,
+                  shadowOpacity: 0.14,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 8 },
+                  elevation: 2,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                },
+              ]}
+            >
+              <Plus size={20} color={colors.primary} />
+            </Pressable>
 
-        <Input label="חיפוש" value={query} onChangeText={setQuery} placeholder="שם/טלפון/role" />
-        <SelectSheet
-          label="פילטר role"
-          value={roleFilter === 'all' ? '' : roleFilter}
-          placeholder="הכל"
-          options={[
-            { value: '', label: 'הכל' },
-            { value: 'admin', label: 'admin' },
-            { value: 'worker', label: 'worker' },
-            { value: 'customer', label: 'customer' },
-          ]}
-          onChange={(v) => setRoleFilter((v || 'all') as any)}
-        />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' }}>משתמשים</Text>
+              <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right', fontWeight: '700' }}>
+                {filtered.length} {filtered.length === 1 ? 'משתמש' : 'משתמשים'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Search */}
+          <View
+            style={{
+              marginTop: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              backgroundColor: 'rgba(118,118,128,0.12)',
+              borderRadius: 14,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderWidth: 1,
+              borderColor: 'rgba(60,60,67,0.08)',
+            }}
+          >
+            <Search size={18} color="rgba(60,60,67,0.6)" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="חיפוש לפי שם / טלפון / role"
+              placeholderTextColor="rgba(60,60,67,0.6)"
+              style={{
+                flex: 1,
+                color: colors.text,
+                fontSize: 16,
+                textAlign: 'right',
+                paddingVertical: 0,
+              }}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {!!query.trim() && (
+              <Pressable
+                onPress={() => setQuery('')}
+                hitSlop={10}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(60,60,67,0.18)',
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="נקה חיפוש"
+              >
+                <X size={16} color="rgba(60,60,67,0.8)" />
+              </Pressable>
+            )}
+          </View>
+
+          {/* Segmented role filter */}
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ color: colors.muted, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>פילטר role</Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                backgroundColor: 'rgba(118,118,128,0.12)',
+                borderRadius: 12,
+                padding: 3,
+                borderWidth: 1,
+                borderColor: 'rgba(60,60,67,0.08)',
+              }}
+            >
+              {[
+                { value: 'all' as const, label: 'הכל' },
+                { value: 'admin' as const, label: 'admin' },
+                { value: 'worker' as const, label: 'worker' },
+                { value: 'customer' as const, label: 'customer' },
+              ].map((opt) => {
+                const active = roleFilter === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setRoleFilter(opt.value as any)}
+                    style={{
+                      flex: 1,
+                      borderRadius: 10,
+                      paddingVertical: 8,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: active ? '#FFFFFF' : 'transparent',
+                      shadowColor: '#000',
+                      shadowOpacity: active ? 0.08 : 0,
+                      shadowRadius: active ? 6 : 0,
+                      shadowOffset: { width: 0, height: 3 },
+                      elevation: active ? 1 : 0,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`פילטר ${opt.label}`}
+                  >
+                    <Text style={{ color: active ? colors.text : 'rgba(60,60,67,0.8)', fontWeight: '800' }}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
       </View>
 
       <FlatList
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 12, flex: 1 }}
         data={filtered}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
@@ -344,23 +615,61 @@ export function UsersScreen() {
                     <Eye size={18} color={colors.text} />
                   </Pressable>
                 ) : null}
-                <Pressable onPress={() => openEdit(item)} style={{ paddingVertical: 6 }}>
-                  <Text style={{ color: colors.primary, fontWeight: '900' }}>עריכה</Text>
-                </Pressable>
-                <Pressable onPress={() => cascadeDelete(item)} style={{ paddingVertical: 6 }} disabled={loading}>
-                  <Text style={{ color: colors.danger, fontWeight: '900' }}>מחיקה</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  <Pressable
+                    onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+                    hitSlop={10}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="עריכה"
+                  >
+                    <Pencil size={18} color={colors.primary} />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => cascadeDelete(item)}
+                    hitSlop={10}
+                    disabled={loading}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: loading ? 0.6 : 1,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="מחיקה"
+                  >
+                    <Trash2 size={18} color={colors.danger} />
+                  </Pressable>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
-                <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>
-                  {item.phone} • {item.role}
-                </Text>
-                {item.role === 'customer' ? (
-                  <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6, fontWeight: '700' }}>
-                    נקודות ריח
+              <View style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                <Avatar size={42} uri={item.avatar_url ?? null} name={item.name} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
+                  <Text style={{ color: colors.muted, marginTop: 2, textAlign: 'right' }}>
+                    {item.phone} • {item.role}
                   </Text>
-                ) : null}
+                  {item.role === 'customer' ? (
+                    <Text style={{ color: colors.muted, textAlign: 'right', marginTop: 6, fontWeight: '700' }}>
+                      נקודות ריח
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             </View>
           </Card>
@@ -368,47 +677,112 @@ export function UsersScreen() {
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין משתמשים.</Text>}
       />
 
-      <ModalSheet visible={editOpen} onClose={() => setEditOpen(false)}>
-        <View style={{ gap: 10 }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-            {isEditExisting ? 'עריכת משתמש' : 'משתמש חדש'}
-          </Text>
-          <Input label="שם" value={editing.name ?? ''} onChangeText={(v) => setEditing((p) => ({ ...p, name: v }))} />
-          <Input
-            label="טלפון"
-            value={editing.phone ?? ''}
-            onChangeText={(v) => setEditing((p) => ({ ...p, phone: v }))}
-            keyboardType="phone-pad"
-          />
-          <Input
-            label="סיסמה"
-            value={editing.password ?? ''}
-            onChangeText={(v) => setEditing((p) => ({ ...p, password: v }))}
-            secureTextEntry
-          />
-          <SelectSheet
-            label="Role"
-            value={editing.role ?? 'customer'}
-            options={roleOptions as any}
-            onChange={(v) => setEditing((p) => ({ ...p, role: v as any }))}
-          />
-          <Input
-            label="כתובת"
-            value={editing.address ?? ''}
-            onChangeText={(v) => setEditing((p) => ({ ...p, address: v }))}
-          />
-          {(editing.role ?? 'customer') === 'customer' ? (
+      <AnchoredWindow visible={editOpen} anchor={editAnchor} onClose={closeEdit} showCloseEye={false} durationMs={EDIT_WINDOW_DURATION_MS}>
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+              marginBottom: 10,
+            }}
+          >
+            <Pressable
+              onPress={closeEdit}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: 'rgba(255,255,255,0.06)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              hitSlop={10}
+            >
+              <X size={18} color={colors.text} />
+            </Pressable>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
+              {isEditExisting ? 'עריכת משתמש' : 'משתמש חדש'}
+            </Text>
+          </View>
+
+          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 14 }}>
+            {(editing.role ?? 'customer') !== 'customer' ? (
+              <Card style={{ padding: 12 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <Avatar size={56} uri={avatarLocalUri ?? editing.avatar_url ?? null} name={editing.name ?? ''} />
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>תמונת משתמש</Text>
+                    <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right', fontWeight: '700' }}>
+                      מוצג בלוח בקרה ובמשימות
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                  <Button
+                    title={avatarBusy ? 'טוען…' : 'בחר תמונה'}
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    disabled={avatarBusy || loading}
+                    onPress={pickAvatar}
+                  />
+                  <Button
+                    title="הסר"
+                    variant="secondary"
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    disabled={avatarBusy || loading}
+                    onPress={clearAvatar}
+                  />
+                </View>
+              </Card>
+            ) : null}
+            <Input label="שם" value={editing.name ?? ''} onChangeText={(v) => setEditing((p) => ({ ...p, name: v }))} />
             <Input
-              label="מחיר"
-              value={editing.price?.toString?.() ?? ''}
-              onChangeText={(v) => setEditing((p) => ({ ...p, price: v ? Number(v) : null }))}
-              keyboardType="numeric"
+              label="טלפון"
+              value={editing.phone ?? ''}
+              onChangeText={(v) => setEditing((p) => ({ ...p, phone: v }))}
+              keyboardType="phone-pad"
             />
-          ) : null}
-          <Button title="שמור" onPress={saveUser} />
-          <Button title="סגור" variant="secondary" onPress={() => setEditOpen(false)} />
+            <Input
+              label="סיסמה"
+              value={editing.password ?? ''}
+              onChangeText={(v) => setEditing((p) => ({ ...p, password: v }))}
+              secureTextEntry
+            />
+            <SelectSheet
+              label="Role"
+              value={editing.role ?? 'customer'}
+              options={roleOptions as any}
+              onChange={(v) => setEditing((p) => ({ ...p, role: v as any }))}
+            />
+            <Input
+              label="כתובת"
+              value={editing.address ?? ''}
+              onChangeText={(v) => setEditing((p) => ({ ...p, address: v }))}
+            />
+            {(editing.role ?? 'customer') === 'customer' ? (
+              <Input
+                label="מחיר"
+                value={editing.price?.toString?.() ?? ''}
+                onChangeText={(v) => setEditing((p) => ({ ...p, price: v ? Number(v) : null }))}
+                keyboardType="numeric"
+              />
+            ) : null}
+            <Button title="שמור" onPress={saveUser} />
+            <Button
+              title="סגור"
+              variant="secondary"
+              onPress={closeEdit}
+            />
+          </ScrollView>
         </View>
-      </ModalSheet>
+      </AnchoredWindow>
 
       <AnchoredWindow visible={pointsOpen} anchor={pointsAnchor} onClose={() => setPointsOpen(false)} showCloseEye={false}>
         <View style={{ flex: 1 }}>
@@ -550,7 +924,7 @@ export function UsersScreen() {
           </ScrollView>
         </View>
       </AnchoredWindow>
-    </Screen>
+    </View>
   );
 }
 

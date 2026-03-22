@@ -3,7 +3,6 @@ import { Pressable, Text, View, FlatList } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { ModalSheet } from '../../components/ModalSheet';
-import { Screen } from '../../components/Screen';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -98,7 +97,7 @@ export function SupportScreen() {
   };
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchTickets} />
@@ -109,7 +108,7 @@ export function SupportScreen() {
       </View>
 
       <FlatList
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 12, flex: 1 }}
         data={filtered}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
@@ -157,7 +156,7 @@ export function SupportScreen() {
           </View>
         )}
       </ModalSheet>
-    </Screen>
+    </View>
   );
 }
 

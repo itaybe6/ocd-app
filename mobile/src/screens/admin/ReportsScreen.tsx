@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { SelectSheet } from '../../components/ui/SelectSheet';
@@ -10,7 +9,7 @@ import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import { useLoading } from '../../state/LoadingContext';
 
-type Customer = { id: string; name: string; role: 'customer'; price?: number | null };
+type Customer = { id: string; name: string; role: 'customer'; price?: number | null; avatar_url?: string | null };
 type Job = { id: string; date: string; status: 'pending' | 'completed' };
 type ServicePoint = { id: string; refill_amount: number };
 type JobServicePoint = { id: string; job_id: string; service_point_id: string; custom_refill_amount?: number | null };
@@ -26,12 +25,12 @@ export function ReportsScreen() {
   const [customerPrice, setCustomerPrice] = useState<number | null>(null);
 
   const customerOptions = useMemo(
-    () => customers.map((c) => ({ value: c.id, label: c.name })),
+    () => customers.map((c) => ({ value: c.id, label: c.name, avatarUrl: c.avatar_url ?? null })),
     [customers]
   );
 
   const fetchCustomers = useCallback(async () => {
-    const { data, error } = await supabase.from('users').select('id, name, role, price').eq('role', 'customer').order('name');
+    const { data, error } = await supabase.from('users').select('id, name, role, price, avatar_url').eq('role', 'customer').order('name');
     if (!error) setCustomers((data ?? []) as any);
   }, []);
 
@@ -106,7 +105,7 @@ export function ReportsScreen() {
   const total = useMemo(() => jobs.reduce((sum, j) => sum + j.totalRefill, 0), [jobs]);
 
   return (
-    <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 }}>
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'הרץ דוח'} fullWidth={false} onPress={runReport} />
@@ -138,7 +137,7 @@ export function ReportsScreen() {
           ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right' }}>אין נתונים.</Text>}
         />
       </View>
-    </Screen>
+    </View>
   );
 }
 

@@ -115,6 +115,7 @@ type ShopifyCollectionProductsQueryResponse = {
   }>;
 };
 
+<<<<<<< HEAD
 type ShopifyMenuQueryResponse = {
   data?: {
     menu: {
@@ -122,6 +123,11 @@ type ShopifyMenuQueryResponse = {
       title: string;
       items: ShopifyMenuItemNode[];
     } | null;
+=======
+type ShopifyProductByHandleQueryResponse = {
+  data?: {
+    productByHandle: ShopifyProductNode | null;
+>>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
   };
   errors?: Array<{
     message: string;
@@ -373,4 +379,40 @@ export async function fetchCollectionProducts(handle: string, first = 40): Promi
   }
 
   return payload.data?.collection?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
+}
+
+export async function fetchProductByHandle(handle: string): Promise<ShopifyProduct | null> {
+  const normalizedHandle = handle.trim();
+  if (!normalizedHandle) return null;
+
+  const query = `
+    query GetProductByHandle($handle: String!) {
+      productByHandle(handle: $handle) {
+        id
+        title
+        description
+        handle
+        productType
+        featuredImage {
+          url
+          altText
+        }
+        priceRange {
+          minVariantPrice {
+            amount
+            currencyCode
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyProductByHandleQueryResponse>(query, { handle: normalizedHandle });
+
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((item) => item.message).join(', '));
+  }
+
+  const node = payload.data?.productByHandle ?? null;
+  return node ? normalizeProduct(node) : null;
 }

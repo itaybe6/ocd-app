@@ -10,14 +10,12 @@ import {
   ClipboardList,
   LayoutDashboard,
   Users as UsersIcon,
-  PlusCircle,
-  PlayCircle,
   CalendarDays,
   FileBarChart2,
   Headset,
   Settings,
   Package,
-  Wrench,
+  Store,
   LogOut,
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -27,30 +25,24 @@ import { DashboardScreen } from '../screens/admin/DashboardScreen';
 import { SupportScreen } from '../screens/admin/SupportScreen';
 import { UsersScreen } from '../screens/admin/UsersScreen';
 import { JobsScreen } from '../screens/admin/JobsScreen';
-import { AddJobsScreen } from '../screens/admin/AddJobsScreen';
-import { JobExecutionScreen } from '../screens/admin/JobExecutionScreen';
-import { WorkTemplatesScreen } from '../screens/admin/WorkTemplatesScreen';
+import { WorkTemplatesStack } from './WorkTemplatesStack';
 import { WorkScheduleScreen } from '../screens/admin/WorkScheduleScreen';
 import { DailyScheduleScreen } from '../screens/admin/DailyScheduleScreen';
 import { ReportsScreen } from '../screens/admin/ReportsScreen';
-import { DeviceInstallationScreen } from '../screens/admin/DeviceInstallationScreen';
-import { InstallationJobsScreen } from '../screens/admin/InstallationJobsScreen';
 import { DevicesAndScentsScreen } from '../screens/admin/DevicesAndScentsScreen';
+import { StoreManagementScreen } from '../screens/admin/StoreManagementScreen';
 
 export type AdminDrawerParamList = {
   Dashboard: undefined;
   Users: undefined;
   Jobs: undefined;
-  AddJobs: undefined;
-  JobExecution: undefined;
   WorkTemplates: undefined;
   WorkSchedule: undefined;
   DailySchedule: undefined;
   Support: undefined;
   Reports: undefined;
-  DeviceInstallation: undefined;
-  InstallationJobs: undefined;
   DevicesAndScents: undefined;
+  StoreManagement: undefined;
 };
 
 /* ─── Design tokens (light premium theme) ─── */
@@ -139,17 +131,15 @@ function SectionGroup({ section, activeKey, supportNewCount, navigate }: {
         <Text style={styles.sectionTitle}>{section.title}</Text>
       </View>
       <View style={styles.sectionCard}>
-        {section.items.map((it, idx) => (
-          <React.Fragment key={String(it.key)}>
-            {idx > 0 && <View style={styles.itemDivider} />}
-            <DrawerNavItem
-              label={it.label}
-              Icon={it.icon}
-              active={activeKey === it.key}
-              badgeCount={it.badge === 'supportNew' ? supportNewCount : undefined}
-              onPress={() => navigate(it.key as string)}
-            />
-          </React.Fragment>
+        {section.items.map((it) => (
+          <DrawerNavItem
+            key={String(it.key)}
+            label={it.label}
+            Icon={it.icon}
+            active={activeKey === it.key}
+            badgeCount={it.badge === 'supportNew' ? supportNewCount : undefined}
+            onPress={() => navigate(it.key as string)}
+          />
         ))}
       </View>
     </View>
@@ -188,10 +178,7 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
       {
         title: 'משימות',
         items: [
-          { key: 'Jobs', label: 'משימות ריח', icon: ClipboardList },
-          { key: 'InstallationJobs', label: 'משימות מיוחדות', icon: Wrench },
-          { key: 'AddJobs', label: 'הוספת משימות', icon: PlusCircle },
-          { key: 'JobExecution', label: 'ביצוע משימות', icon: PlayCircle },
+          { key: 'Jobs', label: 'משימות', icon: ClipboardList },
         ],
       },
       {
@@ -202,8 +189,8 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
           { key: 'WorkSchedule', label: 'קווי עבודה', icon: CalendarDays },
           { key: 'Users', label: 'משתמשים', icon: UsersIcon },
           { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
-          { key: 'DeviceInstallation', label: 'התקנת מכשירים', icon: Wrench },
           { key: 'WorkTemplates', label: 'תבניות עבודה', icon: Settings },
+          { key: 'StoreManagement', label: 'ניהול חנות', icon: Store },
         ],
       },
       {
@@ -317,17 +304,14 @@ export function AdminDrawer() {
     >
       <Drawer.Screen name="Dashboard" options={{ title: 'לוח בקרה' }} component={DashboardScreen} />
       <Drawer.Screen name="Users" options={{ title: 'משתמשים' }} component={UsersScreen} />
-      <Drawer.Screen name="Jobs" options={{ title: 'משימות ריח' }} component={JobsScreen} />
-      <Drawer.Screen name="AddJobs" options={{ title: 'הוספת משימות' }} component={AddJobsScreen} />
-      <Drawer.Screen name="JobExecution" options={{ title: 'ביצוע משימות' }} component={JobExecutionScreen} />
-      <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה' }} component={WorkTemplatesScreen} />
+      <Drawer.Screen name="Jobs" options={{ title: 'משימות' }} component={JobsScreen} />
+      <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה', headerShown: false }} component={WorkTemplatesStack} />
       <Drawer.Screen name="WorkSchedule" options={{ title: 'קווי עבודה' }} component={WorkScheduleScreen} />
       <Drawer.Screen name="DailySchedule" options={{ title: 'לוז יומי' }} component={DailyScheduleScreen} />
       <Drawer.Screen name="Support" options={{ title: 'שירות לקוחות' }} component={SupportScreen} />
       <Drawer.Screen name="Reports" options={{ title: 'דוחות' }} component={ReportsScreen} />
-      <Drawer.Screen name="DeviceInstallation" options={{ title: 'התקנת מכשירים' }} component={DeviceInstallationScreen} />
-      <Drawer.Screen name="InstallationJobs" options={{ title: 'משימות מיוחדות' }} component={InstallationJobsScreen} />
       <Drawer.Screen name="DevicesAndScents" options={{ title: 'מכשירים וניחוחות' }} component={DevicesAndScentsScreen} />
+      <Drawer.Screen name="StoreManagement" options={{ title: 'ניהול חנות' }} component={StoreManagementScreen} />
     </Drawer.Navigator>
   );
 }
@@ -481,7 +465,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: D.border,
     overflow: 'hidden',
-    paddingVertical: 6,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     shadowColor: D.text,
     shadowOpacity: 0.06,
     shadowRadius: 14,
@@ -495,6 +481,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 58,
     paddingHorizontal: 14,
+    marginHorizontal: 0,
+    borderRadius: 12,
     gap: 10,
     position: 'relative',
     overflow: 'hidden',
@@ -514,11 +502,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
   },
-  itemDivider: {
-    height: 1,
-    marginHorizontal: 14,
-    backgroundColor: D.borderFaint,
-  },
+  itemDivider: { height: 0 },
   iconBubble: {
     width: 34,
     height: 34,

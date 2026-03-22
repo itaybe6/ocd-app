@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, type Theme } from '@react-navigation/native';
 import {
@@ -16,6 +16,7 @@ import {
 } from '../screens/store/StoreHomeScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
+<<<<<<< HEAD
 
 type RootStackParamList = {
   Store: undefined;
@@ -34,6 +35,11 @@ type RootStackParamList = {
   Worker: undefined;
   Customer: undefined;
 };
+=======
+import { ProductScreen } from '../screens/store/ProductScreen';
+import { flushPendingNavigation, navigationRef } from './navigationRef';
+import type { RootStackParamList } from './types';
+>>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -52,6 +58,7 @@ function CustomerEntryScreen() {
   return <CustomerDrawer />;
 }
 
+<<<<<<< HEAD
 function PublicStoreScreen({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'Store'>) {
@@ -70,10 +77,34 @@ function PublicStoreScreen({
       }
     />
   );
+=======
+function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return (
+      <StoreHomeScreen
+        onAdminPress={() => navigation.navigate('Login')}
+        onProductPress={(handle) => navigation.navigate('Product', { handle })}
+      />
+    );
+  }
+
+  if (user.role === 'admin') return <AdminEntryScreen />;
+  if (user.role === 'worker') return <WorkerEntryScreen />;
+  return <CustomerEntryScreen />;
+>>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
-  return <LoginScreen onBackToStore={() => navigation.navigate('Store')} />;
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+  }, [navigation, user]);
+
+  return <LoginScreen onBackToStore={() => navigation.navigate('Main')} />;
 }
 
 function StoreCategoryRoute({
@@ -139,11 +170,16 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      theme={navTheme}
+      ref={navigationRef}
+      onReady={() => flushPendingNavigation()}
+    >
       <Stack.Navigator
         key={user ? `role:${user.role}` : 'anon'}
         screenOptions={{ headerShown: false }}
       >
+<<<<<<< HEAD
         {!user ? (
           <>
             <Stack.Screen name="Store" component={PublicStoreScreen} />
@@ -159,6 +195,22 @@ export function RootNavigator() {
         ) : (
           <Stack.Screen name="Customer" component={CustomerEntryScreen} />
         )}
+=======
+        <Stack.Screen name="Main" component={MainEntryScreen} />
+        <Stack.Screen name="Login" component={LoginRoute} />
+        <Stack.Screen
+          name="Product"
+          component={ProductScreen}
+          options={{
+            headerShown: true,
+            headerTitle: 'מוצר',
+            headerTitleStyle: { fontWeight: '900' },
+            headerTintColor: colors.text,
+            headerStyle: { backgroundColor: colors.card },
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        />
+>>>>>>> af24cf11d3ac0d893e2219d348190785a26f113d
       </Stack.Navigator>
     </NavigationContainer>
   );

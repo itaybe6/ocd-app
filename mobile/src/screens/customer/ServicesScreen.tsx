@@ -62,7 +62,7 @@ export function CustomerServicesScreen() {
 
       const workerIds = Array.from(new Set(list.map((j) => j.worker_id).filter(Boolean)));
       if (workerIds.length) {
-        const { data: wData, error: wErr } = await supabase.from('users').select('id, name').in('id', workerIds);
+        const { data: wData, error: wErr } = await supabase.from('users').select('id, name, avatar_url').in('id', workerIds);
         if (!wErr) {
           const map: Record<string, string> = {};
           for (const r of wData ?? []) map[(r as any).id] = (r as any).name;

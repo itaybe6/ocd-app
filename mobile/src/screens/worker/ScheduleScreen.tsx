@@ -1,7 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, Image, Pressable, Text, View } from 'react-native';
+import React, { ReactNode, useEffect, useMemo, useState } from 'react';
+import { FlatList, Image, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
+import Animated, { useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
+import { svgPathProperties } from 'svg-path-properties';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -37,6 +40,120 @@ type SpecialJob = { id: string; battery_type?: 'AA' | 'DC' | null; job_type?: st
 
 const kindLabel = (k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת');
 
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+type AnimatedDonutProps = {
+  width?: number;
+  height?: number;
+  radius?: number;
+  strokeColor?: string;
+  strokeInactiveColor?: string;
+  strokeWidth?: number;
+  current?: number;
+  max?: number;
+  duration?: number;
+  delay?: number;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+};
+
+function AnimatedDonut({
+  width = 100,
+  height = 144,
+  radius = 100 * 0.4,
+  strokeColor = '#80D15A',
+  strokeInactiveColor = '#353C51',
+  strokeWidth = 12,
+  current = 0,
+  max = 1,
+  duration = 500,
+  delay = 500,
+  children,
+  style,
+}: AnimatedDonutProps) {
+  const safeMax = max <= 0 ? 1 : max;
+  const safeCurrent = Math.max(0, Math.min(current, safeMax));
+
+  const d = `
+    M ${width / 2} 0
+    H ${width - radius}
+    C ${width} 0, ${width} ${radius}, ${width} ${radius}
+    V ${height - radius}
+    C ${width} ${height}, ${width - radius} ${height}, ${width - radius} ${height}
+    H ${radius}
+    C 0 ${height}, 0 ${height - radius}, 0 ${height - radius}
+    V ${radius}
+    C 0 0, ${radius} 0, ${radius} 0
+    H ${width / 2}
+  `;
+
+  const wRatio = strokeWidth ? 1 - strokeWidth / width : 1;
+  const hRatio = strokeWidth ? 1 - strokeWidth / height : 1;
+
+  const properties = new svgPathProperties(d);
+  const length = properties.getTotalLength();
+  const animatedValue = useSharedValue(length);
+
+  useEffect(() => {
+    animatedValue.value = withDelay(
+      delay,
+      withTiming(length - (safeCurrent * length) / safeMax, { duration })
+    );
+  }, [delay, duration, length, safeCurrent, safeMax]);
+
+  const animatedProps = useAnimatedProps(() => {
+    return {
+      strokeDashoffset: animatedValue.value,
+    };
+  });
+
+  return (
+    <View style={[style, { width, height }]}>
+      <Svg viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
+        <Path
+          originX={width / 2}
+          originY={height / 2}
+          scaleX={wRatio}
+          scaleY={hRatio}
+          strokeWidth={strokeWidth}
+          d={d}
+          fill="transparent"
+          stroke={strokeInactiveColor}
+          strokeLinejoin="miter"
+          strokeMiterlimit={0}
+        />
+        <AnimatedPath
+          originX={width / 2}
+          originY={height / 2}
+          scaleX={wRatio}
+          scaleY={hRatio}
+          strokeWidth={strokeWidth}
+          d={d}
+          fill="transparent"
+          stroke={strokeColor}
+          strokeDasharray={length}
+          strokeLinejoin="miter"
+          strokeMiterlimit={0}
+          strokeLinecap="round"
+          animatedProps={animatedProps}
+        />
+      </Svg>
+      <View
+        style={{
+          top: strokeWidth,
+          left: strokeWidth,
+          right: strokeWidth,
+          bottom: strokeWidth,
+          position: 'absolute',
+          borderRadius: radius - strokeWidth * 2,
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
 export function WorkerScheduleScreen() {
   const { user } = useAuth();
   const { setIsLoading } = useLoading();
@@ -58,6 +175,13 @@ export function WorkerScheduleScreen() {
   const filtered = useMemo(() => {
     return items.filter((it) => (kindFilter ? it.kind === kindFilter : true));
   }, [items, kindFilter]);
+
+  const oilTotals = useMemo(() => {
+    const totalMl = daySummary.scent.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+    const liters = totalMl / 1000;
+    const maxLiters = Math.max(20, Math.ceil(liters / 5) * 5 || 20);
+    return { totalMl, liters, maxLiters };
+  }, [daySummary.scent]);
 
   const fetchForDay = async () => {
     if (!user?.id) return;
@@ -342,22 +466,63 @@ export function WorkerScheduleScreen() {
       </View>
 
       <View style={{ marginTop: 12, gap: 10 }}>
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>סיכומי יום</Text>
-          <Text style={{ color: colors.muted, marginTop: 6, textAlign: 'right' }}>
-            ציוד להתקנה: {daySummary.equipmentCount}{'\n'}
-            סוללות: {daySummary.batteries.map((b) => `${b.key}:${b.count}`).join(', ') || '—'}
-          </Text>
+        <View style={styles.oilCard}>
+          <View style={styles.oilHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.oilTitle}>שמן להיום</Text>
+              <Text style={styles.oilSubtitle}>
+                לפי סך המילויים בעבודות של היום • {items.length} משימות
+              </Text>
+            </View>
+            <AnimatedDonut
+              current={Number(oilTotals.liters.toFixed(2))}
+              max={oilTotals.maxLiters}
+              strokeColor="#4985E0"
+              strokeInactiveColor="rgba(255,255,255,0.12)"
+              strokeWidth={6}
+              width={78}
+              height={108}
+              radius={78 * 0.4}
+              delay={350}
+              duration={550}
+            >
+              <View style={styles.oilDonutInner}>
+                <Text style={styles.oilDonutValue}>{oilTotals.liters.toFixed(1)}</Text>
+                <View style={styles.oilDivider} />
+                <Text style={styles.oilDonutMax}>{oilTotals.maxLiters}L</Text>
+              </View>
+            </AnimatedDonut>
+          </View>
+
+          <View style={styles.oilMetaRow}>
+            <View style={styles.oilMetaPill}>
+              <Text style={styles.oilMetaLabel}>סה״כ</Text>
+              <Text style={styles.oilMetaValue}>{Math.round(oilTotals.totalMl)} מ״ל</Text>
+            </View>
+            <View style={styles.oilMetaPill}>
+              <Text style={styles.oilMetaLabel}>התקנות</Text>
+              <Text style={styles.oilMetaValue}>{daySummary.equipmentCount} ציוד</Text>
+            </View>
+            <View style={styles.oilMetaPill}>
+              <Text style={styles.oilMetaLabel}>סוללות</Text>
+              <Text style={styles.oilMetaValue}>{daySummary.batteries.map((b) => `${b.key}:${b.count}`).join(' • ') || '—'}</Text>
+            </View>
+          </View>
+
           {daySummary.scent.length ? (
             <View style={{ marginTop: 10, gap: 6 }}>
-              {daySummary.scent.map((s) => (
-                <Text key={s.key} style={{ color: colors.muted, textAlign: 'right' }}>
-                  {s.key}: {s.amount}
-                </Text>
-              ))}
+              <Text style={styles.oilBreakdownTitle}>פירוט לפי ניחוח</Text>
+              <View style={{ gap: 4 }}>
+                {daySummary.scent.slice(0, 5).map((s) => (
+                  <View key={s.key} style={styles.oilBreakdownRow}>
+                    <Text style={styles.oilBreakdownValue}>{Math.round(s.amount)} מ״ל</Text>
+                    <Text style={styles.oilBreakdownKey}>{s.key}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           ) : null}
-        </Card>
+        </View>
       </View>
 
       <FlatList
@@ -517,3 +682,102 @@ export function WorkerScheduleScreen() {
   );
 }
 
+const styles = StyleSheet.create({
+  oilCard: {
+    backgroundColor: '#232839',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  oilHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  oilTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  oilSubtitle: {
+    color: 'rgba(255,255,255,0.65)',
+    marginTop: 6,
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+  oilDonutInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+  },
+  oilDonutValue: {
+    color: '#4985E0',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  oilDivider: {
+    height: 2,
+    width: '58%',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    transform: [{ rotate: '-14deg' }],
+  },
+  oilDonutMax: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  oilMetaRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  oilMetaPill: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  oilMetaLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  oilMetaValue: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  oilBreakdownTitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  oilBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  oilBreakdownKey: {
+    color: 'rgba(255,255,255,0.78)',
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  oilBreakdownValue: {
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+});
