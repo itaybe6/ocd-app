@@ -145,13 +145,11 @@ export function CustomerProfileScreen({
   onTabPress,
   onOpenOrders,
   onOpenFavorites,
-  onOpenSupport,
   onOpenServices,
 }: {
   onTabPress: (tabId: StoreBottomTabId) => void;
   onOpenOrders: () => void;
   onOpenFavorites: () => void;
-  onOpenSupport: () => void;
   onOpenServices: () => void;
 }) {
   const { width: windowWidth } = useWindowDimensions();
@@ -238,14 +236,6 @@ export function CustomerProfileScreen({
         onPress: onOpenOrders,
       },
       {
-        key: 'support',
-        title: 'תמיכה',
-        icon: 'headset-outline' as const,
-        iconColor: '#7A5A2D',
-        iconBackground: '#F8EEDC',
-        onPress: onOpenSupport,
-      },
-      {
         key: 'notifications',
         title: 'התראות',
         icon: 'notifications-outline' as const,
@@ -262,7 +252,7 @@ export function CustomerProfileScreen({
         onPress: () => Toast.show({ type: 'info', text1: 'אמצעי תשלום יתווספו בהמשך' }),
       },
     ],
-    [onOpenFavorites, onOpenOrders, onOpenSupport]
+    [onOpenFavorites, onOpenOrders]
   );
   const actionRows = useMemo(() => [actionItems.slice(0, 3), actionItems.slice(3, 6)], [actionItems]);
 

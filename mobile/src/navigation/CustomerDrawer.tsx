@@ -7,12 +7,11 @@ import {
   type DrawerContentComponentProps,
   type DrawerScreenProps,
 } from '@react-navigation/drawer';
-import { Headset, Heart, Receipt, ShoppingBag, User, Wrench } from 'lucide-react-native';
+import { Heart, Receipt, ShoppingBag, User, Wrench } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useAuth } from '../state/AuthContext';
 import { CustomerProfileScreen } from '../screens/customer/ProfileScreen';
 import { CustomerServicesScreen } from '../screens/customer/ServicesScreen';
-import { CustomerSupportScreen } from '../screens/customer/SupportScreen';
 import { CustomerFavoritesScreen } from '../screens/customer/FavoritesScreen';
 import { CustomerOrdersScreen } from '../screens/customer/OrdersScreen';
 import { safeNavigate } from './navigationRef';
@@ -28,7 +27,6 @@ export type CustomerDrawerParamList = {
   Profile: undefined;
   Orders: undefined;
   Services: undefined;
-  Support: undefined;
   Favorites: undefined;
 };
 
@@ -95,7 +93,6 @@ function CustomerProfileRoute({ navigation }: DrawerScreenProps<CustomerDrawerPa
     <CustomerProfileScreen
       onOpenOrders={() => navigation.navigate('Orders')}
       onOpenFavorites={() => navigation.navigate('Favorites')}
-      onOpenSupport={() => navigation.navigate('Support')}
       onOpenServices={() => navigation.navigate('Services')}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
@@ -115,7 +112,6 @@ function CustomerDrawerContent(props: DrawerContentComponentProps) {
       { key: 'Orders' as const, label: 'רכישות', icon: <Receipt size={18} color={colors.text} /> },
       { key: 'Favorites' as const, label: 'אהבתי', icon: <Heart size={18} color={colors.text} /> },
       { key: 'Services' as const, label: 'שירותים', icon: <Wrench size={18} color={colors.text} /> },
-      { key: 'Support' as const, label: 'תמיכה טכנית', icon: <Headset size={18} color={colors.text} /> },
     ],
     []
   );
@@ -168,7 +164,6 @@ export function CustomerDrawer() {
       <Drawer.Screen name="Orders" options={{ title: 'רכישות', headerShown: false }} component={CustomerOrdersRoute} />
       <Drawer.Screen name="Favorites" options={{ title: 'אהבתי' }} component={CustomerFavoritesScreen} />
       <Drawer.Screen name="Services" options={{ title: 'שירותים' }} component={CustomerServicesScreen} />
-      <Drawer.Screen name="Support" options={{ title: 'תמיכה טכנית' }} component={CustomerSupportScreen} />
     </Drawer.Navigator>
   );
 }

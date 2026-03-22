@@ -3,7 +3,7 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Clock, MapPin, Pencil, Plus, Search, Trash2, User, Users } from 'lucide-react-native';
+import { CheckCircle2, Circle, Clock, MapPin, Pencil, Plus, Search, Trash2, User, Users } from 'lucide-react-native';
 import { Screen } from '../../components/Screen';
 import { Avatar } from '../../components/ui/Avatar';
 import { colors } from '../../theme/colors';
@@ -30,6 +30,8 @@ export function WorkTemplateStationsScreen({
   const [users, setUsers] = useState<UserLite[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase
@@ -79,6 +81,22 @@ export function WorkTemplateStationsScreen({
     return map;
   }, [users]);
 
+  const toggleEditMode = useCallback(() => {
+    setIsEditMode((prev) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const deleteStation = useCallback((stationId: string, order: number) => {
     Alert.alert(
       `מחיקת תחנה #${order}`,
@@ -106,6 +124,37 @@ export function WorkTemplateStationsScreen({
     );
   }, [fetchStations]);
 
+  const bulkDelete = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    Alert.alert(
+      `מחיקת ${selectedIds.size} תחנות`,
+      'האם אתה בטוח שברצונך למחוק את התחנות הנבחרות? לא ניתן לבטל פעולה זו.',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const ids = Array.from(selectedIds);
+              const { error } = await supabase
+                .from('template_stations')
+                .delete()
+                .in('id', ids);
+              if (error) throw error;
+              Toast.show({ type: 'success', text1: `${ids.length} תחנות נמחקו בהצלחה` });
+              setSelectedIds(new Set());
+              setIsEditMode(false);
+              await fetchStations();
+            } catch (e: any) {
+              Toast.show({ type: 'error', text1: 'מחיקה נכשלה', text2: e?.message ?? 'Unknown error' });
+            }
+          },
+        },
+      ]
+    );
+  }, [selectedIds, fetchStations]);
+
   const filteredStations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return stations;
@@ -120,26 +169,46 @@ export function WorkTemplateStationsScreen({
     <Screen padded={false}>
       {/* ─── Header ─── */}
       <View style={s.headerWrap}>
-        <View style={s.headerRow}>
-          <Text style={s.title}>תחנות בתבנית</Text>
-          <View style={s.titleMeta}>
+        <View style={s.titleRow}>
+          <View style={s.titleRight}>
+            <Text style={s.title}>תחנות בתבנית</Text>
             <View style={s.dayBadge}>
               <Text style={s.dayBadgeText}>יום {day}</Text>
             </View>
-            <Text style={s.stationCount}>{filteredStations.length} תחנות</Text>
+          </View>
+          <View style={s.countBadge}>
+            <Text style={s.countBadgeText}>{filteredStations.length}</Text>
+            <Text style={s.countBadgeLabel}>תחנות</Text>
           </View>
         </View>
 
-        {/* Search */}
-        <View style={s.searchBox}>
-          <Search size={17} color={colors.muted} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="חיפוש לפי לקוח או עובד..."
-            placeholderTextColor={colors.muted}
-            style={s.searchInput}
-          />
+        <View style={s.searchRow}>
+          <Pressable
+            onPress={toggleEditMode}
+            style={({ pressed }) => [pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]}
+          >
+            <View style={[s.editModeBtn, isEditMode && s.editModeBtnActive]}>
+              {isEditMode ? (
+                <Text style={s.editModeBtnTextActive}>ביטול</Text>
+              ) : (
+                <>
+                  <Pencil size={13} color={colors.primary} />
+                  <Text style={s.editModeBtnText}>עריכה</Text>
+                </>
+              )}
+            </View>
+          </Pressable>
+
+          <View style={s.searchBox}>
+            <Search size={16} color={colors.muted} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="חיפוש לפי לקוח או עובד..."
+              placeholderTextColor={colors.muted}
+              style={s.searchInput}
+            />
+          </View>
         </View>
       </View>
 
@@ -154,107 +223,121 @@ export function WorkTemplateStationsScreen({
         renderItem={({ item }) => {
           const customer = item.customer_id ? userById.get(item.customer_id) ?? null : null;
           const worker = item.worker_id ? userById.get(item.worker_id) ?? null : null;
+          const isSelected = selectedIds.has(item.id);
 
           return (
-            <View style={s.card}>
-              {/* Colored left accent strip */}
-              <View style={s.cardAccent} />
+            <Pressable
+              onPress={() => isEditMode && toggleSelect(item.id)}
+              style={({ pressed }) => [pressed && isEditMode && { opacity: 0.8 }]}
+            >
+              <View style={[s.card, isSelected && s.cardSelected]}>
+                {/* Colored left accent strip */}
+                <View style={[s.cardAccent, isSelected && s.cardAccentSelected]} />
 
-              <View style={s.cardInner}>
-                {/* Card header: order badge + title + time */}
-                <View style={s.cardHeader}>
-                  <View style={s.cardHeaderRight}>
-                    <View style={s.orderBadge}>
-                      <Text style={s.orderBadgeText}>{item.order}</Text>
-                    </View>
-                    <Text style={s.cardTitle}>תחנה #{item.order}</Text>
-                  </View>
-                  <View style={s.timeBadge}>
-                    <Clock size={13} color={colors.muted} />
-                    <Text style={s.timeBadgeText}>{item.scheduled_time}</Text>
-                  </View>
-                </View>
-
-                {/* Divider */}
-                <View style={s.divider} />
-
-                {/* Customer row */}
-                <View style={[s.personRow, s.customerRow]}>
-                  <View style={s.personRowLeft}>
-                    <View style={[s.roleIcon, s.roleIconNeutral]}>
-                      <User size={14} color={colors.muted} />
-                    </View>
-                    <Text style={s.roleLabel}>לקוח</Text>
-                  </View>
-                  <View style={s.personInfo}>
-                    {customer ? (
-                      <>
-                        <Avatar size={32} uri={customer.avatar_url ?? null} name={customer.name} />
-                        <Text style={s.personName} numberOfLines={1}>{customer.name}</Text>
-                      </>
-                    ) : (
-                      <>
-                        <View style={s.emptyAvatar}>
-                          <User size={15} color="#94A3B8" />
+                <View style={s.cardInner}>
+                  {/* Card header: order badge + title + time */}
+                  <View style={s.cardHeader}>
+                    <View style={s.cardHeaderRight}>
+                      {isEditMode ? (
+                        isSelected
+                          ? <CheckCircle2 size={22} color={colors.primary} />
+                          : <Circle size={22} color={colors.muted} />
+                      ) : (
+                        <View style={s.orderBadge}>
+                          <Text style={s.orderBadgeText}>{item.order}</Text>
                         </View>
-                        <Text style={s.emptyName}>לא נבחר</Text>
-                      </>
-                    )}
-                  </View>
-                </View>
-
-                {/* Worker row */}
-                <View style={[s.personRow, s.workerRow]}>
-                  <View style={s.personRowLeft}>
-                    <View style={[s.roleIcon, s.roleIconNeutralDark]}>
-                      <Users size={14} color={colors.muted} />
+                      )}
+                      <Text style={s.cardTitle}>תחנה #{item.order}</Text>
                     </View>
-                    <Text style={s.roleLabel}>עובד</Text>
-                  </View>
-                  <View style={s.personInfo}>
-                    {worker ? (
-                      <>
-                        <Avatar size={32} uri={worker.avatar_url ?? null} name={worker.name} />
-                        <Text style={s.personName} numberOfLines={1}>{worker.name}</Text>
-                      </>
-                    ) : (
-                      <>
-                        <View style={s.emptyAvatar}>
-                          <Users size={15} color="#94A3B8" />
-                        </View>
-                        <Text style={s.emptyName}>לא נבחר</Text>
-                      </>
-                    )}
-                  </View>
-                </View>
-
-                {/* Divider */}
-                <View style={[s.divider, { marginTop: 10, marginBottom: 0 }]} />
-
-                {/* Action buttons footer */}
-                <View style={s.cardFooter}>
-                  <Pressable
-                    onPress={() => deleteStation(item.id, item.order)}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-                  >
-                    <View style={s.deleteBtn}>
-                      <Trash2 size={15} color={colors.danger} />
-                      <Text style={s.deleteBtnText}>מחק</Text>
+                    <View style={s.timeBadge}>
+                      <Clock size={13} color={colors.muted} />
+                      <Text style={s.timeBadgeText}>{item.scheduled_time}</Text>
                     </View>
-                  </Pressable>
+                  </View>
 
-                  <Pressable
-                    onPress={() => navigation.navigate('WorkTemplateStationEdit', { templateId, day, stationId: item.id })}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-                  >
-                    <View style={s.editBtn}>
-                      <Pencil size={15} color={colors.primary} />
-                      <Text style={s.editBtnText}>עריכה</Text>
+                  {/* Divider */}
+                  <View style={s.divider} />
+
+                  {/* Customer row */}
+                  <View style={[s.personRow, s.customerRow]}>
+                    <View style={s.personRowLeft}>
+                      <View style={[s.roleIcon, s.roleIconNeutral]}>
+                        <User size={14} color={colors.muted} />
+                      </View>
+                      <Text style={s.roleLabel}>לקוח</Text>
                     </View>
-                  </Pressable>
+                    <View style={s.personInfo}>
+                      {customer ? (
+                        <>
+                          <Avatar size={32} uri={customer.avatar_url ?? null} name={customer.name} />
+                          <Text style={s.personName} numberOfLines={1}>{customer.name}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <View style={s.emptyAvatar}>
+                            <User size={15} color="#94A3B8" />
+                          </View>
+                          <Text style={s.emptyName}>לא נבחר</Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Worker row */}
+                  <View style={[s.personRow, s.workerRow]}>
+                    <View style={s.personRowLeft}>
+                      <View style={[s.roleIcon, s.roleIconNeutralDark]}>
+                        <Users size={14} color={colors.muted} />
+                      </View>
+                      <Text style={s.roleLabel}>עובד</Text>
+                    </View>
+                    <View style={s.personInfo}>
+                      {worker ? (
+                        <>
+                          <Avatar size={32} uri={worker.avatar_url ?? null} name={worker.name} />
+                          <Text style={s.personName} numberOfLines={1}>{worker.name}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <View style={s.emptyAvatar}>
+                            <Users size={15} color="#94A3B8" />
+                          </View>
+                          <Text style={s.emptyName}>לא נבחר</Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Action buttons footer — hidden in edit mode */}
+                  {!isEditMode && (
+                    <>
+                      <View style={[s.divider, { marginTop: 10, marginBottom: 0 }]} />
+                      <View style={s.cardFooter}>
+                        <Pressable
+                          onPress={() => deleteStation(item.id, item.order)}
+                          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+                        >
+                          <View style={s.deleteBtn}>
+                            <Trash2 size={15} color={colors.danger} />
+                            <Text style={s.deleteBtnText}>מחק</Text>
+                          </View>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => navigation.navigate('WorkTemplateStationEdit', { templateId, day, stationId: item.id })}
+                          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+                        >
+                          <View style={s.editBtn}>
+                            <Pencil size={15} color={colors.primary} />
+                            <Text style={s.editBtnText}>עריכה</Text>
+                          </View>
+                        </Pressable>
+                      </View>
+                    </>
+                  )}
                 </View>
               </View>
-            </View>
+            </Pressable>
           );
         }}
         ListEmptyComponent={
@@ -268,15 +351,32 @@ export function WorkTemplateStationsScreen({
         }
       />
 
-      {/* ─── FAB ─── */}
+      {/* ─── FAB / Bulk-delete bar ─── */}
       <View pointerEvents="box-none" style={s.fabWrap}>
-        <Pressable
-          onPress={() => navigation.navigate('WorkTemplateStationCreate', { templateId, day })}
-          style={({ pressed }) => [s.fab, pressed && s.fabPressed]}
-        >
-          <Plus size={22} color="#fff" />
-          <Text style={s.fabText}>הוסף תחנה</Text>
-        </Pressable>
+        {isEditMode ? (
+          <Pressable
+            onPress={bulkDelete}
+            disabled={selectedIds.size === 0}
+            style={({ pressed }) => [pressed && s.fabPressed]}
+          >
+            <View style={[s.fab, s.fabDanger, selectedIds.size === 0 && s.fabDisabled]}>
+              <Trash2 size={20} color="#fff" />
+              <Text style={s.fabText}>
+                {selectedIds.size > 0 ? `מחק ${selectedIds.size} תחנות` : 'בחר תחנות למחיקה'}
+              </Text>
+            </View>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => navigation.navigate('WorkTemplateStationCreate', { templateId, day })}
+            style={({ pressed }) => [pressed && s.fabPressed]}
+          >
+            <View style={s.fab}>
+              <Plus size={22} color="#fff" />
+              <Text style={s.fabText}>הוסף תחנה</Text>
+            </View>
+          </Pressable>
+        )}
       </View>
     </Screen>
   );
@@ -286,32 +386,63 @@ const s = StyleSheet.create({
   /* ── Header ── */
   headerWrap: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 16,
+    paddingTop: 2,
+    paddingBottom: 6,
     backgroundColor: colors.elevated,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  headerRow: {
-    alignItems: 'flex-end',
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  titleRight: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
   },
   title: {
     color: colors.text,
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: '900',
-    textAlign: 'right',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
-  titleMeta: {
-    flexDirection: 'row-reverse',
+  searchRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginTop: 6,
   },
+  editModeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  editModeBtnActive: {
+    backgroundColor: 'rgba(100,116,139,0.08)',
+    borderColor: colors.border,
+  },
+  editModeBtnText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  editModeBtnTextActive: {
+    color: colors.muted,
+    fontWeight: '700',
+    fontSize: 13,
+  },
   dayBadge: {
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingHorizontal: 11,
     paddingVertical: 4,
   },
   dayBadgeText: {
@@ -319,28 +450,44 @@ const s = StyleSheet.create({
     fontWeight: '800',
     fontSize: 13,
   },
-  stationCount: {
+  countBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  countBadgeText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  countBadgeLabel: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: colors.bg,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginTop: 14,
-    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     color: colors.text,
     textAlign: 'right',
-    fontSize: 15,
+    fontSize: 14,
     padding: 0,
   },
 
@@ -366,9 +513,17 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
+  cardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(37,99,235,0.04)',
+  },
   cardAccent: {
     width: 5,
     backgroundColor: colors.primary,
+  },
+  cardAccentSelected: {
+    backgroundColor: colors.primary,
+    width: 6,
   },
   cardInner: {
     flex: 1,
@@ -586,6 +741,13 @@ const s = StyleSheet.create({
     shadowOpacity: 0.40,
     shadowRadius: 18,
     elevation: 12,
+  },
+  fabDanger: {
+    backgroundColor: colors.danger,
+    shadowColor: colors.danger,
+  },
+  fabDisabled: {
+    opacity: 0.5,
   },
   fabPressed: {
     opacity: 0.92,

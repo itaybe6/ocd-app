@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Text, View, Pressable, StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import { Image, Text, View, Pressable, StyleSheet } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -12,17 +12,13 @@ import {
   Users as UsersIcon,
   CalendarDays,
   FileBarChart2,
-  Headset,
   Settings,
   Package,
   Store,
   LogOut,
 } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../state/AuthContext';
-import { Badge } from '../components/ui/Badge';
 import { DashboardScreen } from '../screens/admin/DashboardScreen';
-import { SupportScreen } from '../screens/admin/SupportScreen';
 import { UsersScreen } from '../screens/admin/UsersScreen';
 import { JobsScreen } from '../screens/admin/JobsScreen';
 import { WorkTemplatesStack } from './WorkTemplatesStack';
@@ -39,7 +35,6 @@ export type AdminDrawerParamList = {
   WorkTemplates: undefined;
   WorkSchedule: undefined;
   DailySchedule: undefined;
-  Support: undefined;
   Reports: undefined;
   DevicesAndScents: undefined;
   StoreManagement: undefined;
@@ -66,24 +61,32 @@ const D = {
   white: '#FFFFFF',
 } as const;
 
+const ADMIN_HEADER_LOGO = require('../../assets/logopng/OCDLOGO-04.png');
+
 const Drawer = createDrawerNavigator<AdminDrawerParamList>();
 
 type LucideIcon = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-type Item = { key: keyof AdminDrawerParamList; label: string; icon: LucideIcon; badge?: 'supportNew' };
+type Item = { key: keyof AdminDrawerParamList; label: string; icon: LucideIcon };
 type Section = { title: string; items: Item[] };
+
+function AdminHeaderTitle() {
+  return (
+    <View pointerEvents="none" style={styles.headerTitleWrap}>
+      <Image source={ADMIN_HEADER_LOGO} resizeMode="contain" style={styles.headerLogo} />
+    </View>
+  );
+}
 
 /* ─── Single navigation row ─── */
 function DrawerNavItem({
   label,
   Icon,
   active,
-  badgeCount,
   onPress,
 }: {
   label: string;
   Icon: LucideIcon;
   active: boolean;
-  badgeCount?: number;
   onPress: () => void;
 }) {
   return (
@@ -110,18 +113,14 @@ function DrawerNavItem({
           </Text>
         </View>
       </View>
-
-      {/* Badge */}
-      {!!badgeCount && badgeCount > 0 && <Badge count={badgeCount} />}
     </Pressable>
   );
 }
 
 /* ─── Section group ─── */
-function SectionGroup({ section, activeKey, supportNewCount, navigate }: {
+function SectionGroup({ section, activeKey, navigate }: {
   section: Section;
   activeKey: string;
-  supportNewCount: number;
   navigate: (key: string) => void;
 }) {
   return (
@@ -137,7 +136,6 @@ function SectionGroup({ section, activeKey, supportNewCount, navigate }: {
             label={it.label}
             Icon={it.icon}
             active={activeKey === it.key}
-            badgeCount={it.badge === 'supportNew' ? supportNewCount : undefined}
             onPress={() => navigate(it.key as string)}
           />
         ))}
@@ -150,28 +148,6 @@ function SectionGroup({ section, activeKey, supportNewCount, navigate }: {
 function AdminDrawerContent(props: DrawerContentComponentProps) {
   const { signOut, user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [supportNewCount, setSupportNewCount] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    const refresh = async () => {
-      const { count, error } = await supabase
-        .from('support_tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_new', true);
-      if (!alive) return;
-      if (!error) setSupportNewCount(count ?? 0);
-    };
-    refresh();
-    const channel = supabase
-      .channel('support_tickets_badge')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, refresh)
-      .subscribe();
-    return () => {
-      alive = false;
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   const sections: Section[] = useMemo(
     () => [
@@ -196,7 +172,6 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
       {
         title: 'תמיכה ודוחות',
         items: [
-          { key: 'Support', label: 'שירות לקוחות', icon: Headset, badge: 'supportNew' },
           { key: 'Reports', label: 'דוחות', icon: FileBarChart2 },
         ],
       },
@@ -258,7 +233,6 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
             key={section.title}
             section={section}
             activeKey={String(activeKey)}
-            supportNewCount={supportNewCount}
             navigate={(key) => props.navigation.navigate(key as any)}
           />
         ))}
@@ -295,6 +269,9 @@ export function AdminDrawer() {
         headerStyle: { backgroundColor: '#FFFFFF' },
         headerTintColor: '#0F172A',
         headerTitleStyle: { fontWeight: '900' },
+        headerTitle: () => <AdminHeaderTitle />,
+        headerTitleAlign: 'center',
+        headerTitleContainerStyle: styles.headerTitleContainer,
         sceneStyle: { backgroundColor: '#F6F7FB' },
         drawerPosition: 'right',
         drawerType: 'front',
@@ -308,7 +285,6 @@ export function AdminDrawer() {
       <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה', headerShown: false }} component={WorkTemplatesStack} />
       <Drawer.Screen name="WorkSchedule" options={{ title: 'קווי עבודה' }} component={WorkScheduleScreen} />
       <Drawer.Screen name="DailySchedule" options={{ title: 'לוז יומי' }} component={DailyScheduleScreen} />
-      <Drawer.Screen name="Support" options={{ title: 'שירות לקוחות' }} component={SupportScreen} />
       <Drawer.Screen name="Reports" options={{ title: 'דוחות' }} component={ReportsScreen} />
       <Drawer.Screen name="DevicesAndScents" options={{ title: 'מכשירים וניחוחות' }} component={DevicesAndScentsScreen} />
       <Drawer.Screen name="StoreManagement" options={{ title: 'ניהול חנות' }} component={StoreManagementScreen} />
@@ -320,6 +296,22 @@ export function AdminDrawer() {
 const styles = StyleSheet.create({
   scroll: { backgroundColor: D.bg },
   scrollContent: {},
+
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  headerTitleWrap: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLogo: {
+    width: 176,
+    height: 40,
+  },
 
   /* Header */
   header: {

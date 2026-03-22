@@ -90,7 +90,6 @@ function emptyUser(): Partial<UserRow> {
 
 export function UsersScreen() {
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [mutating, setMutating] = useState(false);
@@ -118,16 +117,13 @@ export function UsersScreen() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return users.filter((u) => {
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
-      if (!q) return true;
-      return (
-        u.name?.toLowerCase().includes(q) ||
-        u.phone?.toLowerCase().includes(q) ||
-        u.role?.toLowerCase().includes(q)
-      );
-    });
-  }, [users, roleFilter, query]);
+    if (!q) return users;
+    return users.filter((u) =>
+      u.name?.toLowerCase().includes(q) ||
+      u.phone?.toLowerCase().includes(q) ||
+      u.role?.toLowerCase().includes(q)
+    );
+  }, [users, query]);
 
   const stats = useMemo(() => {
     const admin = users.filter((u) => u.role === 'admin').length;
@@ -453,42 +449,34 @@ export function UsersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchUsers} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
-            <Card style={[styles.headerCard, styles.shadowMd]}>
-              <View style={styles.headerTopRow}>
-                <View style={styles.headerActionsRow}>
-                  <Pressable
-                    onPress={fetchUsers}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="רענון"
-                    style={({ pressed }) => [styles.iconBtn, pressed && { transform: [{ scale: 0.98 }] }, refreshing && { opacity: 0.6 }]}
-                    disabled={refreshing}
-                  >
-                    <RefreshCw size={18} color={colors.text} />
-                  </Pressable>
+            <View style={[styles.hero, styles.shadowMd]}>
+              <View style={styles.heroTopRow}>
+                <View style={styles.heroActionsRow}>
                   <Pressable
                     onPress={(e) => openCreate({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     hitSlop={10}
                     accessibilityRole="button"
                     accessibilityLabel="הוסף משתמש"
-                    style={({ pressed }) => [styles.primaryIconBtn, pressed && { transform: [{ scale: 0.98 }] }]}
+                    style={({ pressed }) => [styles.fabBtn, pressed && { opacity: 0.9 }]}
                   >
-                    <Plus size={18} color={colors.primary} />
+                    <Plus size={17} color="#fff" />
+                  </Pressable>
+                  <Pressable
+                    onPress={fetchUsers}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="רענון"
+                    style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }, refreshing && { opacity: 0.5 }]}
+                    disabled={refreshing}
+                  >
+                    <RefreshCw size={17} color={IOS.muted} />
                   </Pressable>
                 </View>
 
                 <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={styles.title}>משתמשים</Text>
-                  <Text style={styles.subtitle}>
-                    {filtered.length} {filtered.length === 1 ? 'משתמש' : 'משתמשים'} · סה״כ {stats.total}
-                  </Text>
+                  <Text style={styles.heroTitle}>ניהול משתמשים</Text>
+                  <Text style={styles.heroSubtitle}>{filtered.length} תוצאות · סה״כ {stats.total}</Text>
                 </View>
-              </View>
-
-              <View style={styles.statsRow}>
-                <StatPill label="admin" value={stats.admin} bg="#EEF2FF" border="#C7D2FE" fg="#3730A3" />
-                <StatPill label="worker" value={stats.worker} bg="#ECFDF5" border="#A7F3D0" fg="#047857" />
-                <StatPill label="customer" value={stats.customer} bg="#FFFBEB" border="#FDE68A" fg="#B45309" />
               </View>
 
               <View style={styles.searchWrap}>
@@ -496,7 +484,7 @@ export function UsersScreen() {
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="חיפוש לפי שם / טלפון / role"
+                  placeholder="חיפוש לפי שם, טלפון או תפקיד"
                   placeholderTextColor="rgba(60,60,67,0.55)"
                   style={styles.searchInput}
                   autoCorrect={false}
@@ -511,36 +499,17 @@ export function UsersScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="נקה חיפוש"
                   >
-                    <X size={16} color="rgba(60,60,67,0.82)" />
+                    <X size={14} color="#fff" />
                   </Pressable>
                 )}
               </View>
 
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.filterLabel}>פילטר role</Text>
-                <View style={styles.segmented}>
-                  {[
-                    { value: 'all' as const, label: 'הכל' },
-                    { value: 'admin' as const, label: 'admin' },
-                    { value: 'worker' as const, label: 'worker' },
-                    { value: 'customer' as const, label: 'customer' },
-                  ].map((opt) => {
-                    const active = roleFilter === opt.value;
-                    return (
-                      <Pressable
-                        key={opt.value}
-                        onPress={() => setRoleFilter(opt.value as any)}
-                        style={[styles.segmentItem, active && styles.segmentItemActive]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`פילטר ${opt.label}`}
-                      >
-                        <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{opt.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+              <View style={styles.statsRow}>
+                <StatPill label="מנהלים" value={stats.admin} />
+                <StatPill label="עובדים" value={stats.worker} />
+                <StatPill label="לקוחות" value={stats.customer} />
               </View>
-            </Card>
+            </View>
 
             {refreshing && !users.length ? (
               <Card style={[styles.loadingCard, styles.shadowSm]}>
@@ -556,74 +525,54 @@ export function UsersScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <Card style={[styles.userCard, styles.shadowSm]}>
+          <View style={[styles.userCell, styles.shadowSm]}>
             <View style={styles.userRow}>
               <View style={styles.actionsCol}>
                 {item.role === 'customer' ? (
                   <Pressable
                     onPressIn={(e) => setPointsAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     onPress={() => fetchServicePoints(item)}
-                    style={styles.actionChip}
+                    hitSlop={8}
+                    style={styles.actionIconBtn}
                     accessibilityRole="button"
                     accessibilityLabel="נקודות שירות"
                   >
-                    <Eye size={16} color={colors.text} />
-                    <Text style={styles.actionChipText}>נקודות</Text>
+                    <Eye size={18} color="#8E8E93" />
                   </Pressable>
-                ) : (
-                  <View />
-                )}
+                ) : null}
 
-                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                  <Pressable
-                    onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
-                    hitSlop={10}
-                    style={styles.smallIconBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="עריכה"
-                  >
-                    <Pencil size={18} color={colors.primary} />
-                  </Pressable>
+                <Pressable
+                  onPress={() => cascadeDelete(item)}
+                  hitSlop={8}
+                  disabled={mutating}
+                  style={[styles.actionIconBtn, mutating && { opacity: 0.4 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="מחיקה"
+                >
+                  <Trash2 size={18} color="#FF3B30" />
+                </Pressable>
 
-                  <Pressable
-                    onPress={() => cascadeDelete(item)}
-                    hitSlop={10}
-                    disabled={mutating}
-                    style={[styles.smallIconBtn, mutating && { opacity: 0.55 }]}
-                    accessibilityRole="button"
-                    accessibilityLabel="מחיקה"
-                  >
-                    <Trash2 size={18} color={colors.danger} />
-                  </Pressable>
-                </View>
+                <Pressable
+                  onPress={(e) => openEdit(item, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+                  hitSlop={8}
+                  style={styles.actionIconBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="עריכה"
+                >
+                  <Pencil size={18} color="#007AFF" />
+                </Pressable>
               </View>
 
               <View style={styles.userMain}>
-                <Avatar size={44} uri={item.avatar_url ?? null} name={item.name} />
+                <Avatar size={42} uri={item.avatar_url ?? null} name={item.name} />
                 <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <Text style={styles.userName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <RoleBadge role={item.role} />
-                  </View>
-                  <Text style={styles.userMeta} numberOfLines={1}>
-                    {item.phone}
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {item.name}
                   </Text>
-                  {item.role === 'customer' ? (
-                    <Text style={styles.userMeta} numberOfLines={1}>
-                      {formatIls(item.price ?? 0, item.price == null)}
-                    </Text>
-                  ) : null}
-                  {!!item.address?.trim() ? (
-                    <Text style={[styles.userMeta, { marginTop: 4 }]} numberOfLines={1}>
-                      {item.address}
-                    </Text>
-                  ) : null}
                 </View>
               </View>
             </View>
-          </Card>
+          </View>
         )}
         ListEmptyComponent={
           !refreshing ? (
@@ -910,26 +859,11 @@ function formatIls(amount: number, missing?: boolean) {
   }
 }
 
-function RoleBadge({ role }: { role: UserRole }) {
-  const cfg = roleBadge(role);
+function StatPill({ label, value }: { label: string; value: number }) {
   return (
-    <View style={[styles.roleBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-      <Text style={[styles.roleBadgeText, { color: cfg.fg }]}>{role}</Text>
-    </View>
-  );
-}
-
-function roleBadge(role: UserRole) {
-  if (role === 'admin') return { bg: '#EEF2FF', border: '#C7D2FE', fg: '#3730A3' };
-  if (role === 'worker') return { bg: '#ECFDF5', border: '#A7F3D0', fg: '#047857' };
-  return { bg: '#F1F5F9', border: '#CBD5E1', fg: '#0F172A' };
-}
-
-function StatPill({ label, value, bg, border, fg }: { label: string; value: number; bg: string; border: string; fg: string }) {
-  return (
-    <View style={[styles.statPill, { backgroundColor: bg, borderColor: border }]}>
-      <Text style={[styles.statValue, { color: fg }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: fg }]}>{label}</Text>
+    <View style={styles.statPill}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
@@ -995,156 +929,139 @@ function PointEditor({
   );
 }
 
+// Apple HIG color constants
+const IOS = {
+  bg: '#F2F2F7',
+  card: '#FFFFFF',
+  text: '#1C1C1E',
+  muted: '#8E8E93',
+  blue: '#007AFF',
+  red: '#FF3B30',
+  separator: 'rgba(60,60,67,0.10)',
+  segmentedBg: 'rgba(118,118,128,0.12)',
+} as const;
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16, paddingTop: 12 },
+  screen: { flex: 1, backgroundColor: IOS.bg, paddingTop: 12 },
   list: { flex: 1 },
-  listContent: { gap: 10, paddingBottom: 24 },
+  listContent: { gap: 8, paddingBottom: 32, paddingHorizontal: 16 },
 
   shadowSm: {
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   shadowMd: {
     shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
-  },
-
-  headerCard: { borderRadius: 22, padding: 14, borderColor: 'rgba(60,60,67,0.12)' },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  headerActionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  title: { color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'right' },
-  subtitle: { color: colors.muted, marginTop: 3, textAlign: 'right', fontWeight: '800' },
-
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.elevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  primaryIconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
 
-  statsRow: { marginTop: 12, flexDirection: 'row', gap: 10 },
+  hero: {
+    borderRadius: 26,
+    padding: 16,
+    backgroundColor: IOS.card,
+    borderWidth: 1,
+    borderColor: IOS.separator,
+  },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  heroActionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  heroTitle: { color: IOS.text, fontSize: 26, fontWeight: '750', textAlign: 'right' },
+  heroSubtitle: { color: IOS.muted, marginTop: 4, textAlign: 'right', fontWeight: '500', fontSize: 13 },
+
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: IOS.segmentedBg,
+  },
+  fabBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: IOS.blue,
+    shadowColor: IOS.blue,
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+
+  statsRow: { marginTop: 14, flexDirection: 'row', gap: 8 },
   statPill: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
+    borderColor: IOS.separator,
+    backgroundColor: IOS.card,
     paddingVertical: 12,
     paddingHorizontal: 12,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  statValue: { fontWeight: '900', fontSize: 20 },
-  statLabel: { fontWeight: '900' },
+  statValue: { fontWeight: '800', fontSize: 18, color: IOS.text },
+  statLabel: { fontWeight: '600', fontSize: 12, color: IOS.muted },
 
   searchWrap: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(118,118,128,0.12)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(60,60,67,0.10)',
-  },
-  searchInput: { flex: 1, color: colors.text, fontSize: 16, textAlign: 'right', paddingVertical: 0 },
-  clearBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(60,60,67,0.18)',
-  },
-
-  filterLabel: { color: colors.muted, fontWeight: '800', textAlign: 'right', marginBottom: 6 },
-  segmented: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(118,118,128,0.12)',
-    borderRadius: 14,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(60,60,67,0.10)',
-  },
-  segmentItem: { flex: 1, borderRadius: 12, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
-  segmentItemActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
-  },
-  segmentText: { color: 'rgba(60,60,67,0.78)', fontWeight: '900' },
-  segmentTextActive: { color: colors.text },
-
-  loadingCard: { borderRadius: 20 },
-  emptyCard: { borderRadius: 20, marginTop: 8 },
-
-  userCard: { borderRadius: 20 },
-  userRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  userMain: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
-  userName: { color: colors.text, fontWeight: '900', textAlign: 'right', flexShrink: 1 },
-  userMeta: { color: colors.muted, marginTop: 4, textAlign: 'right' },
-
-  actionsCol: { alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
-  actionChip: {
+    marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 7,
+    backgroundColor: IOS.segmentedBg,
+    borderRadius: 10,
     paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.bg,
-    alignSelf: 'flex-start',
+    paddingVertical: 10,
   },
-  actionChipText: { color: colors.text, fontWeight: '900' },
-  smallIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+  searchInput: { flex: 1, color: IOS.text, fontSize: 15, textAlign: 'right', paddingVertical: 0 },
+  clearBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: IOS.muted,
   },
 
-  roleBadge: {
+  loadingCard: { borderRadius: 16, borderWidth: 0 },
+  emptyCard: { borderRadius: 16, marginTop: 4, borderWidth: 0 },
+
+  userCell: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: IOS.card,
+    borderWidth: 1,
+    borderColor: IOS.separator,
+  },
+  userRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 14 },
+  userMain: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  userName: { color: IOS.text, fontWeight: '600', fontSize: 17, textAlign: 'right', flexShrink: 1 },
+  userMeta: { color: IOS.muted, fontSize: 13, textAlign: 'right' },
+  rolePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    alignSelf: 'flex-start',
+    borderColor: IOS.separator,
+    backgroundColor: IOS.segmentedBg,
   },
-  roleBadgeText: { fontWeight: '900', fontSize: 12 },
+  rolePillText: { color: IOS.text, fontWeight: '700', fontSize: 12 },
+
+  actionsCol: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionIconBtn: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 

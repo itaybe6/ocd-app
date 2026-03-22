@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableWithoutFeedback,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -25,23 +24,35 @@ import Animated, {
   useAnimatedKeyboard,
   useAnimatedStyle,
 } from 'react-native-reanimated';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalDialog } from '../../components/ModalDialog';
 import { ModalSheet } from '../../components/ModalSheet';
-import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import { useLoading } from '../../state/LoadingContext';
+
+// ─── iOS-style design tokens ───────────────────────────────────────────────
+const ios = {
+  bg: '#F2F2F7',
+  card: '#FFFFFF',
+  text: '#1C1C1E',
+  secondary: '#8E8E93',
+  separator: '#E5E5EA',
+  danger: '#FF3B30',
+  dangerBg: '#FFF1F0',
+  editBg: '#F2F2F7',
+  primaryAction: '#1C1C1E',
+  labelBg: '#EBEBF0',
+};
 
 type Device = { id: string; name: string; refill_amount: number; created_at?: string };
 type Scent = { id: string; name: string; created_at?: string };
 
 const AnimatedEntypo = Animated.createAnimatedComponent(Entypo);
-
 const { width } = Dimensions.get('window');
-const _defaultDuration = 500;
+const _defaultDuration = 400;
 
+// ─── FAB (Floating Edit Panel) ──────────────────────────────────────────────
 export type FabButtonProps = {
   onPress: () => void;
   isOpen: boolean;
@@ -59,21 +70,15 @@ export function FabButton({
   children,
   duration = _defaultDuration,
   openedSize = width * 0.9,
-  closedSize = 64,
+  closedSize = 56,
 }: FabButtonProps) {
-  const spacing = closedSize * 0.2;
-  const closeIconSize = closedSize * 0.3;
-  const openIconSize = closedSize * 0.45;
+  const spacing = 16;
   const { height: keyboardHeight, state } = useAnimatedKeyboard();
 
-  const keyboardHeightStyle = useAnimatedStyle(() => {
-    return {
-      marginBottom:
-        state.value === KeyboardState.OPEN
-          ? keyboardHeight.value - 80 + spacing
-          : 0,
-    };
-  });
+  const keyboardHeightStyle = useAnimatedStyle(() => ({
+    marginBottom:
+      state.value === KeyboardState.OPEN ? keyboardHeight.value - 80 + spacing : 0,
+  }));
 
   return (
     <Animated.View
@@ -83,8 +88,7 @@ export function FabButton({
         {
           width: isOpen ? openedSize : closedSize,
           height: isOpen ? 'auto' : closedSize,
-          borderRadius: closedSize / 2,
-          padding: spacing,
+          borderRadius: isOpen ? 20 : closedSize / 2,
         },
         keyboardHeightStyle,
       ]}
@@ -108,8 +112,8 @@ export function FabButton({
             <AnimatedEntypo
               key="close"
               name="cross"
-              size={closeIconSize}
-              color={colors.text}
+              size={18}
+              color={ios.secondary}
               entering={FadeIn.duration(duration)}
               exiting={FadeOut.duration(duration)}
             />
@@ -117,8 +121,8 @@ export function FabButton({
             <AnimatedEntypo
               key="open"
               name="pencil"
-              size={openIconSize}
-              color={colors.text}
+              size={20}
+              color="#FFFFFF"
               entering={FadeIn.duration(duration)}
               exiting={FadeOut.duration(duration)}
             />
@@ -129,12 +133,12 @@ export function FabButton({
         <Animated.View
           entering={FadeInDown.duration(duration)}
           exiting={FadeOutDown.duration(duration)}
-          style={{ flex: 1, gap: spacing * 2, padding: spacing }}
+          style={{ flex: 1, padding: spacing + 4 }}
         >
           <View style={fabStyles.header}>
             <Text style={fabStyles.heading}>עריכת סוג מכשיר</Text>
           </View>
-          <View style={[fabStyles.content, { gap: spacing * 2 }]}>{children}</View>
+          <View style={{ gap: spacing, marginTop: spacing }}>{children}</View>
         </Animated.View>
       )}
     </Animated.View>
@@ -143,30 +147,30 @@ export function FabButton({
 
 const fabStyles = StyleSheet.create({
   heading: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    color: ios.text,
     textAlign: 'right',
   },
   panel: {
     position: 'absolute',
     overflow: 'hidden',
-    bottom: 18,
-    right: 18,
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
+    bottom: 20,
+    right: 20,
+    backgroundColor: ios.card,
+    borderColor: ios.separator,
+    borderWidth: 0.5,
     zIndex: 9999,
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  content: { flex: 1, paddingTop: 0 },
   header: { justifyContent: 'center' },
 });
 
+// ─── Main Screen ─────────────────────────────────────────────────────────────
 export function DevicesAndScentsScreen() {
   const { setIsLoading } = useLoading();
   const [devices, setDevices] = useState<Device[]>([]);
@@ -186,6 +190,7 @@ export function DevicesAndScentsScreen() {
 
   const [editDevice, setEditDevice] = useState<Device | null>(null);
   const [editDeviceName, setEditDeviceName] = useState('');
+  const [editDeviceRefill, setEditDeviceRefill] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const editCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -343,13 +348,11 @@ export function DevicesAndScentsScreen() {
       closeEditScent();
       return;
     }
-
     const exists = scents.some((x) => x.id !== s.id && x.name.toLocaleLowerCase() === nextName.toLocaleLowerCase());
     if (exists) {
       Toast.show({ type: 'error', text1: 'קיים כבר ניחוח בשם הזה' });
       return;
     }
-
     try {
       setIsLoading(true);
       const { error } = await supabase.from('scents').update({ name: nextName }).eq('id', s.id);
@@ -371,6 +374,7 @@ export function DevicesAndScentsScreen() {
     }
     setEditDevice(d);
     setEditDeviceName(d.name);
+    setEditDeviceRefill(String(d.refill_amount));
     setIsEditOpen(true);
   };
 
@@ -387,34 +391,40 @@ export function DevicesAndScentsScreen() {
     const d = editDevice;
     if (!d) return;
     const nextName = editDeviceName.trim();
+    const nextRefill = Number(editDeviceRefill);
     if (!nextName) {
       Toast.show({ type: 'error', text1: 'חסר שם סוג מכשיר' });
       return;
     }
-    if (nextName === d.name) {
+    if (!nextRefill) {
+      Toast.show({ type: 'error', text1: 'כמות מילוי חייבת להיות מספר' });
+      return;
+    }
+    const nameUnchanged = nextName === d.name;
+    const refillUnchanged = nextRefill === d.refill_amount;
+    if (nameUnchanged && refillUnchanged) {
       closeEditDevice();
       return;
     }
-
-    const exists = devices.some((x) => x.id !== d.id && x.name.toLocaleLowerCase() === nextName.toLocaleLowerCase());
-    if (exists) {
-      Toast.show({ type: 'error', text1: 'קיים כבר סוג מכשיר בשם הזה' });
-      return;
+    if (!nameUnchanged) {
+      const exists = devices.some((x) => x.id !== d.id && x.name.toLocaleLowerCase() === nextName.toLocaleLowerCase());
+      if (exists) {
+        Toast.show({ type: 'error', text1: 'קיים כבר סוג מכשיר בשם הזה' });
+        return;
+      }
     }
-
     const oldName = d.name;
     try {
       setIsLoading(true);
-
-      const { error: devErr } = await supabase.from('devices').update({ name: nextName }).eq('id', d.id);
+      const { error: devErr } = await supabase.from('devices').update({ name: nextName, refill_amount: nextRefill }).eq('id', d.id);
       if (devErr) throw devErr;
-
-      const { error: spErr } = await supabase.from('service_points').update({ device_type: nextName }).eq('device_type', oldName);
-      if (spErr) {
-        await supabase.from('devices').update({ name: oldName }).eq('id', d.id);
-        throw spErr;
+      if (!nameUnchanged) {
+        const { error: spErr } = await supabase.from('service_points').update({ device_type: nextName }).eq('device_type', oldName);
+        if (spErr) {
+          await supabase.from('devices').update({ name: oldName }).eq('id', d.id);
+          throw spErr;
+        }
       }
-
       Toast.show({ type: 'success', text1: 'עודכן סוג מכשיר' });
       closeEditDevice();
       await fetchAll();
@@ -428,134 +438,155 @@ export function DevicesAndScentsScreen() {
   const listHeader = useMemo(() => {
     const isSearching = !!query.trim();
     return (
-      <View style={{ gap: 10, marginTop: 4 }}>
-        <View style={styles.actionRow}>
-          <View style={styles.searchWrap}>
-            <Entypo name="magnifying-glass" size={16} color="rgba(100,116,139,0.8)" />
+      <View style={{ gap: 20, marginTop: 4 }}>
+        {/* Page Title */}
+        <View style={s.pageHeader}>
+          <Text style={s.pageKicker}>ניהול</Text>
+          <Text style={s.pageTitle}>מכשירים וניחוחות</Text>
+        </View>
+
+        {/* Search + Add row */}
+        <View style={s.searchRow}>
+          <View style={s.searchWrap}>
+            <Entypo name="magnifying-glass" size={16} color={ios.secondary} style={{ marginRight: 4 }} />
             <Input
               label={undefined}
               value={query}
               onChangeText={setQuery}
               placeholder="חיפוש…"
-              style={styles.searchInput}
+              style={s.searchInput}
             />
-            {isSearching ? (
-              <Pressable
-                hitSlop={10}
-                onPress={() => setQuery('')}
-                style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Entypo name="cross" size={16} color={colors.muted} />
+            {isSearching && (
+              <Pressable hitSlop={10} onPress={() => setQuery('')} style={({ pressed }) => [s.clearBtn, pressed && { opacity: 0.6 }]}>
+                <Entypo name="cross" size={14} color={ios.secondary} />
               </Pressable>
-            ) : null}
+            )}
           </View>
-
           <Pressable
             accessibilityRole="button"
-            onPress={() => {
-              setCreateType('device');
-              setCreateOpen(true);
-            }}
+            onPress={() => { setCreateType('device'); setCreateOpen(true); }}
             hitSlop={8}
           >
             {({ pressed }) => (
-              <View style={[styles.plusBtn, pressed && { opacity: 0.82, transform: [{ scale: 0.96 }] }]}>
-                <Entypo name="plus" size={18} color="#FFFFFF" />
+              <View style={[s.addBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.95 }] }]}>
+                <Entypo name="plus" size={20} color="#FFFFFF" />
               </View>
             )}
           </Pressable>
         </View>
 
-        <View style={styles.sectionTitleRow}>
-          <Text style={styles.sectionTitle}>מכשירים</Text>
-          {isSearching ? <Text style={styles.sectionMeta}>{filteredDevices.length} תוצאות</Text> : null}
+        {/* Devices section header */}
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionLabel}>מכשירים</Text>
+          <View style={s.countBadge}>
+            <Text style={s.countText}>{filteredDevices.length}</Text>
+          </View>
         </View>
       </View>
     );
   }, [filteredDevices.length, query]);
 
+  const renderDeviceCard = ({ item }: { item: Device }) => (
+    <View style={s.card}>
+      <View style={s.cardInner}>
+        {/* Right: content */}
+        <View style={s.cardContent}>
+          <Text style={s.cardTitle}>{item.name}</Text>
+          <Text style={s.cardMeta}>מילוי: {item.refill_amount}</Text>
+        </View>
+
+        {/* Left: action buttons */}
+        <View style={s.cardActions}>
+          <Pressable
+            hitSlop={8}
+            onPress={() => requestDeleteDevice(item)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <View style={[s.iconBtn, s.iconBtnDanger]}>
+              <Entypo name="trash" size={16} color={ios.danger} />
+            </View>
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            onPress={() => openEditDevice(item)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <View style={[s.iconBtn, s.iconBtnEdit]}>
+              <Entypo name="pencil" size={16} color={ios.text} />
+            </View>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: ios.bg }}>
       <FlatList
         data={filteredDevices}
         keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 10, paddingBottom: 24, paddingHorizontal: 16, paddingTop: 12 }}
+        contentContainerStyle={s.listContent}
         refreshing={loading}
         onRefresh={fetchAll}
         ListHeaderComponent={listHeader}
-        renderItem={({ item }) => (
-          <Card>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Pressable
-                  hitSlop={8}
-                  onPress={() => requestDeleteDevice(item)}
-                  style={({ pressed }) => [styles.iconBtn, styles.iconBtnDanger, pressed && { opacity: 0.7 }]}
-                >
-                  <Entypo name="trash" size={16} color={colors.danger} />
-                </Pressable>
-                <Pressable
-                  hitSlop={8}
-                  onPress={() => openEditDevice(item)}
-                  style={({ pressed }) => [styles.iconBtn, styles.iconBtnEdit, pressed && { opacity: 0.7 }]}
-                >
-                  <Entypo name="pencil" size={16} color={colors.primary} />
-                </Pressable>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{item.name}</Text>
-                <Text style={{ color: colors.muted, marginTop: 4, textAlign: 'right' }}>מילוי: {item.refill_amount}</Text>
-              </View>
-            </View>
-          </Card>
-        )}
+        renderItem={renderDeviceCard}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListEmptyComponent={
-          <Text style={{ color: colors.muted, textAlign: 'right' }}>
+          <Text style={s.emptyText}>
             {query.trim() ? 'לא נמצאו מכשירים.' : 'אין מכשירים.'}
           </Text>
         }
         ListFooterComponent={
-          <View style={{ gap: 10, marginTop: 10 }}>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>ניחוחות</Text>
-              {query.trim() ? <Text style={styles.sectionMeta}>{filteredScents.length} תוצאות</Text> : null}
+          <View style={{ gap: 8, marginTop: 24 }}>
+            {/* Scents section header */}
+            <View style={[s.sectionHeader, { marginBottom: 4 }]}>
+              <Text style={s.sectionLabel}>ניחוחות</Text>
+              <View style={s.countBadge}>
+                <Text style={s.countText}>{filteredScents.length}</Text>
+              </View>
             </View>
 
             {filteredScents.length === 0 ? (
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>
+              <Text style={s.emptyText}>
                 {query.trim() ? 'לא נמצאו ניחוחות.' : 'אין ניחוחות.'}
               </Text>
             ) : (
               filteredScents.map((item) => (
-                <Card key={item.id}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View key={item.id} style={s.card}>
+                  <View style={s.cardInner}>
+                    <Text style={[s.cardTitle, { flex: 1, textAlign: 'right' }]}>{item.name}</Text>
+                    <View style={s.cardActions}>
                       <Pressable
                         hitSlop={8}
                         onPress={() => deleteScent(item.id)}
-                        style={({ pressed }) => [styles.iconBtn, styles.iconBtnDanger, pressed && { opacity: 0.7 }]}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
                       >
-                        <Entypo name="trash" size={16} color={colors.danger} />
+                        <View style={[s.iconBtn, s.iconBtnDanger]}>
+                          <Entypo name="trash" size={16} color={ios.danger} />
+                        </View>
                       </Pressable>
                       <Pressable
                         hitSlop={8}
                         onPress={() => openEditScent(item)}
-                        style={({ pressed }) => [styles.iconBtn, styles.iconBtnEdit, pressed && { opacity: 0.7 }]}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
                       >
-                        <Entypo name="pencil" size={16} color={colors.primary} />
+                        <View style={[s.iconBtn, s.iconBtnEdit]}>
+                          <Entypo name="pencil" size={16} color={ios.text} />
+                        </View>
                       </Pressable>
                     </View>
-                    <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>{item.name}</Text>
                   </View>
-                </Card>
+                </View>
               ))
             )}
+            <View style={{ height: 100 }} />
           </View>
         }
       />
 
-      <ModalDialog visible={createOpen} onClose={() => setCreateOpen(false)} containerStyle={styles.createDialog}>
+      {/* ── Create Modal ──────────────────────────────────────────────────── */}
+      <ModalDialog visible={createOpen} onClose={() => setCreateOpen(false)} containerStyle={s.createDialog}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
@@ -563,104 +594,89 @@ export function DevicesAndScentsScreen() {
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.createScrollContent}
+            contentContainerStyle={s.createScrollContent}
           >
-            <View style={{ gap: 12 }}>
-          <View style={styles.createHeaderRow}>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
-              <View style={styles.createIconBubble}>
-                <Entypo name="plus" size={16} color="#fff" />
-              </View>
-              <View style={{ gap: 2 }}>
-                <Text style={styles.createTitle}>הוספה</Text>
-                <Text style={styles.createSubtitle}>בחר סוג ומלא פרטים</Text>
-              </View>
-            </View>
-
-            <Pressable
-              onPress={() => setCreateOpen(false)}
-              hitSlop={8}
-              style={({ pressed }) => [styles.closeIconBtn, pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] }]}
-            >
-              <Entypo name="cross" size={18} color={colors.muted} />
-            </Pressable>
-          </View>
-
-          <View style={styles.segmented}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setCreateType('device')}
-              style={styles.segmentedItemWrap}
-            >
-              {({ pressed }) => (
-                <View
-                  style={[
-                    styles.segmentedItem,
-                    createType === 'device' ? styles.segmentedItemActive : styles.segmentedItemInactive,
-                    pressed && styles.segmentedItemPressed,
-                  ]}
-                >
-                  <Text style={[styles.segmentedText, createType === 'device' && styles.segmentedTextActive]}>
-                    מכשיר
-                  </Text>
+            <View style={{ gap: 16 }}>
+              {/* Header */}
+              <View style={s.createHeaderRow}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                  <View style={s.createIconBubble}>
+                    <Entypo name="plus" size={16} color="#fff" />
+                  </View>
+                  <View style={{ gap: 2 }}>
+                    <Text style={s.createTitle}>הוספה</Text>
+                    <Text style={s.createSubtitle}>בחר סוג ומלא פרטים</Text>
+                  </View>
                 </View>
-              )}
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setCreateType('scent')}
-              style={styles.segmentedItemWrap}
-            >
-              {({ pressed }) => (
-                <View
-                  style={[
-                    styles.segmentedItem,
-                    createType === 'scent' ? styles.segmentedItemActive : styles.segmentedItemInactive,
-                    pressed && styles.segmentedItemPressed,
-                  ]}
+                <Pressable
+                  onPress={() => setCreateOpen(false)}
+                  hitSlop={8}
+                  style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.6 }]}
                 >
-                  <Text style={[styles.segmentedText, createType === 'scent' && styles.segmentedTextActive]}>ניחוח</Text>
-                </View>
-              )}
-            </Pressable>
-          </View>
+                  <Entypo name="cross" size={16} color={ios.secondary} />
+                </Pressable>
+              </View>
 
-          <View style={styles.createFormWrap}>
-            {createType === 'device' ? (
-              <View style={{ gap: 10 }}>
-                <Text style={styles.createFormTitle}>פרטי מכשיר</Text>
-                <Input label="שם מכשיר" value={deviceName} onChangeText={setDeviceName} placeholder="לדוגמה: A100" />
-                <Input
-                  label="כמות מילוי"
-                  value={deviceRefill}
-                  onChangeText={setDeviceRefill}
-                  keyboardType="numeric"
-                  placeholder="100"
-                />
-                <Button
-                  title="הוסף מכשיר"
-                  onPress={addDevice}
-                  disabled={!deviceName.trim() || !Number(deviceRefill)}
-                />
+              {/* Segmented control */}
+              <View style={s.segmented}>
+                {(['device', 'scent'] as const).map((type) => (
+                  <Pressable
+                    key={type}
+                    accessibilityRole="button"
+                    onPress={() => setCreateType(type)}
+                    style={{ flex: 1 }}
+                  >
+                    {({ pressed }) => (
+                      <View
+                        style={[
+                          s.segItem,
+                          createType === type && s.segItemActive,
+                          pressed && { opacity: 0.8 },
+                        ]}
+                      >
+                        <Text style={[s.segText, createType === type && s.segTextActive]}>
+                          {type === 'device' ? 'מכשיר' : 'ניחוח'}
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                ))}
               </View>
-            ) : (
-              <View style={{ gap: 10 }}>
-                <Text style={styles.createFormTitle}>פרטי ניחוח</Text>
-                <Input label="שם ניחוח" value={scentName} onChangeText={setScentName} placeholder="לדוגמה: Ocean" />
-                <Button title="הוסף ניחוח" onPress={addScent} disabled={!scentName.trim()} />
+
+              {/* Form */}
+              <View style={s.formWrap}>
+                {createType === 'device' ? (
+                  <View style={{ gap: 12 }}>
+                    <Text style={s.formSectionTitle}>פרטי מכשיר</Text>
+                    <Input label="שם מכשיר" value={deviceName} onChangeText={setDeviceName} placeholder="לדוגמה: A100" />
+                    <Input
+                      label="כמות מילוי"
+                      value={deviceRefill}
+                      onChangeText={setDeviceRefill}
+                      keyboardType="numeric"
+                      placeholder="100"
+                    />
+                    <Button title="הוסף מכשיר" onPress={addDevice} disabled={!deviceName.trim() || !Number(deviceRefill)} />
+                  </View>
+                ) : (
+                  <View style={{ gap: 12 }}>
+                    <Text style={s.formSectionTitle}>פרטי ניחוח</Text>
+                    <Input label="שם ניחוח" value={scentName} onChangeText={setScentName} placeholder="לדוגמה: Ocean" />
+                    <Button title="הוסף ניחוח" onPress={addScent} disabled={!scentName.trim()} />
+                  </View>
+                )}
               </View>
-            )}
-          </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </ModalDialog>
 
+      {/* ── Delete Device Sheet ────────────────────────────────────────────── */}
       <ModalSheet visible={!!deleteDevice} onClose={() => setDeleteDevice(null)}>
         {!!deleteDevice && (
           <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>מחיקת מכשיר</Text>
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>
+            <Text style={s.sheetTitle}>מחיקת מכשיר</Text>
+            <Text style={s.sheetBody}>
               מכשיר: {deleteDevice.name}
               {deviceUsageCount != null ? `\nבשימוש ב-${deviceUsageCount} נקודות שירות.` : ''}
             </Text>
@@ -671,11 +687,28 @@ export function DevicesAndScentsScreen() {
         )}
       </ModalSheet>
 
-      <ModalSheet visible={!!editScent} onClose={closeEditScent}>
+      {/* ── Edit Scent Sheet ───────────────────────────────────────────────── */}
+      <ModalDialog visible={!!editScent} onClose={closeEditScent}>
         {!!editScent && (
-          <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>עריכת ניחוח</Text>
-            <Text style={{ color: colors.muted, textAlign: 'right' }}>ניחוח: {editScent.name}</Text>
+          <View style={{ gap: 16 }}>
+            <View style={s.createHeaderRow}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                <View style={s.createIconBubble}>
+                  <Entypo name="pencil" size={15} color="#fff" />
+                </View>
+                <View style={{ gap: 2 }}>
+                  <Text style={s.createTitle}>עריכת ניחוח</Text>
+                  <Text style={s.createSubtitle}>{editScent.name}</Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={closeEditScent}
+                hitSlop={8}
+                style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.6 }]}
+              >
+                <Entypo name="cross" size={16} color={ios.secondary} />
+              </Pressable>
+            </View>
             <Input label="שם ניחוח חדש" value={editScentName} onChangeText={setEditScentName} placeholder="לדוגמה: Ocean" />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
@@ -687,49 +720,92 @@ export function DevicesAndScentsScreen() {
             </View>
           </View>
         )}
-      </ModalSheet>
+      </ModalDialog>
 
-      {!!editDevice && (
-        <FabButton
-          isOpen={isEditOpen}
-          onPress={() => (isEditOpen ? closeEditDevice() : setIsEditOpen(true))}
-          openedSize={width - 36}
-          panelStyle={{ right: 18, bottom: 18 }}
-        >
-          <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right' }}>{editDevice.name}</Text>
-          <Input label="שם סוג חדש" value={editDeviceName} onChangeText={setEditDeviceName} placeholder="לדוגמה: A100" />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button title="ביטול" variant="secondary" onPress={() => closeEditDevice()} />
+      {/* ── Edit Device Modal ────────────────────────────────────────────────── */}
+      <ModalDialog visible={isEditOpen} onClose={() => closeEditDevice()}>
+        {!!editDevice && (
+          <View style={{ gap: 16 }}>
+            <View style={s.createHeaderRow}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                <View style={s.createIconBubble}>
+                  <Entypo name="pencil" size={15} color="#fff" />
+                </View>
+                <View style={{ gap: 2 }}>
+                  <Text style={s.createTitle}>עריכת סוג מכשיר</Text>
+                  <Text style={s.createSubtitle}>{editDevice.name}</Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={() => closeEditDevice()}
+                hitSlop={8}
+                style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.6 }]}
+              >
+                <Entypo name="cross" size={16} color={ios.secondary} />
+              </Pressable>
             </View>
-            <View style={{ flex: 1 }}>
-              <Button title="שמור" onPress={saveEditDeviceType} />
+            <Input label="שם סוג מכשיר" value={editDeviceName} onChangeText={setEditDeviceName} placeholder="לדוגמה: A100" />
+            <Input label="כמות מילוי" value={editDeviceRefill} onChangeText={setEditDeviceRefill} keyboardType="numeric" placeholder="100" />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button title="ביטול" variant="secondary" onPress={() => closeEditDevice()} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button title="שמור" onPress={saveEditDeviceType} />
+              </View>
             </View>
           </View>
-        </FabButton>
-      )}
+        )}
+      </ModalDialog>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  actionRow: {
+// ─── Styles ──────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+
+  // ── Page title ──
+  pageHeader: {
+    gap: 6,
+  },
+  pageKicker: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: ios.secondary,
+    textAlign: 'right',
+    letterSpacing: 0.6,
+  },
+  pageTitle: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '700',
+    color: ios.text,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+
+  // ── Search row ──
+  searchRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 16,
   },
   searchWrap: {
     flex: 1,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(15,23,42,0.05)',
-    borderRadius: 18,
+    backgroundColor: ios.card,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: 8,
+    borderWidth: 0.5,
+    borderColor: ios.separator,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
@@ -737,86 +813,131 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: 0,
     backgroundColor: 'transparent',
-    fontSize: 14,
+    fontSize: 15,
+    color: ios.text,
   },
   clearBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: ios.labelBg,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(100,116,139,0.10)',
   },
-  plusBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: ios.primaryAction,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.text,
     shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 5,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  sectionTitleRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 2,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  sectionMeta: {
-    color: colors.muted,
-    fontWeight: '800',
-    fontSize: 12,
-    textAlign: 'right',
-  },
-  closeChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: 'rgba(100,116,139,0.10)',
-  },
-  closeChipText: { color: colors.muted, fontWeight: '800', fontSize: 13 },
-  typeChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(15,23,42,0.05)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  typeChipActive: {
-    backgroundColor: 'rgba(37,99,235,0.12)',
-    borderColor: 'rgba(37,99,235,0.30)',
-  },
-  typeChipText: { color: colors.muted, fontWeight: '900' },
-  typeChipTextActive: { color: colors.primary },
 
-  createSheet: {
-    maxHeight: '82%',
-    paddingHorizontal: 16,
-    paddingBottom: 18,
+  // ── Section header ──
+  sectionHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
   },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: ios.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    textAlign: 'right',
+  },
+  countBadge: {
+    backgroundColor: ios.labelBg,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: ios.secondary,
+  },
+
+  // ── Cards ──
+  card: {
+    backgroundColor: ios.card,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: ios.separator,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  cardInner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  cardContent: {
+    flex: 1,
+    gap: 3,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: ios.text,
+    textAlign: 'right',
+  },
+  cardMeta: {
+    fontSize: 13,
+    color: ios.secondary,
+    textAlign: 'right',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconBtnDanger: {
+    backgroundColor: '#FFEBE9',
+  },
+  iconBtnEdit: {
+    backgroundColor: '#E8E8ED',
+  },
+
+  emptyText: {
+    color: ios.secondary,
+    textAlign: 'right',
+    fontSize: 14,
+    paddingVertical: 8,
+  },
+
+  // ── Create dialog ──
   createDialog: {
     padding: 0,
-    borderRadius: 22,
+    borderRadius: 20,
     overflow: 'hidden',
     maxHeight: '86%',
     width: '100%',
     maxWidth: 520,
+    backgroundColor: ios.bg,
   },
   createScrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 20,
   },
   createHeaderRow: {
     flexDirection: 'row-reverse',
@@ -824,89 +945,94 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   createIconBubble: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.text,
-  },
-  createTitle: { color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' },
-  createSubtitle: { color: colors.muted, fontSize: 12, fontWeight: '800', textAlign: 'right' },
-  closeIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(100,116,139,0.10)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  segmented: {
-    flexDirection: 'row-reverse',
-    gap: 10,
-    padding: 4,
-    backgroundColor: 'rgba(15,23,42,0.06)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  segmentedItemWrap: {
-    flex: 1,
-  },
-  segmentedItem: {
-    minHeight: 44,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  segmentedItemActive: {
-    backgroundColor: colors.text,
-    borderColor: colors.text,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  segmentedItemInactive: {
-    backgroundColor: '#F8FAFC',
-    borderColor: 'rgba(15,23,42,0.12)',
-  },
-  segmentedItemPressed: {
-    opacity: 0.85,
-  },
-  segmentedText: { color: colors.text, fontWeight: '900' },
-  segmentedTextActive: { color: '#FFFFFF' },
-  createFormWrap: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-    borderRadius: 18,
-    padding: 12,
-  },
-  createFormTitle: {
-    color: colors.text,
-    fontWeight: '900',
-    textAlign: 'right',
-    fontSize: 14,
-  },
-  iconBtn: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ios.primaryAction,
   },
-  iconBtnDanger: {
-    backgroundColor: '#FEE2E2',
+  createTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: ios.text,
+    textAlign: 'right',
   },
-  iconBtnEdit: {
-    backgroundColor: '#DBEAFE',
+  createSubtitle: {
+    fontSize: 12,
+    color: ios.secondary,
+    textAlign: 'right',
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ios.labelBg,
+  },
+
+  // ── Segmented control ──
+  segmented: {
+    flexDirection: 'row-reverse',
+    gap: 4,
+    padding: 3,
+    backgroundColor: ios.labelBg,
+    borderRadius: 12,
+  },
+  segItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segItemActive: {
+    backgroundColor: ios.card,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  segText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: ios.secondary,
+  },
+  segTextActive: {
+    color: ios.text,
+  },
+
+  // ── Form ──
+  formWrap: {
+    backgroundColor: ios.card,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 0.5,
+    borderColor: ios.separator,
+  },
+  formSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: ios.secondary,
+    textAlign: 'right',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+
+  // ── Sheets ──
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: ios.text,
+    textAlign: 'right',
+  },
+  sheetBody: {
+    fontSize: 14,
+    color: ios.secondary,
+    textAlign: 'right',
+    lineHeight: 20,
   },
 });
-

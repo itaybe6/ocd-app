@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pressable } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Menu } from 'lucide-react-native';
+import { ChevronLeft, Menu } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { WorkTemplatesScreen } from '../screens/admin/WorkTemplatesScreen';
 import { WorkTemplateStationsScreen } from '../screens/admin/WorkTemplateStationsScreen';
@@ -12,6 +12,16 @@ import type { WorkTemplatesStackParamList } from './workTemplatesTypes';
 
 const Stack = createNativeStackNavigator<WorkTemplatesStackParamList>();
 
+const ADMIN_HEADER_LOGO = require('../../assets/logopng/OCDLOGO-04.png');
+
+function AdminHeaderTitle() {
+  return (
+    <View pointerEvents="none" style={styles.headerTitleWrap}>
+      <Image source={ADMIN_HEADER_LOGO} resizeMode="contain" style={styles.headerLogo} />
+    </View>
+  );
+}
+
 export function WorkTemplatesStack() {
   return (
     <Stack.Navigator
@@ -20,6 +30,10 @@ export function WorkTemplatesStack() {
         headerTintColor: colors.text,
         headerStyle: { backgroundColor: colors.card },
         contentStyle: { backgroundColor: colors.bg },
+        headerTitle: () => <AdminHeaderTitle />,
+        headerTitleAlign: 'center',
+        headerTitleContainerStyle: styles.headerTitleContainer,
+        headerBackTitleVisible: false,
       }}
     >
       <Stack.Screen
@@ -47,7 +61,26 @@ export function WorkTemplatesStack() {
       <Stack.Screen
         name="WorkTemplateStations"
         component={WorkTemplateStationsScreen}
-        options={({ route }) => ({ title: `תחנות בתבנית ${route.params.day}` })}
+        options={({ navigation }) => ({
+          title: ``,
+          headerBackTitle: '',
+          headerBackTitleVisible: false,
+          headerLeft: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="חזור"
+              hitSlop={12}
+              onPress={() => navigation.goBack()}
+              style={({ pressed }) => ({
+                padding: 6,
+                borderRadius: 12,
+                backgroundColor: pressed ? '#0F172A06' : 'transparent',
+              })}
+            >
+              <ChevronLeft size={26} color={colors.text} />
+            </Pressable>
+          ),
+        })}
       />
       <Stack.Screen name="WorkTemplateStationCreate" component={WorkTemplateStationCreateScreen} options={{ title: 'הוספת תחנה' }} />
       <Stack.Screen name="WorkTemplateStationEdit" component={WorkTemplateStationEditScreen} options={{ title: 'עריכת תחנה' }} />
@@ -59,4 +92,22 @@ export function WorkTemplatesStack() {
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  headerTitleWrap: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLogo: {
+    width: 176,
+    height: 40,
+  },
+});
 
