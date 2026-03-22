@@ -1931,7 +1931,7 @@ export function StoreHomeScreen({
                   {categoryPreviewProducts.map((product) => (
                     <Pressable
                       key={`preview-${product.id}`}
-                      onPress={() => onOpenProduct?.(product)}
+                      onPress={() => onProductPress?.(product.handle)}
                       style={{
                         width: '48%',
                         borderRadius: 18,

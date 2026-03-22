@@ -16,8 +16,11 @@ import {
   StoreFloatingTabBar,
   StoreHomeScreen,
   StoreProductScreen,
+<<<<<<< HEAD
   type StoreBottomTabId,
   type StoreProduct,
+=======
+>>>>>>> 0abe257aba02a7fc4b68771ace6e0d8ee186cc66
 } from '../screens/store/StoreHomeScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
@@ -62,14 +65,31 @@ function CustomerEntryScreen() {
   return <CustomerDrawer />;
 }
 
+<<<<<<< HEAD
 function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
+=======
+function MainEntryScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
+>>>>>>> 0abe257aba02a7fc4b68771ace6e0d8ee186cc66
   const { user } = useAuth();
 
   if (!user) {
     return (
       <StoreHomeScreen
+<<<<<<< HEAD
         onProfilePress={() => navigation.navigate('Login')}
         onOcdPlusPress={() => navigation.navigate('StoreOcdPlus')}
+=======
+        onAdminPress={() => navigation.navigate('Login')}
+        onOpenCart={() => navigation.navigate('StoreCart')}
+        onOpenCategory={(category) =>
+          navigation.navigate('StoreCategory', {
+            categoryId: category.id,
+            categoryTitle: category.title,
+            categoryDescription: category.description,
+            parentTitle: category.parentTitle,
+          })
+        }
+>>>>>>> 0abe257aba02a7fc4b68771ace6e0d8ee186cc66
         onProductPress={(handle) => navigation.navigate('Product', { handle })}
         onOpenCart={() => navigation.navigate('StoreCart')}
         onOpenProduct={(product) => navigation.navigate('StoreProduct', { product })}
@@ -91,6 +111,7 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
   if (user.role === 'admin') return <AdminEntryScreen />;
   if (user.role === 'worker') return <WorkerEntryScreen />;
   return <CustomerEntryScreen />;
+<<<<<<< HEAD
 }
 
 function StoreOcdPlusRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'>) {
@@ -116,6 +137,8 @@ function StoreOcdPlusRoute({ navigation }: NativeStackScreenProps<RootStackParam
       </View>
     </SafeAreaView>
   );
+=======
+>>>>>>> 0abe257aba02a7fc4b68771ace6e0d8ee186cc66
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
@@ -215,6 +238,9 @@ export function RootNavigator() {
       >
         <Stack.Screen name="Main" component={MainEntryScreen} />
         <Stack.Screen name="Login" component={LoginRoute} />
+        <Stack.Screen name="StoreCategory" component={StoreCategoryRoute} />
+        <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
+        <Stack.Screen name="StoreCart" component={StoreCartRoute} />
         <Stack.Screen
           name="StoreOcdPlus"
           component={StoreOcdPlusRoute}
@@ -239,9 +265,12 @@ export function RootNavigator() {
             contentStyle: { backgroundColor: colors.bg },
           }}
         />
+<<<<<<< HEAD
         <Stack.Screen name="StoreCategory" component={StoreCategoryRoute} />
         <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
         <Stack.Screen name="StoreCart" component={StoreCartRoute} />
+=======
+>>>>>>> 0abe257aba02a7fc4b68771ace6e0d8ee186cc66
       </Stack.Navigator>
     </NavigationContainer>
   );
