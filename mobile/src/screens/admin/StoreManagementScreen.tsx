@@ -21,6 +21,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { endOfWeek, startOfWeek } from 'date-fns';
 import { Card } from '../../components/ui/Card';
@@ -239,7 +240,7 @@ function ProductPickerModal({
 
       {/* Search */}
       <View style={pickerStyles.searchWrap}>
-        <Text style={pickerStyles.searchIcon}>⌕</Text>
+        <Ionicons name="search-outline" size={18} color="rgba(100,116,139,0.7)" style={pickerStyles.searchIcon} />
         <TextInput
           value={q}
           onChangeText={setQ}
@@ -345,7 +346,7 @@ const pickerStyles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
   },
-  searchIcon: { color: 'rgba(100,116,139,0.7)', fontSize: 16 },
+  searchIcon: { marginLeft: 8 },
   searchInput: {
     flex: 1,
     color: colors.text,

@@ -18,6 +18,7 @@ export type RootStackParamList = {
   Login: undefined;
   StoreOcdPlus: undefined;
   StoreFavorites: undefined;
+  StoreSearch: undefined;
   Product: { handle: string };
   StoreCategory: StoreCategoryRouteParams;
   StoreProduct: { product: StoreProduct };

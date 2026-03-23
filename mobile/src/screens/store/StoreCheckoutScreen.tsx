@@ -11,30 +11,162 @@ const RTL_TEXT = {
 
 const CHECKOUT_DIRECTION_FIX_SCRIPT = `
   (function() {
+    var styleId = 'ocd-checkout-direction-fix';
+    var LRM = '\\u200E';
+    var selectors = [
+      '[data-checkout-payment-due-target]',
+      '[data-checkout-subtotal-price-target]',
+      '[data-checkout-total-price-target]',
+      '[data-checkout-discount-amount-target]',
+      '[data-checkout-shipping-rate-target]',
+      '[data-checkout-order-summary-section] .money',
+      '.money',
+      '.payment-due__price',
+      '.payment-due-label__total',
+      '.payment-due-label__taxes',
+      '.order-summary__emphasis',
+      '.order-summary__small-text',
+      '.order-summary-toggle__total-recap',
+      '.order-summary-toggle__total-recap-final-price',
+      '.total-recap',
+      '.total-recap__final-price',
+      '.product__price',
+      '.total-line__price',
+      '.reduction-code__text'
+    ];
+    var paymentDueContainerSelectors = [
+      '[data-checkout-payment-due-target]',
+      '.payment-due__price',
+      '.order-summary-toggle__total-recap',
+      '.order-summary-toggle__total-recap-final-price',
+      '.total-recap',
+      '.total-recap__final-price'
+    ];
+    var paymentDueValueSelectors = [
+      '[data-checkout-payment-due-target]',
+      '.payment-due__price',
+      '.order-summary-toggle__total-recap-final-price',
+      '.total-recap__final-price'
+    ];
+
+    function ensureFixStyle() {
+      if (document.getElementById(styleId)) return;
+
+      var style = document.createElement('style');
+      style.id = styleId;
+      style.textContent =
+        selectors
+          .map(function(selector) {
+            return selector + ',' + selector + ' *';
+          })
+          .join(',') +
+        '{direction:ltr !important;unicode-bidi:isolate !important;text-align:left !important;}' +
+        paymentDueContainerSelectors.join(',') +
+        '{display:inline-flex !important;flex-direction:row !important;align-items:baseline !important;justify-content:flex-start !important;gap:4px !important;white-space:nowrap !important;}';
+      document.head.appendChild(style);
+    }
+
+    function normalizePriceText(text) {
+      return String(text || '')
+        .replace(/[\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]/g, '')
+        .replace(/\\s+/g, ' ')
+        .trim();
+    }
+
+    function fixMirroredAmountTokens(text) {
+      return String(text || '').replace(/\\d[\\d.,]*/g, function(token) {
+        if (token.indexOf('.') !== -1 && token.indexOf(',') !== -1 && token.indexOf('.') < token.indexOf(',')) {
+          return token.split('').reverse().join('');
+        }
+        return token;
+      });
+    }
+
+    function parseAmountValue(text) {
+      var normalizedText = normalizePriceText(fixMirroredAmountTokens(text));
+      var tokens = normalizedText.match(/\\d[\\d.,]*/g);
+      if (!tokens || !tokens.length) return null;
+
+      var token = tokens.sort(function(a, b) {
+        return b.length - a.length;
+      })[0];
+
+      if (token.indexOf(',') !== -1 && token.indexOf('.') !== -1) {
+        if (token.lastIndexOf('.') > token.lastIndexOf(',')) {
+          token = token.replace(/,/g, '');
+        } else {
+          token = token.replace(/\\./g, '').replace(',', '.');
+        }
+      } else if ((token.match(/,/g) || []).length >= 1 && token.indexOf('.') === -1) {
+        if (/,[0-9]{2}$/.test(token)) {
+          token = token.replace(',', '.');
+        } else {
+          token = token.replace(/,/g, '');
+        }
+      }
+
+      var value = Number.parseFloat(token);
+      return Number.isFinite(value) ? value : null;
+    }
+
+    function formatIlsAmount(value) {
+      return '₪ ' + value.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function normalizePaymentDueValue(node) {
+      var amountValue = parseAmountValue(node.textContent);
+      if (amountValue == null) return;
+
+      var formattedValue = formatIlsAmount(amountValue);
+      if (normalizePriceText(node.textContent) === formattedValue) return;
+
+      node.textContent = formattedValue;
+      node.style.direction = 'ltr';
+      node.style.unicodeBidi = 'isolate';
+      node.style.textAlign = 'left';
+      node.style.whiteSpace = 'nowrap';
+      node.setAttribute('dir', 'ltr');
+    }
+
+    function applyLtrMarks(root) {
+      var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      var current;
+      while ((current = walker.nextNode())) {
+        var normalized = normalizePriceText(fixMirroredAmountTokens(current.nodeValue));
+        if (!/[\\d₪]/.test(normalized)) continue;
+        current.nodeValue = LRM + normalized + LRM;
+      }
+    }
+
     function applyPriceDirectionFix() {
-      var selectors = [
-        '[data-checkout-payment-due-target]',
-        '[data-checkout-subtotal-price-target]',
-        '[data-checkout-total-price-target]',
-        '[data-checkout-discount-amount-target]',
-        '[data-checkout-shipping-rate-target]',
-        '[data-checkout-order-summary-section] .money',
-        '.money',
-        '.payment-due__price',
-        '.order-summary__emphasis',
-        '.order-summary__small-text',
-        '.product__price',
-        '.total-line__price',
-        '.reduction-code__text'
-      ];
+      ensureFixStyle();
 
       var nodes = document.querySelectorAll(selectors.join(','));
       nodes.forEach(function(node) {
         node.style.direction = 'ltr';
-        node.style.unicodeBidi = 'embed';
+        node.style.unicodeBidi = 'isolate';
         node.style.textAlign = 'left';
         node.style.display = 'inline-block';
         node.setAttribute('dir', 'ltr');
+        applyLtrMarks(node);
+      });
+
+      var paymentDueNodes = document.querySelectorAll(paymentDueContainerSelectors.join(','));
+      paymentDueNodes.forEach(function(node) {
+        node.style.display = 'inline-flex';
+        node.style.flexDirection = 'row';
+        node.style.alignItems = 'baseline';
+        node.style.justifyContent = 'flex-start';
+        node.style.gap = '4px';
+        node.style.whiteSpace = 'nowrap';
+      });
+
+      var paymentDueValueNodes = document.querySelectorAll(paymentDueValueSelectors.join(','));
+      paymentDueValueNodes.forEach(function(node) {
+        normalizePaymentDueValue(node);
       });
     }
 

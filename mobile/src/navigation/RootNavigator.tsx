@@ -15,6 +15,7 @@ import {
   StoreFloatingTabBar,
   StoreHomeScreen,
   StoreProductScreen,
+  StoreSearchScreen,
   type StoreBottomTabId,
   type StoreProduct,
 } from '../screens/store/StoreHomeScreen';
@@ -34,6 +35,11 @@ function handleStoreTabNavigation(
 ) {
   if (tabId === 'favorites') {
     navigation.navigate('StoreFavorites');
+    return;
+  }
+
+  if (tabId === 'search') {
+    navigation.navigate('StoreSearch');
     return;
   }
 
@@ -77,6 +83,7 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
         onProfilePress={() => navigation.navigate('Login')}
         onFavoritesPress={() => navigation.navigate('StoreFavorites')}
         onOcdPlusPress={() => navigation.navigate('StoreOcdPlus')}
+        onSearchPress={() => navigation.navigate('StoreSearch')}
         onProductPress={(handle) => navigation.navigate('Product', { handle })}
         onOpenCart={() => navigation.navigate('StoreCart')}
         onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
@@ -130,6 +137,17 @@ function StoreFavoritesRoute({ navigation }: NativeStackScreenProps<RootStackPar
     <StoreFavoritesScreen
       onOpenProduct={(handle) => navigation.navigate('Product', { handle })}
       onLoginPress={() => navigation.navigate('Login')}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+    />
+  );
+}
+
+function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreSearch'>) {
+  return (
+    <StoreSearchScreen
+      onBack={() => navigation.goBack()}
+      onOpenCart={() => navigation.navigate('StoreCart')}
+      onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
       onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
     />
   );
@@ -283,6 +301,14 @@ export function RootNavigator() {
         <Stack.Screen
           name="StoreFavorites"
           component={StoreFavoritesRoute}
+          options={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        />
+        <Stack.Screen
+          name="StoreSearch"
+          component={StoreSearchRoute}
           options={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.bg },

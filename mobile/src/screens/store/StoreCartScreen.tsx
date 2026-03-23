@@ -15,6 +15,21 @@ const RTL_TEXT = {
   writingDirection: 'rtl' as const,
 };
 
+const COLORS = {
+  background: '#F3F5F7',
+  surface: '#FFFFFF',
+  border: '#E6EAF0',
+  text: '#111827',
+  muted: '#6B7280',
+  softText: '#97A1AF',
+  dark: '#121826',
+  accent: '#00C2A8',
+  accentSoft: '#E7FBF7',
+  danger: '#B91C1C',
+  dangerSoft: '#FFF3F2',
+  pill: '#EFF3F6',
+};
+
 function formatPrice(price: number, currencyCode: string) {
   if (currencyCode === 'ILS') {
     return `₪${price.toLocaleString('he-IL', {
@@ -48,7 +63,7 @@ function CartProductImage({
         source={{ uri: imageUrl }}
         resizeMode="cover"
         accessibilityLabel={imageAltText ?? name}
-        style={{ width: '100%', height: '100%', borderRadius: 18 }}
+        style={{ width: '100%', height: '100%', borderRadius: 20 }}
       />
     );
   }
@@ -57,7 +72,7 @@ function CartProductImage({
     <View
       style={{
         flex: 1,
-        borderRadius: 18,
+        borderRadius: 20,
         backgroundColor: coverColor,
         justifyContent: 'center',
         alignItems: 'center',
@@ -80,12 +95,14 @@ function SurfaceIconButton({
   children,
   size,
   backgroundColor,
+  borderColor,
   disabled = false,
 }: {
   onPress: () => void;
   children: React.ReactNode;
   size: number;
   backgroundColor: string;
+  borderColor?: string;
   disabled?: boolean;
 }) {
   return (
@@ -96,31 +113,16 @@ function SurfaceIconButton({
       style={({ pressed }) => ({
         width: size,
         height: size,
-        minWidth: size,
-        minHeight: size,
-        maxWidth: size,
-        maxHeight: size,
         borderRadius: size / 2,
-        alignSelf: 'flex-start',
-        flexShrink: 0,
-        overflow: 'hidden',
-        opacity: pressed || disabled ? 0.94 : 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor,
+        borderWidth: borderColor ? 1 : 0,
+        borderColor,
+        opacity: pressed || disabled ? 0.55 : 1,
       })}
     >
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor,
-          alignItems: 'center',
-          justifyContent: 'center',
-          alignSelf: 'flex-start',
-          flexShrink: 0,
-        }}
-      >
-        {children}
-      </View>
+      {children}
     </Pressable>
   );
 }
@@ -141,22 +143,62 @@ function SurfaceActionButton({
   textColor: string;
 }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => ({ opacity: pressed || disabled ? 0.94 : 1 })}>
+    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => ({ flex: 1, opacity: pressed || disabled ? 0.55 : 1 })}>
       <View
         style={{
-          borderRadius: 22,
+          minHeight: 48,
+          borderRadius: 18,
           backgroundColor,
           borderWidth: borderColor ? 1 : 0,
           borderColor,
-          paddingVertical: 16,
-          minHeight: 56,
           alignItems: 'center',
           justifyContent: 'center',
+          paddingHorizontal: 14,
         }}
       >
-        <Text style={{ color: textColor, fontSize: 16, fontWeight: '900', ...RTL_TEXT }}>{label}</Text>
+        <Text style={{ color: textColor, fontSize: 14, fontWeight: '800', ...RTL_TEXT }}>{label}</Text>
       </View>
     </Pressable>
+  );
+}
+
+function StatPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        minWidth: 0,
+        backgroundColor: COLORS.surface,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        gap: 4,
+      }}
+    >
+      <Text style={{ color: COLORS.softText, fontSize: 11, fontWeight: '700', ...RTL_TEXT }}>{label}</Text>
+      <Text style={{ color: COLORS.text, fontSize: 16, fontWeight: '900', ...RTL_TEXT }}>{value}</Text>
+    </View>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  emphasized = false,
+}: {
+  label: string;
+  value: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Text style={{ color: emphasized ? COLORS.text : COLORS.muted, fontSize: 14, fontWeight: emphasized ? '800' : '600', ...RTL_TEXT }}>
+        {label}
+      </Text>
+      <Text style={{ color: COLORS.text, fontSize: emphasized ? 16 : 14, fontWeight: emphasized ? '900' : '700' }}>{value}</Text>
+    </View>
   );
 }
 
@@ -170,7 +212,7 @@ export function StoreCartScreen({
   onOpenCheckout: (checkoutUrl: string) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
+  const { contentPaddingBottom, bottomBarHeight, bottomBarOffset } = getStoreBottomBarMetrics(insets.bottom);
   const {
     checkoutUrl,
     items,
@@ -194,379 +236,364 @@ export function StoreCartScreen({
     void refreshCart();
   };
 
-  const bottomPadding = contentPaddingBottom + 18;
+  const handleClearCart = () => {
+    if (!items.length) return;
+
+    Toast.show({
+      type: 'info',
+      text1: 'העגלה תנוקה מיידית',
+      text2: 'אפשר להוסיף שוב כל מוצר בכל רגע',
+    });
+    void clearCart();
+  };
+
+  const checkoutFooterOffset = bottomBarOffset + bottomBarHeight + 12;
+  const checkoutFooterHeight = items.length ? 128 : 0;
+  const bottomPadding = contentPaddingBottom + checkoutFooterHeight + 28;
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <View style={{ flex: 1 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.background }}>
+      <View style={{ flex: 1, backgroundColor: COLORS.background }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: bottomPadding, gap: 16 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: bottomPadding,
+            gap: 14,
+          }}
           showsVerticalScrollIndicator={false}
         >
           <View
             style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 24,
-              padding: 18,
-              borderWidth: 1,
-              borderColor: '#E8EDF4',
+              flexDirection: 'row-reverse',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 2,
             }}
           >
-            <View
-              style={{
-                flexDirection: 'row-reverse',
-                justifyContent: 'space-between',
+            <Pressable
+              onPress={onBack}
+              hitSlop={8}
+              style={({ pressed }) => ({
+                width: 42,
+                height: 42,
+                borderRadius: 21,
                 alignItems: 'center',
-                marginBottom: 16,
-              }}
+                justifyContent: 'center',
+                backgroundColor: COLORS.surface,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                opacity: pressed ? 0.6 : 1,
+              })}
             >
-              <Pressable
-                onPress={onBack}
-                hitSlop={8}
-                style={({ pressed }) => ({
-                  width: 42,
-                  height: 42,
-                  minWidth: 42,
-                  minHeight: 42,
-                  maxWidth: 42,
-                  maxHeight: 42,
-                  borderRadius: 21,
-                  alignSelf: 'flex-start',
-                  flexShrink: 0,
-                  overflow: 'hidden',
-                  opacity: pressed ? 0.94 : 1,
-                })}
-              >
-                <View
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: '#F3F4F6',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    alignSelf: 'flex-start',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900' }}>→</Text>
-                </View>
-              </Pressable>
+              <Text style={{ color: COLORS.text, fontSize: 18, fontWeight: '900' }}>→</Text>
+            </Pressable>
 
-              <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Text style={{ color: '#C18D39', fontSize: 11, fontWeight: '800', ...RTL_TEXT }}>SHOPIFY CART</Text>
-                <Text style={{ color: '#111827', fontSize: 28, fontWeight: '900', ...RTL_TEXT }}>עגלת קניות</Text>
-                <Text style={{ color: '#6B7280', fontSize: 13, ...RTL_TEXT }}>
-                  {itemCount ? `${itemCount} פריטים מוכנים לקופה` : 'העגלה מחכה לבחירה הראשונה שלך'}
-                </Text>
-              </View>
+            <View style={{ flex: 1, alignItems: 'flex-end', marginRight: 12 }}>
+              <Text style={{ color: COLORS.text, fontSize: 24, fontWeight: '900', ...RTL_TEXT }}>העגלה שלך</Text>
+              <Text style={{ color: COLORS.muted, fontSize: 13, marginTop: 4, ...RTL_TEXT }}>
+                {itemCount ? `${itemCount} פריטים מוכנים להמשך רכישה` : 'כאן תראה את כל מה שבחרת לפני המעבר לקופה'}
+              </Text>
             </View>
+          </View>
 
-            {items.length ? (
-              <View
-                style={{
-                  borderRadius: 20,
-                  padding: 16,
-                  backgroundColor: '#111827',
-                  flexDirection: 'row-reverse',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '900' }}>
-                    {formatPrice(subtotal, currencyCode)}
-                  </Text>
-                  <Text style={{ color: '#CBD5E1', fontSize: 12, marginTop: 4, ...RTL_TEXT }}>
-                    סכום ביניים לפני שילוח ומסים סופיים ב-Shopify Checkout
-                  </Text>
-                </View>
-
-                <View
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 26,
-                    backgroundColor: 'rgba(255,255,255,0.12)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <ShoppingCart size={22} color="#FFFFFF" />
-                </View>
-              </View>
-            ) : (
-              <View
-                style={{
-                  borderRadius: 18,
-                  padding: 14,
-                  backgroundColor: '#F8FAFC',
-                  borderWidth: 1,
-                  borderColor: '#E2E8F0',
-                  flexDirection: 'row-reverse',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <View style={{ alignItems: 'flex-end', flex: 1 }}>
-                  <Text style={{ color: '#0F172A', fontSize: 16, fontWeight: '900', ...RTL_TEXT }}>עדיין אין מוצרים בעגלה</Text>
-                  <Text style={{ color: '#64748B', fontSize: 12, marginTop: 4, ...RTL_TEXT }}>
-                    ברגע שתוסיף מוצר, כאן יופיע הסכום והקישור לקופה של Shopify.
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
-                    backgroundColor: '#FFFFFF',
-                    borderWidth: 1,
-                    borderColor: '#E2E8F0',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginLeft: 12,
-                  }}
-                >
-                  <ShoppingCart size={20} color="#0F172A" />
-                </View>
-              </View>
-            )}
+          <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+            <StatPill label="פריטים" value={`${itemCount}`} />
+            <StatPill label="סכום ביניים" value={formatPrice(subtotal, currencyCode)} />
           </View>
 
           {isBootstrapping && (
             <View
               style={{
-                backgroundColor: '#FFFFFF',
+                backgroundColor: COLORS.surface,
                 borderRadius: 24,
-                padding: 24,
                 borderWidth: 1,
-                borderColor: '#E8EDF4',
+                borderColor: COLORS.border,
+                padding: 24,
                 alignItems: 'center',
                 gap: 12,
               }}
             >
-              <ActivityIndicator size="large" color="#111827" />
-              <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900', ...RTL_TEXT }}>טוען את עגלת Shopify...</Text>
+              <ActivityIndicator size="large" color={COLORS.text} />
+              <Text style={{ color: COLORS.text, fontSize: 17, fontWeight: '900', ...RTL_TEXT }}>טוען את עגלת Shopify...</Text>
             </View>
           )}
 
           {!isBootstrapping && !items.length && (
             <View
               style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 24,
-                padding: 24,
+                backgroundColor: COLORS.surface,
+                borderRadius: 28,
                 borderWidth: 1,
-                borderColor: '#E8EDF4',
+                borderColor: COLORS.border,
+                paddingHorizontal: 22,
+                paddingVertical: 28,
                 alignItems: 'center',
-                gap: 10,
+                gap: 12,
               }}
             >
               <View
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: '#F3F4F6',
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  backgroundColor: COLORS.pill,
                 }}
               >
-                <ShoppingCart size={24} color="#111827" />
+                <ShoppingCart size={26} color={COLORS.text} />
               </View>
-              <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900', ...RTL_TEXT }}>העגלה שלך עדיין ריקה</Text>
-              <Text style={{ color: '#94A3B8', fontSize: 13, lineHeight: 20, ...RTL_TEXT }}>
-                הוסף מוצרים מתוך עמודי החנות והמוצרים, והם יופיעו כאן מיידית עם סנכרון מלא מול Shopify.
+              <Text style={{ color: COLORS.text, fontSize: 20, fontWeight: '900', ...RTL_TEXT }}>העגלה עדיין ריקה</Text>
+              <Text style={{ color: COLORS.muted, fontSize: 13, lineHeight: 21, ...RTL_TEXT }}>
+                ברגע שתוסיף מוצרים מהחנות, הם יופיעו כאן במבנה נקי ונוח עם מעבר מהיר לתשלום.
               </Text>
+              <Pressable
+                onPress={onBack}
+                style={({ pressed }) => ({
+                  marginTop: 4,
+                  minWidth: 160,
+                  borderRadius: 18,
+                  backgroundColor: COLORS.dark,
+                  paddingHorizontal: 18,
+                  paddingVertical: 14,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', ...RTL_TEXT }}>חזרה לחנות</Text>
+              </Pressable>
             </View>
           )}
 
           {!!items.length && (
             <View style={{ gap: 12 }}>
-              {items.map((item) => (
-                <View
-                  key={item.id}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: 22,
-                    borderWidth: 1,
-                    borderColor: '#E8EDF4',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
-                    <View style={{ width: 112, padding: 10, height: 132 }}>
-                      <CartProductImage
-                        imageUrl={item.product.imageUrl}
-                        imageAltText={item.product.imageAltText}
-                        name={item.product.name}
-                        coverColor={item.product.coverColor}
-                        accentColor={item.product.accentColor}
-                      />
+              {items.map((item) => {
+                const variantLabel =
+                  item.product.variantTitle && item.product.variantTitle !== 'Default Title'
+                    ? `${item.product.subtitle} • ${item.product.variantTitle}`
+                    : item.product.subtitle;
+
+                return (
+                  <View
+                    key={item.id}
+                    style={{
+                      backgroundColor: COLORS.surface,
+                      borderRadius: 24,
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                      padding: 12,
+                      gap: 12,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                      <View style={{ width: 92, height: 92 }}>
+                        <CartProductImage
+                          imageUrl={item.product.imageUrl}
+                          imageAltText={item.product.imageAltText}
+                          name={item.product.name}
+                          coverColor={item.product.coverColor}
+                          accentColor={item.product.accentColor}
+                        />
+                      </View>
+
+                      <View style={{ flex: 1, alignItems: 'flex-end', gap: 6 }}>
+                        <Text style={{ color: COLORS.text, fontSize: 16, fontWeight: '900', ...RTL_TEXT }}>
+                          {item.product.name}
+                        </Text>
+                        <Text style={{ color: COLORS.muted, fontSize: 12, lineHeight: 18, ...RTL_TEXT }}>{variantLabel}</Text>
+                        <View
+                          style={{
+                            alignSelf: 'stretch',
+                            flexDirection: 'row-reverse',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginTop: 2,
+                          }}
+                        >
+                          <Text style={{ color: COLORS.text, fontSize: 19, fontWeight: '900' }}>
+                            {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
+                          </Text>
+                          <Text style={{ color: COLORS.softText, fontSize: 12, ...RTL_TEXT }}>{item.quantity} יחידות</Text>
+                        </View>
+                      </View>
                     </View>
 
                     <View
                       style={{
-                        flex: 1,
-                        paddingHorizontal: 14,
-                        paddingVertical: 16,
-                        alignItems: 'flex-end',
+                        flexDirection: 'row-reverse',
                         justifyContent: 'space-between',
+                        alignItems: 'center',
                       }}
                     >
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', ...RTL_TEXT }}>
-                          {item.product.name}
-                        </Text>
-                        <Text style={{ color: '#8D94A1', fontSize: 11, marginTop: 4, ...RTL_TEXT }}>
-                          {item.product.variantTitle && item.product.variantTitle !== 'Default Title'
-                            ? `${item.product.subtitle} • ${item.product.variantTitle}`
-                            : item.product.subtitle}
-                        </Text>
-                        <Text style={{ color: '#111827', fontSize: 21, fontWeight: '900', marginTop: 10 }}>
-                          {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
-                        </Text>
-                      </View>
-
                       <View
                         style={{
-                          width: '100%',
                           flexDirection: 'row-reverse',
-                          justifyContent: 'space-between',
                           alignItems: 'center',
-                          marginTop: 14,
+                          gap: 8,
+                          backgroundColor: COLORS.pill,
+                          borderRadius: 999,
+                          paddingHorizontal: 8,
+                          paddingVertical: 6,
                         }}
                       >
                         <SurfaceIconButton
                           onPress={() => {
-                            void removeItem(item.product.id);
+                            void updateQuantity(item.product.id, item.quantity + 1);
                           }}
-                          size={34}
-                          backgroundColor="#FFF5F5"
+                          size={30}
+                          backgroundColor={COLORS.surface}
+                          borderColor={COLORS.border}
                           disabled={isMutating}
                         >
-                          <Trash2 size={16} color="#B91C1C" />
+                          <Plus size={15} color={COLORS.text} />
                         </SurfaceIconButton>
-
-                        <View
-                          style={{
-                            flexDirection: 'row-reverse',
-                            alignItems: 'center',
-                            gap: 8,
-                            backgroundColor: '#F8FAFC',
-                            borderRadius: 999,
-                            borderWidth: 1,
-                            borderColor: '#E5E7EB',
-                            paddingHorizontal: 8,
-                            paddingVertical: 6,
+                        <Text style={{ minWidth: 26, textAlign: 'center', color: COLORS.text, fontSize: 15, fontWeight: '900' }}>
+                          {item.quantity}
+                        </Text>
+                        <SurfaceIconButton
+                          onPress={() => {
+                            void updateQuantity(item.product.id, item.quantity - 1);
                           }}
+                          size={30}
+                          backgroundColor={COLORS.surface}
+                          borderColor={COLORS.border}
+                          disabled={isMutating}
                         >
-                          <SurfaceIconButton
-                            onPress={() => {
-                              void updateQuantity(item.product.id, item.quantity + 1);
-                            }}
-                            size={28}
-                            backgroundColor="#FFFFFF"
-                            disabled={isMutating}
-                          >
-                            <Plus size={15} color="#111827" />
-                          </SurfaceIconButton>
-
-                          <Text style={{ color: '#111827', fontSize: 15, fontWeight: '900', minWidth: 24, textAlign: 'center' }}>
-                            {item.quantity}
-                          </Text>
-
-                          <SurfaceIconButton
-                            onPress={() => {
-                              void updateQuantity(item.product.id, item.quantity - 1);
-                            }}
-                            size={28}
-                            backgroundColor="#FFFFFF"
-                            disabled={isMutating}
-                          >
-                            <Minus size={15} color="#111827" />
-                          </SurfaceIconButton>
-                        </View>
+                          <Minus size={15} color={COLORS.text} />
+                        </SurfaceIconButton>
                       </View>
+
+                      <Pressable
+                        onPress={() => {
+                          void removeItem(item.product.id);
+                        }}
+                        disabled={isMutating}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row-reverse',
+                          alignItems: 'center',
+                          gap: 6,
+                          borderRadius: 999,
+                          backgroundColor: COLORS.dangerSoft,
+                          paddingHorizontal: 12,
+                          paddingVertical: 10,
+                          opacity: pressed || isMutating ? 0.55 : 1,
+                        })}
+                      >
+                        <Trash2 size={15} color={COLORS.danger} />
+                        <Text style={{ color: COLORS.danger, fontSize: 13, fontWeight: '800', ...RTL_TEXT }}>הסר</Text>
+                      </Pressable>
                     </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
           {!!items.length && (
             <View
               style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 22,
-                padding: 18,
+                backgroundColor: COLORS.surface,
+                borderRadius: 24,
                 borderWidth: 1,
-                borderColor: '#E8EDF4',
+                borderColor: COLORS.border,
+                padding: 18,
                 gap: 14,
               }}
             >
-              <View style={{ gap: 8 }}>
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: '#111827', fontWeight: '900', ...RTL_TEXT }}>סכום ביניים</Text>
-                  <Text style={{ color: '#111827', fontWeight: '900' }}>{formatPrice(subtotal, currencyCode)}</Text>
-                </View>
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: '#64748B', ...RTL_TEXT }}>שילוח</Text>
-                  <Text style={{ color: '#64748B', ...RTL_TEXT }}>מחושב בקופה</Text>
-                </View>
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: '#64748B', ...RTL_TEXT }}>תשלום</Text>
-                  <Text style={{ color: '#64748B', ...RTL_TEXT }}>מתבצע בתוך Shopify WebView</Text>
-                </View>
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <Text style={{ color: COLORS.text, fontSize: 17, fontWeight: '900', ...RTL_TEXT }}>לפני המעבר לקופה</Text>
+                <Text style={{ color: COLORS.muted, fontSize: 12, ...RTL_TEXT }}>
+                  עמוד התשלום, הכתובת והשילוח מנוהלים ישירות דרך Shopify.
+                </Text>
               </View>
 
-              <Text style={{ color: '#64748B', fontSize: 12, lineHeight: 20, ...RTL_TEXT }}>
-                קופה זו מותאמת לרכישת מוצרים פיזיים: המשלוח, הכתובת ואמצעי התשלום מנוהלים ישירות על ידי Shopify ללא שער תשלום מותאם אישית בתוך האפליקציה.
-              </Text>
+              <View style={{ gap: 10 }}>
+                <SummaryRow label="סכום ביניים" value={formatPrice(subtotal, currencyCode)} emphasized />
+                <SummaryRow label="שילוח" value="מחושב בקופה" />
+                <SummaryRow label="אמצעי תשלום" value="ב- Shopify" />
+              </View>
+
+              <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                <SurfaceActionButton
+                  onPress={handleRefresh}
+                  disabled={isMutating}
+                  label="רענון עגלה"
+                  backgroundColor={COLORS.surface}
+                  borderColor={COLORS.border}
+                  textColor={COLORS.text}
+                />
+                <SurfaceActionButton
+                  onPress={handleClearCart}
+                  disabled={isMutating}
+                  label="ניקוי עגלה"
+                  backgroundColor={COLORS.dangerSoft}
+                  borderColor="#F7D8D5"
+                  textColor={COLORS.danger}
+                />
+              </View>
             </View>
           )}
+        </ScrollView>
 
-          {!!items.length && (
-            <>
-              <SurfaceActionButton
+        {!!items.length && (
+          <View
+            style={{
+              position: 'absolute',
+              left: 16,
+              right: 16,
+              bottom: checkoutFooterOffset,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: COLORS.surface,
+                borderRadius: 26,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                padding: 12,
+                gap: 12,
+                shadowColor: '#000000',
+                shadowOpacity: 0.1,
+                shadowRadius: 14,
+                shadowOffset: { width: 0, height: 8 },
+                elevation: 10,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: '700', ...RTL_TEXT }}>סה"כ לתשלום</Text>
+                  <Text style={{ color: COLORS.softText, fontSize: 11, ...RTL_TEXT }}>השילוח והמסים יושלמו בקופה</Text>
+                </View>
+                <Text style={{ color: COLORS.text, fontSize: 24, fontWeight: '900' }}>{formatPrice(subtotal, currencyCode)}</Text>
+              </View>
+
+              <Pressable
                 onPress={handleCheckout}
                 disabled={isMutating || !checkoutUrl}
-                label={isMutating ? 'מעדכן את העגלה...' : 'המשך ל-Shopify Checkout'}
-                backgroundColor={isMutating || !checkoutUrl ? '#475569' : '#111827'}
-                textColor="#FFFFFF"
-              />
+                style={({ pressed }) => ({
+                  minHeight: 56,
+                  borderRadius: 20,
+                  backgroundColor: isMutating || !checkoutUrl ? '#8A94A6' : COLORS.dark,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900', ...RTL_TEXT }}>
+                  {isMutating ? 'מעדכן את העגלה...' : 'המשך לתשלום'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
-              <SurfaceActionButton
-                onPress={handleRefresh}
-                disabled={isMutating}
-                label="רענן עגלה"
-                backgroundColor="#FFFFFF"
-                borderColor="#D8E1EB"
-                textColor="#0F172A"
-              />
-
-              <SurfaceActionButton
-                onPress={() => {
-                  if (!items.length) return;
-
-                  Toast.show({
-                    type: 'info',
-                    text1: 'העגלה תנוקה מיידית',
-                    text2: 'אפשר להוסיף שוב כל מוצר בכל רגע',
-                  });
-                  void clearCart();
-                }}
-                disabled={isMutating}
-                label="נקה עגלה"
-                backgroundColor="#FFFFFF"
-                borderColor="#F1D2D2"
-                textColor="#B91C1C"
-              />
-            </>
-          )}
-        </ScrollView>
         <StoreFloatingTabBar activeTab="home" onTabPress={onTabPress} />
       </View>
     </SafeAreaView>

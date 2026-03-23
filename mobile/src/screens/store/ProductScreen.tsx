@@ -176,9 +176,12 @@ export function ProductScreen({ navigation, route }: Props) {
     const mainParams =
       tabId === 'categories'
         ? { initialTab: 'categories' as const, initialTabRequestId: Date.now() }
-        : tabId === 'search'
-          ? { initialTab: 'search' as const, initialTabRequestId: Date.now() }
-          : { initialTab: 'home' as const, initialTabRequestId: Date.now() };
+        : { initialTab: 'home' as const, initialTabRequestId: Date.now() };
+
+    if (tabId === 'search') {
+      navigation.navigate('StoreSearch');
+      return;
+    }
 
     if (tabId === 'ocdPlus') {
       navigation.navigate('StoreOcdPlus');

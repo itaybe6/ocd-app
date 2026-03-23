@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -7,6 +7,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -118,9 +119,9 @@ const COLLECTIONS: CollectionCard[] = [
 
 const BOTTOM_NAV_ITEMS = [
   { id: 'home', label: 'בית' },
-  { id: 'favorites', label: 'אהבתי' },
   { id: 'categories', label: 'קטגוריות' },
   { id: 'ocdPlus', label: 'OCD+' },
+  { id: 'favorites', label: 'אהבתי' },
   { id: 'search', label: 'חיפוש' },
   { id: 'profile', label: 'חשבון' },
 ] as const;
@@ -919,31 +920,9 @@ export function StoreFloatingTabBar({
       >
         <AnimatedStoreTabButton
           compact
-          focused={activeTab === 'search'}
-          onPress={() => onTabPress('search')}
-          icon={renderBottomNavIcon('search', activeTab === 'search', activeTab === 'search' ? '#FFFFFF' : '#9CA3AF', 22)}
-        />
-      </View>
-
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 999,
-          padding: 4,
-          borderWidth: 1,
-          borderColor: '#E5E7EB',
-          shadowColor: '#000000',
-          shadowOpacity: 0.16,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 8,
-        }}
-      >
-        <AnimatedStoreTabButton
-          compact
-          focused={activeTab === 'favorites'}
-          onPress={() => onTabPress('favorites')}
-          icon={renderBottomNavIcon('favorites', activeTab === 'favorites', activeTab === 'favorites' ? '#FFFFFF' : '#9CA3AF', 22)}
+          focused={activeTab === 'home'}
+          onPress={() => onTabPress('home')}
+          icon={renderBottomNavIcon('home', activeTab === 'home', activeTab === 'home' ? '#FFFFFF' : '#9CA3AF', 22)}
         />
       </View>
 
@@ -967,19 +946,24 @@ export function StoreFloatingTabBar({
         }}
       >
         <AnimatedStoreTabButton
-          focused={activeTab === 'home'}
-          onPress={() => onTabPress('home')}
-          icon={renderBottomNavIcon('home', activeTab === 'home', activeTab === 'home' ? '#FFFFFF' : '#9CA3AF', 22)}
-        />
-        <AnimatedStoreTabButton
           focused={activeTab === 'categories'}
           onPress={() => onTabPress('categories')}
           icon={renderBottomNavIcon('categories', activeTab === 'categories', activeTab === 'categories' ? '#FFFFFF' : '#9CA3AF', 22)}
         />
         <AnimatedStoreTabButton
+          focused={activeTab === 'favorites'}
+          onPress={() => onTabPress('favorites')}
+          icon={renderBottomNavIcon('favorites', activeTab === 'favorites', activeTab === 'favorites' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+        <AnimatedStoreTabButton
           focused={activeTab === 'ocdPlus'}
           onPress={() => onTabPress('ocdPlus')}
           icon={renderBottomNavIcon('ocdPlus', activeTab === 'ocdPlus', activeTab === 'ocdPlus' ? '#FFFFFF' : '#9CA3AF', 22)}
+        />
+        <AnimatedStoreTabButton
+          focused={activeTab === 'search'}
+          onPress={() => onTabPress('search')}
+          icon={renderBottomNavIcon('search', activeTab === 'search', activeTab === 'search' ? '#FFFFFF' : '#9CA3AF', 22)}
         />
       </View>
 
@@ -1066,6 +1050,7 @@ export function StoreHomeScreen({
   onProfilePress,
   onFavoritesPress,
   onOcdPlusPress,
+  onSearchPress,
   onProductPress,
   onOpenCart,
   onOpenProduct,
@@ -1076,6 +1061,7 @@ export function StoreHomeScreen({
   onProfilePress: () => void;
   onFavoritesPress?: () => void;
   onOcdPlusPress?: () => void;
+  onSearchPress?: () => void;
   onProductPress?: (handle: string) => void;
   onOpenCart?: () => void;
   onOpenProduct?: (product: StoreProduct) => void;
@@ -1444,6 +1430,12 @@ export function StoreHomeScreen({
 
     if (itemId === 'search') {
       setMenuOpen(false);
+      if (onSearchPress) {
+        searchInputRef.current?.blur();
+        onSearchPress();
+        return;
+      }
+
       setActivePrimaryTab('search');
       requestAnimationFrame(() => {
         searchInputRef.current?.focus();
@@ -1703,7 +1695,7 @@ export function StoreHomeScreen({
                     alignItems: 'center',
                   }}
                 >
-                  <Text style={{ color: '#B7BDC8', marginLeft: 8, fontSize: 12 }}>⌕</Text>
+                  <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
                   <TextInput
                     ref={searchInputRef}
                     value={query}
@@ -3037,7 +3029,7 @@ export function StoreCategoryScreen({
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: '#B7BDC8', marginLeft: 8, fontSize: 12 }}>⌕</Text>
+            <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
             <TextInput
               value={query}
               onChangeText={setQuery}
@@ -3186,6 +3178,215 @@ export function StoreCategoryScreen({
           </View>
         </ScrollView>
         <StoreFloatingTabBar activeTab="categories" onTabPress={onTabPress} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+export function StoreSearchScreen({
+  onBack: _onBack,
+  onOpenCart: _onOpenCart,
+  onOpenProduct,
+  onTabPress,
+}: {
+  onBack: () => void;
+  onOpenCart?: () => void;
+  onOpenProduct?: (product: StoreProduct) => void;
+  onTabPress: (tabId: StoreBottomTabId) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
+  const { width: windowWidth } = useWindowDimensions();
+  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const searchInputRef = useRef<TextInput | null>(null);
+
+  const loadProducts = useCallback(async (isPullToRefresh = false) => {
+    try {
+      if (isPullToRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError(null);
+      const liveProducts = await fetchProducts(80);
+      const shuffledProducts = liveProducts
+        .map((product, index) => toStoreProduct(product, index))
+        .sort(() => Math.random() - 0.5);
+
+      setProducts(shuffledProducts);
+    } catch (err) {
+      setProducts([]);
+      setError(err instanceof Error ? err.message : 'שגיאה בטעינת החיפוש');
+    } finally {
+      if (isPullToRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredProducts = useMemo(() => {
+    return products
+      .filter((product) => {
+        return (
+          !normalizedQuery ||
+          product.name.toLowerCase().includes(normalizedQuery) ||
+          product.subtitle.toLowerCase().includes(normalizedQuery) ||
+          product.description.toLowerCase().includes(normalizedQuery)
+        );
+      })
+      .slice(0, 30);
+  }, [normalizedQuery, products]);
+
+  const gridGap = 3;
+  const horizontalPadding = 3;
+  const gridItemSize = Math.floor((windowWidth - horizontalPadding * 2 - gridGap * 2) / 3);
+
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingTop: 6, paddingBottom: contentPaddingBottom }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                void loadProducts(true);
+              }}
+              tintColor="#111827"
+              colors={['#111827']}
+              progressViewOffset={18}
+            />
+          }
+        >
+          <View style={{ gap: 3 }}>
+            <View
+              style={{
+                paddingHorizontal: 12,
+                paddingBottom: 10,
+                backgroundColor: '#FFFFFF',
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  backgroundColor: '#EFF1F4',
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                  height: 42,
+                }}
+              >
+                <Ionicons name="search-outline" size={18} color="#8E8E93" style={{ marginLeft: 8 }} />
+                <TextInput
+                  ref={searchInputRef}
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="חיפוש"
+                  placeholderTextColor="#8E8E93"
+                  style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 14 }}
+                />
+              </View>
+            </View>
+
+            {loading && (
+              <View
+                style={{
+                  minHeight: 180,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <ActivityIndicator color="#111827" />
+              </View>
+            )}
+
+            {!!error && !loading && (
+              <View
+                style={{
+                  marginHorizontal: 12,
+                  borderRadius: 16,
+                  padding: 16,
+                  backgroundColor: '#FFF4F4',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <Text style={{ color: '#991B1B', fontWeight: '800' }}>לא הצלחנו לטעון את החיפוש</Text>
+                <Text style={{ color: '#B91C1C', marginTop: 6, textAlign: 'right' }}>{error}</Text>
+              </View>
+            )}
+
+            {!loading && !error && (
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  flexWrap: 'wrap',
+                  paddingHorizontal: horizontalPadding,
+                  gap: gridGap,
+                }}
+              >
+                {filteredProducts.map((product) => (
+                  <Pressable
+                    key={`search-${product.id}`}
+                    onPress={() => onOpenProduct?.(product)}
+                    style={{
+                      width: gridItemSize,
+                      height: gridItemSize,
+                      backgroundColor: '#F4F4F5',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {product.imageUrl ? (
+                      <Image
+                        source={{ uri: product.imageUrl }}
+                        resizeMode="cover"
+                        accessibilityLabel={product.imageAltText ?? product.name}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    ) : (
+                      <ProductImage product={product} height={gridItemSize} />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {!loading && !error && !filteredProducts.length && (
+              <View
+                style={{
+                  minHeight: 180,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingHorizontal: 24,
+                }}
+              >
+                <Text style={{ color: '#111827', fontWeight: '900' }}>לא נמצאו מוצרים</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+        <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
       </View>
     </SafeAreaView>
   );

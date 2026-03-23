@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -188,13 +188,19 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
 
   return (
     <Screen>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={{ flex: 1 }}>
           <Animated.View pointerEvents="none" style={[blobA, { backgroundColor: '#DBEAFE' }]} />
           <Animated.View pointerEvents="none" style={[blobB, { backgroundColor: '#E0E7FF' }]} />
           <Animated.View pointerEvents="none" style={[blobC, { backgroundColor: '#DCFCE7' }]} />
 
-          <View style={{ flex: 1, justifyContent: 'center', paddingBottom: 10 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ flexGrow: 1, paddingTop: 24, paddingBottom: 18 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
             <Animated.View style={[{ alignItems: 'center', marginBottom: 16 }, logoStyle]}>
               <View
                 style={{
@@ -376,7 +382,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                 </View>
               </Card>
             </Animated.View>
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Screen>

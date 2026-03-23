@@ -47,7 +47,7 @@ function handleCustomerTabPress(
   }
 
   if (tabId === 'search') {
-    navigation.navigate('Store', { initialTab: 'search', initialTabRequestId: Date.now() });
+    safeNavigate('StoreSearch');
     return;
   }
 
@@ -70,6 +70,7 @@ function CustomerStoreScreen({ navigation, route }: DrawerScreenProps<CustomerDr
       onProfilePress={() => navigation.navigate('Profile')}
       onFavoritesPress={() => navigation.navigate('Favorites')}
       onOcdPlusPress={() => safeNavigate('StoreOcdPlus')}
+      onSearchPress={() => safeNavigate('StoreSearch')}
       onProductPress={(handle) => safeNavigate('Product', { handle })}
       onOpenCart={() => safeNavigate('StoreCart')}
       onOpenProduct={(product) => safeNavigate('Product', { handle: product.handle })}
