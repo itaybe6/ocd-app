@@ -52,6 +52,7 @@ export function toStoreProductLike(favorite: ProductFavoriteRow): StoreProduct {
     id: favorite.product_id,
     name: favorite.product_title,
     subtitle: favorite.product_type?.trim() || 'מוצר',
+    collectionTitle: null,
     categoryId: 'favorites',
     price: favorite.price,
     currencyCode: favorite.currency_code || 'ILS',

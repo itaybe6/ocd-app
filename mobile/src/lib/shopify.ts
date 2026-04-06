@@ -46,6 +46,8 @@ export type ShopifyCartProduct = {
   id: string;
   name: string;
   subtitle: string;
+  /** כותרת אוסף Shopify לגיבוי כשאין קטגוריה/תת־קטגוריה (מייצגת "עמוד" בחנות) */
+  collectionTitle: string | null;
   price: number;
   currencyCode: string;
   handle: string;
@@ -231,6 +233,13 @@ type ShopifyCartLineNode = {
       description: string;
       productType: string;
       featuredImage: ShopifyImage | null;
+      collections?: {
+        edges: Array<{
+          node: {
+            title: string;
+          };
+        }>;
+      };
     };
     price: ShopifyMoneyV2;
   } | null;
@@ -395,6 +404,13 @@ const CART_FIELDS = `
                 url
                 altText
               }
+              collections(first: 1) {
+                edges {
+                  node {
+                    title
+                  }
+                }
+              }
             }
           }
         }
@@ -507,6 +523,8 @@ function normalizeCart(cart: ShopifyCartNode | null): ShopifyCart | null {
       }
 
       const palette = getCartPalette(index);
+      const collectionTitle =
+        product.collections?.edges?.[0]?.node?.title?.trim() || null;
 
       acc.push({
         id: edge.node.id,
@@ -520,7 +538,8 @@ function normalizeCart(cart: ShopifyCartNode | null): ShopifyCart | null {
         product: {
           id: product.id,
           name: product.title,
-          subtitle: product.productType?.trim() || 'מוצר',
+          subtitle: product.productType?.trim() ?? '',
+          collectionTitle,
           price: toNumber(merchandise.price.amount),
           currencyCode: merchandise.price.currencyCode,
           handle: product.handle,

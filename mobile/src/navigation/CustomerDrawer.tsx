@@ -104,6 +104,12 @@ function CustomerOrdersRoute() {
   return <CustomerOrdersScreen />;
 }
 
+function CustomerFavoritesRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'Favorites'>) {
+  return (
+    <CustomerFavoritesScreen onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)} />
+  );
+}
+
 function CustomerDrawerContent(props: DrawerContentComponentProps) {
   const { signOut } = useAuth();
   const items = useMemo(
@@ -163,7 +169,7 @@ export function CustomerDrawer() {
       <Drawer.Screen name="Store" options={{ title: 'חנות', headerShown: false }} component={CustomerStoreScreen} />
       <Drawer.Screen name="Profile" options={{ title: 'פרופיל', headerShown: false }} component={CustomerProfileRoute} />
       <Drawer.Screen name="Orders" options={{ title: 'רכישות', headerShown: false }} component={CustomerOrdersRoute} />
-      <Drawer.Screen name="Favorites" options={{ title: 'אהבתי' }} component={CustomerFavoritesScreen} />
+      <Drawer.Screen name="Favorites" options={{ title: 'אהבתי', headerShown: false }} component={CustomerFavoritesRoute} />
       <Drawer.Screen name="Services" options={{ title: 'שירותים' }} component={CustomerServicesScreen} />
     </Drawer.Navigator>
   );

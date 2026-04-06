@@ -222,7 +222,6 @@ function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamLis
   return (
     <StoreCartScreen
       onBack={() => navigation.goBack()}
-      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
       onOpenCheckout={(checkoutUrl) => navigation.navigate('StoreCheckout', { checkoutUrl })}
     />
   );
@@ -275,9 +274,20 @@ export function RootNavigator() {
       >
         <Stack.Screen name="Main" component={MainEntryScreen} />
         <Stack.Screen name="Login" component={LoginRoute} />
-        <Stack.Screen name="StoreCategory" component={StoreCategoryRoute} />
+        <Stack.Screen
+          name="StoreCategory"
+          component={StoreCategoryRoute}
+          options={{ contentStyle: { backgroundColor: '#FFFFFF' } }}
+        />
         <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
-        <Stack.Screen name="StoreCart" component={StoreCartRoute} />
+        <Stack.Screen
+          name="StoreCart"
+          component={StoreCartRoute}
+          options={{
+            contentStyle: { backgroundColor: '#FFFFFF' },
+            scrollEdgeEffects: { top: 'hidden' },
+          }}
+        />
         <Stack.Screen
           name="StoreCheckout"
           component={StoreCheckoutRoute}

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { safeNavigate } from '../navigation/navigationRef';
 import type { ProductFavoriteRow } from '../types/database';
@@ -24,8 +24,14 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const [favorites, setFavorites] = useState<ProductFavoriteRow[]>([]);
   const [isHydrating, setIsHydrating] = useState(false);
   const [pendingProductIds, setPendingProductIds] = useState<string[]>([]);
+  /** Avoid full-screen "loading" flicker on every refetch; reset when customer session ends. */
+  const favoritesInitialLoadPendingRef = useRef(true);
 
   const canUseFavorites = user?.role === 'customer';
+
+  useEffect(() => {
+    favoritesInitialLoadPendingRef.current = true;
+  }, [user?.id]);
 
   const setPending = useCallback((productId: string, next: boolean) => {
     setPendingProductIds((current) => {
@@ -40,10 +46,12 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const refreshFavorites = useCallback(async () => {
     if (!canUseFavorites || !user?.id) {
       setFavorites([]);
+      favoritesInitialLoadPendingRef.current = true;
       return;
     }
 
-    setIsHydrating(true);
+    const showLoader = favoritesInitialLoadPendingRef.current;
+    if (showLoader) setIsHydrating(true);
     try {
       const { data, error } = await supabase
         .from('product_favorites')
@@ -55,6 +63,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
       setFavorites((data ?? []) as ProductFavoriteRow[]);
+      favoritesInitialLoadPendingRef.current = false;
     } catch (error: any) {
       setFavorites([]);
       Toast.show({
@@ -63,7 +72,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         text2: error?.message ?? 'Unknown error',
       });
     } finally {
-      setIsHydrating(false);
+      if (showLoader) setIsHydrating(false);
     }
   }, [canUseFavorites, user?.id]);
 
