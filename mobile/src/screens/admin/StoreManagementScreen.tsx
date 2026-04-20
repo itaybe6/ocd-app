@@ -482,19 +482,25 @@ export function StoreManagementScreen() {
                 </View>
               </View>
             ) : null}
-          </ScrollView>
 
-          {/* Footer */}
-          <View style={m.footer}>
-            <Pressable
-              style={({ pressed }) => [m.submitBtn, pressed && { opacity: 0.88, transform: [{ scale: 0.99 }] }]}
+            {/* Submit button */}
+            <TouchableOpacity
+              activeOpacity={0.8}
               onPress={submitPush}
+              style={{
+                backgroundColor: '#1D4ED8',
+                borderRadius: 16,
+                paddingVertical: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: 4,
+              }}
             >
-              <Text style={m.submitBtnText}>
-                {scheduleMode === 'scheduled' ? '🗓 תזמן פוש' : '📣 שגר עכשיו'}
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900' }}>
+                {scheduleMode === 'scheduled' ? '🗓  תזמן פוש' : '📣  שגר עכשיו'}
               </Text>
-            </Pressable>
-          </View>
+            </TouchableOpacity>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </View>
@@ -655,7 +661,7 @@ const m = StyleSheet.create({
   },
   navBtnText: { color: '#475569', fontWeight: '800', fontSize: 18 },
 
-  content: { padding: 16, gap: 14, paddingBottom: 28 },
+  content: { padding: 16, gap: 14, paddingBottom: 40 },
 
   sectionLabel: {
     color: '#0F172A',
@@ -761,20 +767,4 @@ const m = StyleSheet.create({
     textAlign: 'right',
   },
 
-  footer: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  submitBtn: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: 16,
-    backgroundColor: '#2563EB',
-  },
-  submitBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 16 },
 });
