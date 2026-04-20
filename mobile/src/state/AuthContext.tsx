@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await supabase
         .from('users')
-        .select('id, phone, password, role, name, address, price, avatar_url, created_at')
+        .select('id, phone, password, role, name, address, price, ocd_plus_subscriber, avatar_url, created_at')
         .eq('phone', normalizedPhone)
         .maybeSingle();
 
@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           price: null,
           avatar_url: null,
         })
-        .select('id, phone, role, name, address, price, avatar_url, created_at')
+        .select('id, phone, role, name, address, price, ocd_plus_subscriber, avatar_url, created_at')
         .single();
 
       if (error) throw error;

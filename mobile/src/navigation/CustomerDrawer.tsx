@@ -60,16 +60,18 @@ function handleCustomerTabPress(
     navigation.navigate('Profile');
     return;
   }
-
-  safeNavigate('StoreOcdPlus');
 }
 
 function CustomerStoreScreen({ navigation, route }: DrawerScreenProps<CustomerDrawerParamList, 'Store'>) {
+  const { user } = useAuth();
+  const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
+
   return (
     <StoreHomeScreen
       onProfilePress={() => navigation.navigate('Profile')}
       onFavoritesPress={() => navigation.navigate('Favorites')}
-      onOcdPlusPress={() => safeNavigate('StoreOcdPlus')}
+      isOcdPlusSubscriber={isOcdPlusSubscriber}
+      onOcdPlusSubscribePress={() => safeNavigate('StoreOcdPlus')}
       onSearchPress={() => safeNavigate('StoreSearch')}
       onProductPress={(handle) => safeNavigate('Product', { handle })}
       onOpenCart={() => safeNavigate('StoreCart')}

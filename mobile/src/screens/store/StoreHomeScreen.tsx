@@ -43,6 +43,7 @@ import {
 } from '../../lib/shopify';
 import { FavoriteToggleButton } from '../../components/FavoriteToggleButton';
 import { favoriteInputFromStoreProduct } from '../../lib/favorites';
+import { OcdPlusProductPriceBlock } from '../../components/OcdPlusProductPriceBlock';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 
@@ -137,7 +138,6 @@ const COLLECTIONS: CollectionCard[] = [
 const BOTTOM_NAV_ITEMS = [
   { id: 'home', label: 'בית' },
   { id: 'categories', label: 'קטגוריות' },
-  { id: 'ocdPlus', label: 'OCD+' },
   { id: 'favorites', label: 'אהבתי' },
   { id: 'search', label: 'חיפוש' },
   { id: 'profile', label: 'חשבון' },
@@ -1081,13 +1081,9 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorO
           ? 'heart'
           : 'heart-outline'
         : itemId === 'categories'
-        ? isActive
-          ? 'grid'
-          : 'grid-outline'
-        : itemId === 'ocdPlus'
           ? isActive
-            ? 'sparkles'
-            : 'sparkles-outline'
+            ? 'grid'
+            : 'grid-outline'
           : itemId === 'search'
             ? isActive
               ? 'search'
@@ -1198,7 +1194,7 @@ export function StoreFloatingTabBar({
   activeTab,
   onTabPress,
 }: {
-  activeTab: StoreBottomTabId;
+  activeTab: StoreBottomTabId | null;
   onTabPress: (tabId: StoreBottomTabId) => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -1269,11 +1265,6 @@ export function StoreFloatingTabBar({
           focused={activeTab === 'favorites'}
           onPress={() => onTabPress('favorites')}
           icon={renderBottomNavIcon('favorites', activeTab === 'favorites', activeTab === 'favorites' ? '#FFFFFF' : '#9CA3AF', 22)}
-        />
-        <AnimatedStoreTabButton
-          focused={activeTab === 'ocdPlus'}
-          onPress={() => onTabPress('ocdPlus')}
-          icon={renderBottomNavIcon('ocdPlus', activeTab === 'ocdPlus', activeTab === 'ocdPlus' ? '#FFFFFF' : '#9CA3AF', 22)}
         />
         <AnimatedStoreTabButton
           focused={activeTab === 'search'}
@@ -1364,19 +1355,21 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
 export function StoreHomeScreen({
   onProfilePress,
   onFavoritesPress,
-  onOcdPlusPress,
   onSearchPress,
   onProductPress,
   onOpenCart,
   onOpenProduct,
   onOpenCategory,
+  isOcdPlusSubscriber = false,
+  onOcdPlusSubscribePress,
   initialTab,
   initialTabRequestId,
 }: {
   onProfilePress: () => void;
   onFavoritesPress?: () => void;
-  onOcdPlusPress?: () => void;
   onSearchPress?: () => void;
+  isOcdPlusSubscriber?: boolean;
+  onOcdPlusSubscribePress?: () => void;
   onProductPress?: (handle: string) => void;
   onOpenCart?: () => void;
   onOpenProduct?: (product: StoreProduct) => void;
@@ -1791,13 +1784,6 @@ export function StoreHomeScreen({
       requestAnimationFrame(() => {
         searchInputRef.current?.focus();
       });
-      return;
-    }
-
-    if (itemId === 'ocdPlus') {
-      setMenuOpen(false);
-      searchInputRef.current?.blur();
-      onOcdPlusPress?.();
       return;
     }
 
@@ -2218,9 +2204,8 @@ export function StoreHomeScreen({
                   }}
                 >
                   {categoryPreviewProducts.map((product) => (
-                    <Pressable
+                    <View
                       key={`preview-${product.id}`}
-                      onPress={() => onProductPress?.(product.handle)}
                       style={{
                         width: '48%',
                         borderRadius: 18,
@@ -2228,68 +2213,76 @@ export function StoreHomeScreen({
                       }}
                     >
                       <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                      {/* Image area */}
-                      <View
-                        style={{
-                          height: 160,
-                          backgroundColor: '#F4F6FA',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <ProductImage product={product} height={160} bottomRadius={0} />
-
-                        <StoreProductCardQuantityControl product={product} closedSize={44} />
-
-                        {/* Badge — top-right */}
-                        {!!product.badge && (
+                        <Pressable onPress={() => onProductPress?.(product.handle)}>
+                          {/* Image area */}
                           <View
                             style={{
-                              position: 'absolute',
-                              top: 10,
-                              right: 10,
-                              backgroundColor: '#111827',
-                              borderRadius: 999,
-                              paddingHorizontal: 8,
-                              paddingVertical: 4,
-                              zIndex: 1,
+                              height: 160,
+                              backgroundColor: '#F4F6FA',
+                              overflow: 'hidden',
                             }}
                           >
-                            <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                              {product.badge}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
+                            <ProductImage product={product} height={160} bottomRadius={0} />
 
-                      {/* Info section: price first, then name, then subtitle */}
-                      <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
-                        <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
-                          {formatPrice(product.price)}
-                        </Text>
-                        <Text
-                          numberOfLines={2}
-                          style={{
-                            color: '#111827',
-                            fontSize: 13,
-                            lineHeight: 18,
-                            fontWeight: '700',
-                            textAlign: 'right',
-                            marginTop: 3,
-                          }}
-                        >
-                          {product.name}
-                        </Text>
-                        {!!product.subtitle && (
-                          <Text
-                            numberOfLines={1}
-                            style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
-                          >
-                            {product.subtitle}
-                          </Text>
-                        )}
+                            <StoreProductCardQuantityControl product={product} closedSize={44} />
+
+                            {/* Badge — top-right */}
+                            {!!product.badge && (
+                              <View
+                                style={{
+                                  position: 'absolute',
+                                  top: 10,
+                                  right: 10,
+                                  backgroundColor: '#111827',
+                                  borderRadius: 999,
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 4,
+                                  zIndex: 1,
+                                }}
+                              >
+                                <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                                  {product.badge}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </Pressable>
+
+                        <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }}>
+                          <OcdPlusProductPriceBlock
+                            regularPrice={product.price}
+                            isOcdPlusSubscriber={isOcdPlusSubscriber}
+                            onSubscribePress={onOcdPlusSubscribePress}
+                            titleSize={16}
+                          />
+                        </View>
+
+                        <Pressable onPress={() => onProductPress?.(product.handle)}>
+                          <View style={{ paddingHorizontal: 12, paddingTop: 0, paddingBottom: 12 }}>
+                            <Text
+                              numberOfLines={2}
+                              style={{
+                                color: '#111827',
+                                fontSize: 13,
+                                lineHeight: 18,
+                                fontWeight: '700',
+                                textAlign: 'right',
+                              }}
+                            >
+                              {product.name}
+                            </Text>
+                            {!!product.subtitle && (
+                              <Text
+                                numberOfLines={1}
+                                style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                              >
+                                {product.subtitle}
+                              </Text>
+                            )}
+                          </View>
+                        </Pressable>
                       </View>
-                      </View>
-                    </Pressable>
+                    </View>
                   ))}
                 </View>
               </View>
@@ -2353,84 +2346,95 @@ export function StoreHomeScreen({
               }}
             >
               {featuredProducts.map((product) => (
-                <Pressable
+                <View
                   key={product.id}
-                  onPress={() => onProductPress?.(product.handle)}
-                  style={({ pressed }) => ({
+                  style={{
                     width: 156,
                     borderRadius: 18,
                     ...storeProductCardShadowStyle,
-                    opacity: pressed ? 0.95 : 1,
-                    transform: [{ scale: pressed ? 0.99 : 1 }],
-                  })}
+                  }}
                 >
                   <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                  {/* Image area */}
-                  <View style={{ height: 152, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
-                    <ProductImage product={product} height={152} bottomRadius={0} />
+                    <Pressable
+                      onPress={() => onProductPress?.(product.handle)}
+                      style={({ pressed }) => ({
+                        opacity: pressed ? 0.95 : 1,
+                        transform: [{ scale: pressed ? 0.99 : 1 }],
+                      })}
+                    >
+                      {/* Image area */}
+                      <View style={{ height: 152, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
+                        <ProductImage product={product} height={152} bottomRadius={0} />
 
-                    <StoreProductCardQuantityControl product={product} closedSize={40} />
+                        <StoreProductCardQuantityControl product={product} closedSize={40} />
 
-                    {/* Favorite — top-right */}
-                    <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
-                      <FavoriteToggleButton
-                        active={isFavorite(product.id)}
-                        loading={isFavoritePending(product.id)}
-                        onPress={(event) => {
-                          event?.stopPropagation();
-                          void toggleFavorite(favoriteInputFromStoreProduct(product));
-                        }}
-                        size={32}
+                        {/* Favorite — top-right */}
+                        <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                          <FavoriteToggleButton
+                            active={isFavorite(product.id)}
+                            loading={isFavoritePending(product.id)}
+                            onPress={(event) => {
+                              event?.stopPropagation();
+                              void toggleFavorite(favoriteInputFromStoreProduct(product));
+                            }}
+                            size={32}
+                          />
+                        </View>
+
+                        {/* Badge — below favorite */}
+                        {!!product.badge && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 48,
+                              right: 10,
+                              backgroundColor: '#111827',
+                              borderRadius: 999,
+                              paddingHorizontal: 7,
+                              paddingVertical: 3,
+                              zIndex: 1,
+                            }}
+                          >
+                            <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                              {product.badge}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </Pressable>
+
+                    <View style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4 }}>
+                      <OcdPlusProductPriceBlock
+                        regularPrice={product.price}
+                        isOcdPlusSubscriber={isOcdPlusSubscriber}
+                        onSubscribePress={onOcdPlusSubscribePress}
+                        titleSize={15}
                       />
                     </View>
 
-                    {/* Badge — below favorite */}
-                    {!!product.badge && (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          top: 48,
-                          right: 10,
-                          backgroundColor: '#111827',
-                          borderRadius: 999,
-                          paddingHorizontal: 7,
-                          paddingVertical: 3,
-                          zIndex: 1,
-                        }}
-                      >
-                        <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                          {product.badge}
+                    <Pressable onPress={() => onProductPress?.(product.handle)}>
+                      <View style={{ paddingHorizontal: 10, paddingTop: 0, paddingBottom: 12 }}>
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            color: '#111827',
+                            fontSize: 12,
+                            lineHeight: 17,
+                            fontWeight: '700',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {product.name}
                         </Text>
+                        {!!product.subtitle && (
+                          <Text numberOfLines={1} style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}>
+                            {product.subtitle}
+                          </Text>
+                        )}
                       </View>
-                    )}
+                    </Pressable>
                   </View>
-
-                  {/* Info section: price first, then name, then subtitle */}
-                  <View style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 12 }}>
-                    <Text style={{ color: '#111827', fontSize: 15, fontWeight: '900', textAlign: 'right' }}>
-                      {formatPrice(product.price)}
-                    </Text>
-                    <Text
-                      numberOfLines={2}
-                      style={{
-                        color: '#111827',
-                        fontSize: 12,
-                        lineHeight: 17,
-                        fontWeight: '700',
-                        textAlign: 'right',
-                        marginTop: 3,
-                      }}
-                    >
-                      {product.name}
-                    </Text>
-                    {!!product.subtitle && (
-                      <Text numberOfLines={1} style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}>
-                        {product.subtitle}
-                      </Text>
-                    )}
-                  </View>
-                  </View>
-                </Pressable>
+                </View>
               ))}
             </View>
 
@@ -2443,67 +2447,82 @@ export function StoreHomeScreen({
 
             <View style={{ gap: 12 }}>
               {visibleProducts.map((product) => (
-                <Pressable
+                <View
                   key={`list-${product.id}`}
-                  onPress={() => onProductPress?.(product.handle)}
-                  style={({ pressed }) => ({
+                  style={{
                     borderRadius: 18,
                     ...storeProductCardShadowStyle,
-                    opacity: pressed ? 0.96 : 1,
-                    transform: [{ scale: pressed ? 0.995 : 1 }],
-                  })}
+                  }}
                 >
                   <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
-                    <View style={{ width: 112, padding: 10 }}>
-                      <View style={{ position: 'relative' }}>
-                        <ProductImage product={product} height={118} bottomRadius={0} />
-                        <View
-                          style={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
-                          }}
-                        >
-                          <FavoriteToggleButton
-                            active={isFavorite(product.id)}
-                            loading={isFavoritePending(product.id)}
-                            onPress={(event) => {
-                              event?.stopPropagation();
-                              void toggleFavorite(favoriteInputFromStoreProduct(product));
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
+                      <Pressable
+                        onPress={() => onProductPress?.(product.handle)}
+                        style={({ pressed }) => ({
+                          width: 112,
+                          padding: 10,
+                          opacity: pressed ? 0.96 : 1,
+                        })}
+                      >
+                        <View style={{ position: 'relative' }}>
+                          <ProductImage product={product} height={118} bottomRadius={0} />
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
                             }}
-                            size={32}
+                          >
+                            <FavoriteToggleButton
+                              active={isFavorite(product.id)}
+                              loading={isFavoritePending(product.id)}
+                              onPress={(event) => {
+                                event?.stopPropagation();
+                                void toggleFavorite(favoriteInputFromStoreProduct(product));
+                              }}
+                              size={32}
+                            />
+                          </View>
+                        </View>
+                      </Pressable>
+
+                      <View
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#FFFFFF',
+                          borderRadius: 18,
+                          overflow: 'hidden',
+                          paddingVertical: 10,
+                          paddingLeft: 10,
+                          paddingRight: 4,
+                        }}
+                      >
+                        <Pressable onPress={() => onProductPress?.(product.handle)}>
+                          <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
+                            {product.name}
+                          </Text>
+                          <Text style={{ color: '#8D94A1', fontSize: 11, marginTop: 4, textAlign: 'right' }}>
+                            {product.subtitle}
+                          </Text>
+                          <Text
+                            numberOfLines={2}
+                            style={{ color: '#6B7280', fontSize: 12, marginTop: 8, textAlign: 'right' }}
+                          >
+                            {product.description || 'מוצר מהקטלוג שלך'}
+                          </Text>
+                        </Pressable>
+                        <View style={{ marginTop: 10 }}>
+                          <OcdPlusProductPriceBlock
+                            regularPrice={product.price}
+                            isOcdPlusSubscriber={isOcdPlusSubscriber}
+                            onSubscribePress={onOcdPlusSubscribePress}
+                            titleSize={20}
                           />
                         </View>
                       </View>
                     </View>
-
-                    <View
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        borderRadius: 18,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
-                        {product.name}
-                      </Text>
-                      <Text style={{ color: '#8D94A1', fontSize: 11, marginTop: 4, textAlign: 'right' }}>
-                        {product.subtitle}
-                      </Text>
-                      <Text
-                        numberOfLines={2}
-                        style={{ color: '#6B7280', fontSize: 12, marginTop: 8, textAlign: 'right' }}
-                      >
-                        {product.description || 'מוצר מהקטלוג שלך'}
-                      </Text>
-                      <Text style={{ color: '#111827', fontSize: 20, fontWeight: '900', marginTop: 10 }}>
-                        {formatPrice(product.price)}
-                      </Text>
-                    </View>
                   </View>
-                  </View>
-                </Pressable>
+                </View>
               ))}
             </View>
 
@@ -2985,6 +3004,8 @@ export function StoreCategoryScreen({
   onOpenProduct,
   onOpenCategory,
   onTabPress,
+  isOcdPlusSubscriber = false,
+  onOcdPlusSubscribePress,
   subcategories,
 }: {
   onBack: () => void;
@@ -3002,6 +3023,8 @@ export function StoreCategoryScreen({
     subcategories?: StoreSubcategory[];
   }) => void;
   onTabPress: (tabId: StoreBottomTabId) => void;
+  isOcdPlusSubscriber?: boolean;
+  onOcdPlusSubscribePress?: () => void;
   subcategories?: StoreSubcategory[];
 }) {
   const insets = useSafeAreaInsets();
@@ -3524,9 +3547,8 @@ export function StoreCategoryScreen({
               }}
             >
               {filteredProducts.map((product) => (
-                <Pressable
+                <View
                   key={`category-${product.id}`}
-                  onPress={() => onOpenProduct?.(product)}
                   style={{
                     width: '48%',
                     borderRadius: 18,
@@ -3534,75 +3556,83 @@ export function StoreCategoryScreen({
                   }}
                 >
                   <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                  {/* Image area */}
-                  <View style={{ height: 160, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
-                    <ProductImage product={product} height={160} bottomRadius={0} />
+                    <Pressable onPress={() => onOpenProduct?.(product)}>
+                      {/* Image area */}
+                      <View style={{ height: 160, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
+                        <ProductImage product={product} height={160} bottomRadius={0} />
 
-                    <StoreProductCardQuantityControl product={product} closedSize={44} />
+                        <StoreProductCardQuantityControl product={product} closedSize={44} />
 
-                    {/* Favorite — top-right */}
-                    <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
-                      <FavoriteToggleButton
-                        active={isFavorite(product.id)}
-                        loading={isFavoritePending(product.id)}
-                        onPress={(event) => {
-                          event?.stopPropagation();
-                          void toggleFavorite(favoriteInputFromStoreProduct(product));
-                        }}
-                        size={32}
+                        {/* Favorite — top-right */}
+                        <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                          <FavoriteToggleButton
+                            active={isFavorite(product.id)}
+                            loading={isFavoritePending(product.id)}
+                            onPress={(event) => {
+                              event?.stopPropagation();
+                              void toggleFavorite(favoriteInputFromStoreProduct(product));
+                            }}
+                            size={32}
+                          />
+                        </View>
+
+                        {/* Badge — below favorite */}
+                        {!!product.badge && (
+                          <View
+                            style={{
+                              position: 'absolute',
+                              top: 48,
+                              right: 10,
+                              backgroundColor: '#111827',
+                              borderRadius: 999,
+                              paddingHorizontal: 7,
+                              paddingVertical: 3,
+                              zIndex: 1,
+                            }}
+                          >
+                            <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                              {product.badge}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </Pressable>
+
+                    <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }}>
+                      <OcdPlusProductPriceBlock
+                        regularPrice={product.price}
+                        isOcdPlusSubscriber={isOcdPlusSubscriber}
+                        onSubscribePress={onOcdPlusSubscribePress}
+                        titleSize={16}
                       />
                     </View>
 
-                    {/* Badge — below favorite */}
-                    {!!product.badge && (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          top: 48,
-                          right: 10,
-                          backgroundColor: '#111827',
-                          borderRadius: 999,
-                          paddingHorizontal: 7,
-                          paddingVertical: 3,
-                          zIndex: 1,
-                        }}
-                      >
-                        <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                          {product.badge}
+                    <Pressable onPress={() => onOpenProduct?.(product)}>
+                      <View style={{ paddingHorizontal: 12, paddingTop: 0, paddingBottom: 12 }}>
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            color: '#111827',
+                            fontSize: 13,
+                            lineHeight: 18,
+                            fontWeight: '700',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {product.name}
                         </Text>
+                        {!!product.subtitle && (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                          >
+                            {product.subtitle}
+                          </Text>
+                        )}
                       </View>
-                    )}
+                    </Pressable>
                   </View>
-
-                  {/* Info: price first, then name, then subtitle */}
-                  <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
-                    <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
-                      {formatPrice(product.price)}
-                    </Text>
-                    <Text
-                      numberOfLines={2}
-                      style={{
-                        color: '#111827',
-                        fontSize: 13,
-                        lineHeight: 18,
-                        fontWeight: '700',
-                        textAlign: 'right',
-                        marginTop: 3,
-                      }}
-                    >
-                      {product.name}
-                    </Text>
-                    {!!product.subtitle && (
-                      <Text
-                        numberOfLines={1}
-                        style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
-                      >
-                        {product.subtitle}
-                      </Text>
-                    )}
-                  </View>
-                  </View>
-                </Pressable>
+                </View>
               ))}
             </View>
           )}
@@ -3995,11 +4025,15 @@ export function StoreProductScreen({
   onOpenCart,
   product,
   onTabPress,
+  isOcdPlusSubscriber = false,
+  onOcdPlusSubscribePress,
 }: {
   onBack: () => void;
   onOpenCart?: () => void;
   product: StoreProduct;
   onTabPress: (tabId: StoreBottomTabId) => void;
+  isOcdPlusSubscriber?: boolean;
+  onOcdPlusSubscribePress?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
@@ -4147,8 +4181,14 @@ export function StoreProductScreen({
                 alignItems: 'center',
               }}
             >
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '900' }}>{formatPrice(product.price)}</Text>
+              <View style={{ alignItems: 'flex-end', flex: 1, minWidth: 0 }}>
+                <OcdPlusProductPriceBlock
+                  regularPrice={product.price}
+                  isOcdPlusSubscriber={isOcdPlusSubscriber}
+                  onSubscribePress={onOcdPlusSubscribePress}
+                  titleSize={26}
+                  variant="onDark"
+                />
                 <Text style={{ color: '#CBD5E1', fontSize: 12, marginTop: 4 }}>כולל תצוגה ישירה מהקטלוג שלך</Text>
               </View>
 

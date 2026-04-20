@@ -16,6 +16,8 @@ import { Card } from '../../components/ui/Card';
 import { favoriteInputFromShopify } from '../../lib/favorites';
 import { fetchProductByHandle, type ShopifyProduct } from '../../lib/shopify';
 import type { RootStackParamList } from '../../navigation/types';
+import { OcdPlusProductPriceBlock } from '../../components/OcdPlusProductPriceBlock';
+import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { colors } from '../../theme/colors';
@@ -121,6 +123,8 @@ function getCartProduct(product: ShopifyProduct) {
 export function ProductScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom, bottomBarOffset } = getStoreBottomBarMetrics(insets.bottom);
+  const { user } = useAuth();
+  const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
   const { addItem, getQuantity, updateQuantity, isMutating } = useCart();
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
   const handle = route.params.handle;
@@ -438,16 +442,25 @@ export function ProductScreen({ navigation, route }: Props) {
               {product.title}
             </Text>
 
-            <Text
-              style={{
-                color: '#111827',
-                fontSize: 22,
-                fontWeight: '900',
-                ...RTL_TEXT,
-              }}
-            >
-              {formatPrice(product.price, product.currencyCode)}
-            </Text>
+            {product.currencyCode === 'ILS' ? (
+              <OcdPlusProductPriceBlock
+                regularPrice={product.price}
+                isOcdPlusSubscriber={isOcdPlusSubscriber}
+                onSubscribePress={() => navigation.navigate('StoreOcdPlus')}
+                titleSize={22}
+              />
+            ) : (
+              <Text
+                style={{
+                  color: '#111827',
+                  fontSize: 22,
+                  fontWeight: '900',
+                  ...RTL_TEXT,
+                }}
+              >
+                {formatPrice(product.price, product.currencyCode)}
+              </Text>
+            )}
           </View>
           </View>
           </View>
@@ -568,7 +581,6 @@ export function ProductScreen({ navigation, route }: Props) {
                       paddingHorizontal: 8,
                       flexDirection: 'row-reverse',
                       alignItems: 'center',
-                      justifyContent: 'center',
                       flexWrap: 'wrap',
                       gap: 6,
                     }}

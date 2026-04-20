@@ -5,8 +5,6 @@ type JobRow = {
   title: string;
   body: string;
   image_url?: string | null;
-  scope?: string | null;
-  product_handles?: string[] | null;
   scheduled_for: string;
   status: string;
 };
@@ -64,11 +62,8 @@ async function sendBroadcast(opts: {
   title: string;
   body: string;
   imageUrl: string | null;
-  scope: 'general' | 'product';
-  productHandles: string[];
 }) {
-  const { supabaseAdmin, title, body, imageUrl, scope, productHandles } = opts;
-  const primaryHandle = productHandles[0] ?? null;
+  const { supabaseAdmin, title, body, imageUrl } = opts;
 
   const sentAt = new Date().toISOString();
   const { data: inserted, error: insertErr } = await supabaseAdmin
@@ -77,8 +72,6 @@ async function sendBroadcast(opts: {
       title,
       body,
       image_url: imageUrl,
-      product_handle: primaryHandle,
-      product_title: null,
       sent_at: sentAt,
     })
     .select('id')
@@ -103,11 +96,7 @@ async function sendBroadcast(opts: {
     body,
     sound: 'default',
     channelId: 'marketing',
-    data: {
-      type: scope,
-      ...(primaryHandle ? { productHandle: primaryHandle } : {}),
-      ...(productHandles.length > 1 ? { productHandles } : {}),
-    },
+    data: { type: 'broadcast' },
   };
   if (imageUrl) {
     baseMessage.richContent = { image: imageUrl };
@@ -219,7 +208,7 @@ Deno.serve(async (req) => {
   const nowIso = new Date().toISOString();
   const { data: due, error: dueErr } = await supabaseAdmin
     .from('push_notification_jobs')
-    .select('id, title, body, image_url, scope, product_handles, scheduled_for, status')
+    .select('id, title, body, image_url, scheduled_for, status')
     .eq('status', 'scheduled')
     .lte('scheduled_for', nowIso)
     .order('scheduled_for', { ascending: true })
@@ -230,7 +219,6 @@ Deno.serve(async (req) => {
   const results: any[] = [];
 
   for (const job of jobs) {
-    // Try to lock the job
     const { data: locked, error: lockErr } = await supabaseAdmin
       .from('push_notification_jobs')
       .update({ status: 'sending' })
@@ -244,17 +232,12 @@ Deno.serve(async (req) => {
     }
     if (!locked) continue;
 
-    const handles = Array.from(new Set((job.product_handles ?? []).map((h) => String(h ?? '').trim()).filter(Boolean)));
-    const scope: 'general' | 'product' = job.scope === 'product' || handles.length ? 'product' : 'general';
-
     try {
       const res = await sendBroadcast({
         supabaseAdmin,
         title: String(job.title ?? '').trim(),
         body: String(job.body ?? '').trim(),
         imageUrl: (job.image_url ?? null) ? String(job.image_url).trim() : null,
-        scope,
-        productHandles: handles,
       });
       await supabaseAdmin
         .from('push_notification_jobs')
@@ -292,4 +275,3 @@ Deno.serve(async (req) => {
     { headers: corsHeaders() },
   );
 });
-

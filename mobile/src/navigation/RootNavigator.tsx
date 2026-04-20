@@ -5,25 +5,21 @@ import {
   createNativeStackNavigator,
   type NativeStackScreenProps,
 } from '@react-navigation/native-stack';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../state/AuthContext';
 import {
-  getStoreBottomBarMetrics,
   StoreCategoryScreen,
-  StoreFloatingTabBar,
   StoreHomeScreen,
-  StoreProductScreen,
   StoreSearchScreen,
   type StoreBottomTabId,
-  type StoreProduct,
 } from '../screens/store/StoreHomeScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
 import { StoreCheckoutScreen } from '../screens/store/StoreCheckoutScreen';
 import { StoreFavoritesScreen } from '../screens/store/StoreFavoritesScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
+import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
 
@@ -40,11 +36,6 @@ function handleStoreTabNavigation(
 
   if (tabId === 'search') {
     navigation.navigate('StoreSearch');
-    return;
-  }
-
-  if (tabId === 'ocdPlus') {
-    navigation.navigate('StoreOcdPlus');
     return;
   }
 
@@ -82,7 +73,6 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
       <StoreHomeScreen
         onProfilePress={() => navigation.navigate('Login')}
         onFavoritesPress={() => navigation.navigate('StoreFavorites')}
-        onOcdPlusPress={() => navigation.navigate('StoreOcdPlus')}
         onSearchPress={() => navigation.navigate('StoreSearch')}
         onProductPress={(handle) => navigation.navigate('Product', { handle })}
         onOpenCart={() => navigation.navigate('StoreCart')}
@@ -96,6 +86,8 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
             subcategories: category.subcategories,
           })
         }
+        isOcdPlusSubscriber={false}
+        onOcdPlusSubscribePress={() => navigation.navigate('StoreOcdPlus')}
         initialTab={route.params?.initialTab}
         initialTabRequestId={route.params?.initialTabRequestId}
       />
@@ -107,28 +99,12 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
   return <CustomerEntryScreen />;
 }
 
-function StoreOcdPlusRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'>) {
-  const insets = useSafeAreaInsets();
-  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
-
+function StoreOcdPlusRoute(props: NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'>) {
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ flex: 1 }}>
-        <Screen padded={false}>
-          <View
-            className="flex-1 items-center justify-center px-6"
-            style={{ paddingBottom: contentPaddingBottom }}
-          >
-            <Text style={{ fontSize: 34, fontWeight: '900', color: colors.text }}>OCD+</Text>
-            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '800', color: colors.text }}>העמוד הזה עדיין בפיתוח</Text>
-            <Text style={{ marginTop: 8, fontSize: 14, color: colors.muted, textAlign: 'center' }}>
-              כאן יופיעו בהמשך תכנים, הטבות או שירותים מיוחדים של OCD+.
-            </Text>
-          </View>
-        </Screen>
-        <StoreFloatingTabBar activeTab="ocdPlus" onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)} />
-      </View>
-    </SafeAreaView>
+    <StoreOcdPlusScreen
+      {...props}
+      onBottomTabPress={(tabId) => handleStoreTabNavigation(props.navigation, tabId)}
+    />
   );
 }
 
@@ -168,6 +144,8 @@ function StoreCategoryRoute({
   navigation,
   route,
 }: NativeStackScreenProps<RootStackParamList, 'StoreCategory'>) {
+  const { user } = useAuth();
+  const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
   const params = route.params as RootStackParamList['StoreCategory'] & {
     id?: string;
     title?: string;
@@ -192,6 +170,8 @@ function StoreCategoryRoute({
         })
       }
       onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+      isOcdPlusSubscriber={isOcdPlusSubscriber}
+      onOcdPlusSubscribePress={() => navigation.navigate('StoreOcdPlus')}
       categoryId={categoryId}
       categoryTitle={categoryTitle}
       categoryDescription={categoryDescription}
