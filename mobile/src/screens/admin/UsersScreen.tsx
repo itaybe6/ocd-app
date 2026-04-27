@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Pencil, Plus, RefreshCw, Search, Trash2, Users, X } from 'lucide-react-native';
+import { Eye, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { AnchoredWindow, type WindowAnchor } from '../../components/AnchoredWindow';
@@ -504,15 +504,6 @@ export function UsersScreen() {
                   >
                     <Plus size={18} color="#fff" strokeWidth={2.5} />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={fetchUsers}
-                    hitSlop={10}
-                    activeOpacity={0.5}
-                    disabled={refreshing}
-                    style={[s.refreshBtn, refreshing && { opacity: 0.4 }]}
-                  >
-                    <RefreshCw size={16} color={A.muted} />
-                  </TouchableOpacity>
                 </View>
                 <View style={s.heroTitleBlock}>
                   <View style={s.heroIconCircle}>
@@ -994,14 +985,6 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
-  },
-  refreshBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F0F0F5',
   },
 
   /* ── Search ── */

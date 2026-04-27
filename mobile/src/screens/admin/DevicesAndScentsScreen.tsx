@@ -1,4 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -38,6 +45,34 @@ export function DevicesAndScentsScreen() {
   const [loading, setLoading] = useState(false);
 
   const [query, setQuery] = useState('');
+  const [listTab, setListTab] = useState<'devices' | 'scents'>('devices');
+  const [segW, setSegW] = useState(0);
+  const segAnim = useSharedValue(0); // 0 = devices (left), 1 = scents (right)
+
+  const switchListTab = (tab: 'devices' | 'scents') => {
+    setListTab(tab);
+    segAnim.value = withSpring(tab === 'devices' ? 0 : 1, {
+      damping: 28,
+      stiffness: 120,
+      mass: 1.2,
+    });
+  };
+
+  const thumbStyle = useAnimatedStyle(() => {
+    if (segW === 0) return {};
+    const pillW = (segW - 9) / 2;
+    return {
+      width: pillW,
+      transform: [{ translateX: segAnim.value * (pillW + 3) }],
+    };
+  });
+
+  const devContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(segAnim.value, [0, 0.6], [1, 0.55], Extrapolation.CLAMP),
+  }));
+  const scentContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(segAnim.value, [0.4, 1], [0.55, 1], Extrapolation.CLAMP),
+  }));
   const [createOpen, setCreateOpen] = useState(false);
   const [createType, setCreateType] = useState<'device' | 'scent'>('device');
 
@@ -298,7 +333,7 @@ export function DevicesAndScentsScreen() {
   const listHeader = useMemo(() => {
     const isSearching = !!query.trim();
     return (
-      <View style={{ gap: 20, marginTop: 4 }}>
+      <View style={{ gap: 0, marginTop: 4, marginBottom: 12 }}>
         {/* Search + Add row */}
         <View style={st.searchRow}>
           <View style={st.searchWrap}>
@@ -318,7 +353,10 @@ export function DevicesAndScentsScreen() {
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={() => { setCreateType('device'); setCreateOpen(true); }}
+            onPress={() => {
+              setCreateType(listTab === 'devices' ? 'device' : 'scent');
+              setCreateOpen(true);
+            }}
             hitSlop={8}
           >
             {({ pressed }) => (
@@ -328,20 +366,9 @@ export function DevicesAndScentsScreen() {
             )}
           </Pressable>
         </View>
-
-        {/* Devices section header */}
-        <View style={st.sectionHeader}>
-          <View style={st.sectionIconWrap}>
-            <Smartphone size={14} color={colors.primary} strokeWidth={2.2} />
-          </View>
-          <Text style={st.sectionLabel}>מכשירים</Text>
-          <View style={st.countBadge}>
-            <Text style={st.countText}>{filteredDevices.length}</Text>
-          </View>
-        </View>
       </View>
     );
-  }, [filteredDevices.length, query]);
+  }, [listTab, query]);
 
   const renderDeviceCard = ({ item }: { item: Device }) => (
     <View style={st.card}>
@@ -380,91 +407,127 @@ export function DevicesAndScentsScreen() {
     </View>
   );
 
+  const renderScentCard = ({ item }: { item: Scent }) => (
+    <View style={st.card}>
+      <View style={st.cardInner}>
+        <View style={[st.cardIconWrap, st.cardIconWrapScent]}>
+          <Droplets size={18} color="#7C3AED" strokeWidth={2} />
+        </View>
+        <Text style={[st.cardTitle, { flex: 1, textAlign: 'right' }]}>{item.name}</Text>
+        <View style={st.cardActions}>
+          <Pressable
+            hitSlop={8}
+            onPress={() => openEditScent(item)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <View style={st.iconBtnEdit}>
+              <Pencil size={14} color={colors.text} strokeWidth={2.2} />
+            </View>
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            onPress={() => deleteScent(item.id)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <View style={st.iconBtnDanger}>
+              <Trash2 size={14} color={colors.danger} strokeWidth={2.2} />
+            </View>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  const listEmpty = listTab === 'devices' ? (
+    <View style={st.emptyWrap}>
+      <View style={st.emptyIcon}>
+        <Smartphone size={28} color={colors.muted} strokeWidth={1.5} />
+      </View>
+      <Text style={st.emptyTitle}>{query.trim() ? 'לא נמצאו מכשירים' : 'אין מכשירים'}</Text>
+      <Text style={st.emptySubtitle}>{query.trim() ? 'נסה חיפוש אחר' : 'לחץ + כדי להוסיף מכשיר חדש'}</Text>
+    </View>
+  ) : (
+    <View style={st.emptyWrap}>
+      <View style={[st.emptyIcon, st.emptyIconScent]}>
+        <Droplets size={28} color={colors.muted} strokeWidth={1.5} />
+      </View>
+      <Text style={st.emptyTitle}>{query.trim() ? 'לא נמצאו ניחוחות' : 'אין ניחוחות'}</Text>
+      <Text style={st.emptySubtitle}>{query.trim() ? 'נסה חיפוש אחר' : 'לחץ + כדי להוסיף ניחוח חדש'}</Text>
+    </View>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* ── Segmented Toggle ── */}
+      <View style={st.segWrap}>
+        <View
+          style={st.seg}
+          onLayout={(e) => setSegW(e.nativeEvent.layout.width)}
+        >
+          {/* Sliding thumb */}
+          <Animated.View style={[st.segThumb, thumbStyle]} />
+
+          {/* מכשירים */}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => switchListTab('devices')}
+            style={st.segPill}
+          >
+            <Animated.View style={[st.segPillInner, devContentStyle]}>
+              <View style={listTab === 'devices' ? [st.segIconBox, st.segIconBoxDevice] : st.segIconBox}>
+                <Smartphone size={14} color={listTab === 'devices' ? colors.primary : '#8E8E93'} strokeWidth={2.2} />
+              </View>
+              <Text style={listTab === 'devices' ? [st.segLabel, st.segLabelActiveDevice] : st.segLabel}>
+                מכשירים
+              </Text>
+              <View style={listTab === 'devices' ? [st.segBadge, st.segBadgeDevice] : st.segBadge}>
+                <Text style={listTab === 'devices' ? [st.segBadgeTxt, st.segBadgeTxtDevice] : st.segBadgeTxt}>
+                  {filteredDevices.length}
+                </Text>
+              </View>
+            </Animated.View>
+          </Pressable>
+
+          {/* ניחוחות */}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => switchListTab('scents')}
+            style={st.segPill}
+          >
+            <Animated.View style={[st.segPillInner, scentContentStyle]}>
+              <View style={listTab === 'scents' ? [st.segIconBox, st.segIconBoxScent] : st.segIconBox}>
+                <Droplets size={14} color={listTab === 'scents' ? '#7C3AED' : '#8E8E93'} strokeWidth={2.2} />
+              </View>
+              <Text style={listTab === 'scents' ? [st.segLabel, st.segLabelActiveScent] : st.segLabel}>
+                ניחוחות
+              </Text>
+              <View style={listTab === 'scents' ? [st.segBadge, st.segBadgeScent] : st.segBadge}>
+                <Text style={listTab === 'scents' ? [st.segBadgeTxt, st.segBadgeTxtScent] : st.segBadgeTxt}>
+                  {filteredScents.length}
+                </Text>
+              </View>
+            </Animated.View>
+          </Pressable>
+        </View>
+      </View>
+
       <FlatList
-        data={filteredDevices}
+        key={listTab}
+        data={listTab === 'devices' ? filteredDevices : filteredScents}
         keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={st.listContent}
         refreshing={loading}
         onRefresh={fetchAll}
         ListHeaderComponent={listHeader}
-        renderItem={renderDeviceCard}
+        renderItem={
+          listTab === 'devices'
+            ? (info) => renderDeviceCard(info as { item: Device })
+            : (info) => renderScentCard(info as { item: Scent })
+        }
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-        ListEmptyComponent={
-          <View style={st.emptyWrap}>
-            <View style={st.emptyIcon}>
-              <Smartphone size={28} color={colors.muted} strokeWidth={1.5} />
-            </View>
-            <Text style={st.emptyTitle}>
-              {query.trim() ? 'לא נמצאו מכשירים' : 'אין מכשירים'}
-            </Text>
-            <Text style={st.emptySubtitle}>
-              {query.trim() ? 'נסה חיפוש אחר' : 'לחץ + כדי להוסיף מכשיר חדש'}
-            </Text>
-          </View>
-        }
-        ListFooterComponent={
-          <View style={{ gap: 8, marginTop: 28 }}>
-            {/* Scents section header */}
-            <View style={[st.sectionHeader, { marginBottom: 4 }]}>
-              <View style={[st.sectionIconWrap, { backgroundColor: 'rgba(139,92,246,0.1)' }]}>
-                <Droplets size={14} color="#8B5CF6" strokeWidth={2.2} />
-              </View>
-              <Text style={st.sectionLabel}>ניחוחות</Text>
-              <View style={st.countBadge}>
-                <Text style={st.countText}>{filteredScents.length}</Text>
-              </View>
-            </View>
-
-            {filteredScents.length === 0 ? (
-              <View style={st.emptyWrap}>
-                <View style={[st.emptyIcon, { backgroundColor: 'rgba(139,92,246,0.06)' }]}>
-                  <Droplets size={28} color={colors.muted} strokeWidth={1.5} />
-                </View>
-                <Text style={st.emptyTitle}>
-                  {query.trim() ? 'לא נמצאו ניחוחות' : 'אין ניחוחות'}
-                </Text>
-                <Text style={st.emptySubtitle}>
-                  {query.trim() ? 'נסה חיפוש אחר' : 'לחץ + כדי להוסיף ניחוח חדש'}
-                </Text>
-              </View>
-            ) : (
-              filteredScents.map((item) => (
-                <View key={item.id} style={st.card}>
-                  <View style={st.cardInner}>
-                    <View style={[st.cardIconWrap, { backgroundColor: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.15)' }]}>
-                      <Droplets size={18} color="#8B5CF6" strokeWidth={2} />
-                    </View>
-                    <Text style={[st.cardTitle, { flex: 1, textAlign: 'right' }]}>{item.name}</Text>
-                    <View style={st.cardActions}>
-                      <Pressable
-                        hitSlop={8}
-                        onPress={() => openEditScent(item)}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-                      >
-                        <View style={st.iconBtnEdit}>
-                          <Pencil size={14} color={colors.text} strokeWidth={2.2} />
-                        </View>
-                      </Pressable>
-                      <Pressable
-                        hitSlop={8}
-                        onPress={() => deleteScent(item.id)}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-                      >
-                        <View style={st.iconBtnDanger}>
-                          <Trash2 size={14} color={colors.danger} strokeWidth={2.2} />
-                        </View>
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              ))
-            )}
-            <View style={{ height: 40 }} />
-          </View>
-        }
+        ListEmptyComponent={listEmpty}
+        ListFooterComponent={<View style={{ height: 32 }} />}
       />
 
       {/* ── Create Modal ──────────────────────────────────────────────────── */}
@@ -709,40 +772,98 @@ const st = StyleSheet.create({
     elevation: 4,
   },
 
-  sectionHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 2,
-    marginBottom: 6,
+  segWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-  sectionIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+  seg: {
+    flexDirection: 'row',
+    backgroundColor: '#E5E5EA',
+    borderRadius: 13,
+    padding: 3,
+    gap: 3,
+  },
+  segThumb: {
+    position: 'absolute',
+    top: 3,
+    bottom: 3,
+    left: 3,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.11,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  segPill: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  segPillInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  segIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  segIconBoxDevice: {
     backgroundColor: 'rgba(37,99,235,0.1)',
+  },
+  segIconBoxScent: {
+    backgroundColor: 'rgba(124,58,237,0.1)',
+  },
+  segLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: -0.3,
+  },
+  segLabelActiveDevice: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  segLabelActiveScent: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  segBadge: {
+    minWidth: 22,
+    height: 18,
+    paddingHorizontal: 6,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionLabel: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: colors.text,
-    letterSpacing: 0.2,
-    textAlign: 'right',
+  segBadgeDevice: {
+    backgroundColor: 'rgba(37,99,235,0.12)',
   },
-  countBadge: {
-    backgroundColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 24,
-    alignItems: 'center',
+  segBadgeScent: {
+    backgroundColor: 'rgba(124,58,237,0.12)',
   },
-  countText: {
+  segBadgeTxt: {
     fontSize: 11,
-    fontWeight: '800',
-    color: colors.muted,
+    fontWeight: '700',
+    color: '#8E8E93',
+    letterSpacing: -0.2,
+  },
+  segBadgeTxtDevice: {
+    color: colors.primary,
+  },
+  segBadgeTxtScent: {
+    color: '#7C3AED',
   },
 
   card: {
@@ -768,6 +889,10 @@ const st = StyleSheet.create({
     borderColor: 'rgba(37,99,235,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cardIconWrapScent: {
+    backgroundColor: 'rgba(124,58,237,0.08)',
+    borderColor: 'rgba(124,58,237,0.18)',
   },
   cardContent: {
     flex: 1,
@@ -829,6 +954,9 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
+  },
+  emptyIconScent: {
+    backgroundColor: 'rgba(124,58,237,0.08)',
   },
   emptyTitle: {
     color: colors.text,
