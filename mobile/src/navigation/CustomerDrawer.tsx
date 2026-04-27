@@ -32,6 +32,10 @@ export type CustomerDrawerParamList = {
 
 const Drawer = createDrawerNavigator<CustomerDrawerParamList>();
 
+type CustomerDrawerProps = {
+  initialRouteName?: keyof CustomerDrawerParamList;
+};
+
 function handleCustomerTabPress(
   navigation: DrawerScreenProps<CustomerDrawerParamList, 'Store'>['navigation'],
   tabId: StoreBottomTabId
@@ -41,8 +45,8 @@ function handleCustomerTabPress(
     return;
   }
 
-  if (tabId === 'categories') {
-    navigation.navigate('Store', { initialTab: 'categories', initialTabRequestId: Date.now() });
+  if (tabId === 'cart') {
+    safeNavigate('StoreCart');
     return;
   }
 
@@ -155,9 +159,10 @@ function CustomerDrawerContent(props: DrawerContentComponentProps) {
   );
 }
 
-export function CustomerDrawer() {
+export function CustomerDrawer({ initialRouteName = 'Store' }: CustomerDrawerProps) {
   return (
     <Drawer.Navigator
+      initialRouteName={initialRouteName}
       drawerContent={(p) => <CustomerDrawerContent {...p} />}
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },

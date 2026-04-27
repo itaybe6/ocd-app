@@ -21,7 +21,7 @@ import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { colors } from '../../theme/colors';
-import { getStoreBottomBarMetrics } from './StoreHomeScreen';
+import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from './StoreHomeScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
 
@@ -36,16 +36,15 @@ const RTL_TEXT = {
   writingDirection: 'rtl' as const,
 };
 
-/** Matches `StoreFloatingTabBar` dock shells in StoreHomeScreen. */
+/** Matches `StoreFloatingTabBar` dock shells — reused for visual consistency in-page. */
 const STORE_FLOATING_DOCK_SHADOW = {
   shadowColor: '#000000' as const,
-  shadowOpacity: 0.16,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 8 },
-  elevation: 8,
+  shadowOpacity: 0.14,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 6,
 };
 
-/** Same timing as `StoreProductCardQuantityControl` on home. */
 const PRODUCT_CART_STEPPER_AUTO_CLOSE_MS = 3200;
 
 const CART_BAR_MORPH_SPRING = { damping: 18, stiffness: 220, mass: 0.52 } as const;
@@ -122,7 +121,34 @@ function getCartProduct(product: ShopifyProduct) {
 
 export function ProductScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { contentPaddingBottom, bottomBarOffset } = getStoreBottomBarMetrics(insets.bottom);
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
+
+  const handleStoreTabPress = useCallback(
+    (tabId: StoreBottomTabId) => {
+      if (tabId === 'favorites') {
+        navigation.navigate('StoreFavorites');
+        return;
+      }
+      if (tabId === 'search') {
+        navigation.navigate('StoreSearch');
+        return;
+      }
+      if (tabId === 'profile') {
+        navigation.navigate('Login');
+        return;
+      }
+      if (tabId === 'cart') {
+        navigation.navigate('StoreCart');
+        return;
+      }
+      navigation.navigate('Main', {
+        initialTab: 'home',
+        initialTabRequestId: Date.now(),
+      });
+    },
+    [navigation]
+  );
+
   const { user } = useAuth();
   const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
   const { addItem, getQuantity, updateQuantity, isMutating } = useCart();
@@ -138,7 +164,8 @@ export function ProductScreen({ navigation, route }: Props) {
   const descriptionParts = useMemo(() => normalizeDescription(product?.description ?? ''), [product?.description]);
   const quantityInCart = product ? getQuantity(product.id) : 0;
   const activeImage = galleryItems[activeImageIndex] ?? galleryItems[0] ?? null;
-  const imageHeight = 340;
+  const imageHeight = 360;
+  const productTypeLabel = product?.productType?.trim() ?? '';
 
   const [cartStepperOpen, setCartStepperOpen] = useState(false);
   const [cartPendingOpen, setCartPendingOpen] = useState(false);
@@ -241,10 +268,8 @@ export function ProductScreen({ navigation, route }: Props) {
     updateQuantity,
   ]);
 
-  const cartBarStepperExpanded =
-    cartStepperOpen && (quantityInCart > 0 || cartPendingOpen);
-  const cartBarStepperDisplayQty =
-    quantityInCart > 0 ? quantityInCart : cartPendingOpen ? 1 : 0;
+  const cartBarStepperExpanded = cartStepperOpen && (quantityInCart > 0 || cartPendingOpen);
+  const cartBarStepperDisplayQty = quantityInCart > 0 ? quantityInCart : cartPendingOpen ? 1 : 0;
 
   const cartBarMorph = useSharedValue(0);
 
@@ -305,137 +330,200 @@ export function ProductScreen({ navigation, route }: Props) {
 
   if (loading) {
     return (
-      <Screen>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, color: colors.muted, fontWeight: '700' }}>טוען מוצר…</Text>
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              flex: 1,
+              paddingHorizontal: 16,
+              paddingBottom: contentPaddingBottom,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{ marginTop: 12, color: colors.muted, fontWeight: '700' }}>טוען מוצר…</Text>
+          </View>
+          <StoreFloatingTabBar activeTab={null} onTabPress={handleStoreTabPress} />
         </View>
-      </Screen>
+      </SafeAreaView>
     );
   }
 
   if (!product) {
     return (
-      <Screen>
-        <Card>
-          <Text style={{ color: colors.text, fontWeight: '900', fontSize: 18, ...RTL_TEXT }}>לא הצלחנו להציג את המוצר</Text>
-          {!!error && <Text style={{ color: colors.muted, marginTop: 8, ...RTL_TEXT }}>{error}</Text>}
-          <Pressable
-            onPress={() => setReloadSeq((current) => current + 1)}
-            style={({ pressed }) => ({ marginTop: 12, opacity: pressed ? 0.94 : 1 })}
-          >
-            <View
-              style={{
-                borderRadius: 14,
-                paddingVertical: 12,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: colors.elevated,
-              }}
-            >
-              <Text style={{ color: colors.primary, fontWeight: '900' }}>רענן</Text>
-            </View>
-          </Pressable>
-        </Card>
-      </Screen>
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: contentPaddingBottom }}>
+            <Card>
+              <Text style={{ color: colors.text, fontWeight: '900', fontSize: 18, ...RTL_TEXT }}>לא הצלחנו להציג את המוצר</Text>
+              {!!error && <Text style={{ color: colors.muted, marginTop: 8, ...RTL_TEXT }}>{error}</Text>}
+              <Pressable
+                onPress={() => setReloadSeq((current) => current + 1)}
+                style={({ pressed }) => ({ marginTop: 12, opacity: pressed ? 0.94 : 1 })}
+              >
+                <View
+                  style={{
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.elevated,
+                  }}
+                >
+                  <Text style={{ color: colors.primary, fontWeight: '900' }}>רענן</Text>
+                </View>
+              </Pressable>
+            </Card>
+          </View>
+          <StoreFloatingTabBar activeTab={null} onTabPress={handleStoreTabPress} />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: contentPaddingBottom + 20, gap: 16 }}
-          showsVerticalScrollIndicator={false}
-        >
-          <View
-            style={{
-              marginTop: 16,
-              borderRadius: 28,
-              shadowColor: '#0F172A',
-              shadowOpacity: 0.14,
-              shadowRadius: 20,
-              shadowOffset: { width: 0, height: 10 },
-              elevation: 10,
+        <Screen padded={false} backgroundColor={colors.bg}>
+          <ScrollView
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 10,
+              paddingBottom: contentPaddingBottom + 20,
+              gap: 18,
             }}
+            showsVerticalScrollIndicator={false}
           >
-            <View
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 28,
-                overflow: 'hidden',
-              }}
-            >
-              <View style={{ height: imageHeight, position: 'relative', backgroundColor: '#F3F4F6' }}>
-                {activeImage?.url ? (
-                  <Image
-                    source={{ uri: activeImage.url }}
-                    resizeMode="cover"
-                    accessibilityLabel={activeImage.altText ?? 'תמונת מוצר'}
-                    style={{ width: '100%', height: '100%' }}
-                  />
-                ) : (
-                  <View
-                    style={{
-                      flex: 1,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: '#E2E8F0',
-                    }}
-                  >
-                    <Ionicons name="image-outline" size={42} color="#64748B" />
-                    <Text style={{ marginTop: 10, color: '#475569', fontWeight: '700', ...RTL_TEXT }}>אין תמונה זמינה</Text>
-                  </View>
-                )}
-              </View>
-
-            {galleryItems.length > 1 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 10, paddingHorizontal: 12, paddingVertical: 12 }}
+        <View
+          style={{
+            borderRadius: 26,
+            overflow: 'hidden',
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#0F172A',
+            shadowOpacity: 0.1,
+            shadowRadius: 22,
+            shadowOffset: { width: 0, height: 12 },
+            elevation: 8,
+          }}
+        >
+          <View style={{ height: imageHeight, position: 'relative', backgroundColor: '#EEF2F7' }}>
+            {activeImage?.url ? (
+              <Image
+                source={{ uri: activeImage.url }}
+                resizeMode="cover"
+                accessibilityLabel={activeImage.altText ?? 'תמונת מוצר'}
+                style={{ width: '100%', height: '100%' }}
+              />
+            ) : (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#E2E8F0',
+                }}
               >
-                {galleryItems.map((item, index) => (
-                  <Pressable
-                    key={`${item.id}-thumb`}
-                    onPress={() => setActiveImageIndex(index)}
-                    style={{
-                      width: 70,
-                      height: 70,
-                      borderRadius: 16,
-                      overflow: 'hidden',
-                      borderWidth: 2,
-                      borderColor: index === activeImageIndex ? '#111827' : '#E2E8F0',
-                      backgroundColor: '#F8FAFC',
-                    }}
-                  >
-                    {item.url ? (
-                      <Image
-                        source={{ uri: item.url }}
-                        resizeMode="cover"
-                        accessibilityLabel={item.altText ?? `תמונה ${index + 1}`}
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    ) : (
-                      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E2E8F0' }}>
-                        <Ionicons name="image-outline" size={20} color="#64748B" />
-                      </View>
-                    )}
-                  </Pressable>
-                ))}
-              </ScrollView>
+                <Ionicons name="image-outline" size={44} color="#64748B" />
+                <Text style={{ marginTop: 10, color: '#475569', fontWeight: '700', ...RTL_TEXT }}>אין תמונה זמינה</Text>
+              </View>
             )}
 
-          <View style={{ gap: 12, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 }}>
+            {galleryItems.length > 1 && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 14,
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {galleryItems.map((_, index) => (
+                  <View
+                    key={`dot-${product.id}-${index}`}
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      width: index === activeImageIndex ? 22 : 6,
+                      backgroundColor: index === activeImageIndex ? '#FFFFFF' : 'rgba(255,255,255,0.45)',
+                    }}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
+          {galleryItems.length > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingHorizontal: 14, paddingVertical: 12 }}
+            >
+              {galleryItems.map((item, index) => (
+                <Pressable
+                  key={`${item.id}-thumb`}
+                  onPress={() => setActiveImageIndex(index)}
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                    borderWidth: 2,
+                    borderColor: index === activeImageIndex ? colors.text : colors.border,
+                    backgroundColor: '#F8FAFC',
+                  }}
+                >
+                  {item.url ? (
+                    <Image
+                      source={{ uri: item.url }}
+                      resizeMode="cover"
+                      accessibilityLabel={item.altText ?? `תמונה ${index + 1}`}
+                      style={{ width: '100%', height: '100%' }}
+                    />
+                  ) : (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E2E8F0' }}>
+                      <Ionicons name="image-outline" size={20} color="#64748B" />
+                    </View>
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          <View style={{ gap: 10, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 20 }}>
+            {!!productTypeLabel && productTypeLabel !== 'מוצרים' && (
+              <View style={{ alignSelf: 'flex-end' }}>
+                <View
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                    borderRadius: 999,
+                    backgroundColor: '#EEF2FF',
+                    borderWidth: 1,
+                    borderColor: '#C7D2FE',
+                  }}
+                >
+                  <Text style={{ color: '#4338CA', fontWeight: '800', fontSize: 12, ...RTL_TEXT }}>{productTypeLabel}</Text>
+                </View>
+              </View>
+            )}
+
             <Text
               style={{
                 width: '100%',
-                color: '#475569',
-                fontSize: 22,
-                lineHeight: 30,
-                fontWeight: '800',
+                color: colors.text,
+                fontSize: 24,
+                lineHeight: 32,
+                fontWeight: '900',
+                letterSpacing: -0.3,
                 ...RTL_TEXT,
               }}
             >
@@ -447,274 +535,272 @@ export function ProductScreen({ navigation, route }: Props) {
                 regularPrice={product.price}
                 isOcdPlusSubscriber={isOcdPlusSubscriber}
                 onSubscribePress={() => navigation.navigate('StoreOcdPlus')}
-                titleSize={22}
+                titleSize={24}
               />
             ) : (
-              <Text
-                style={{
-                  color: '#111827',
-                  fontSize: 22,
-                  fontWeight: '900',
-                  ...RTL_TEXT,
-                }}
-              >
+              <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900', ...RTL_TEXT }}>
                 {formatPrice(product.price, product.currencyCode)}
               </Text>
             )}
           </View>
-          </View>
-          </View>
+        </View>
 
-          <Card
-            style={{
-              gap: 10,
-              borderWidth: 0,
-              shadowColor: '#0F172A',
-              shadowOpacity: 0.1,
-              shadowRadius: 18,
-              shadowOffset: { width: 0, height: 8 },
-              elevation: 8,
-            }}
-          >
-            <Text style={{ color: colors.text, fontWeight: '900', fontSize: 18, ...RTL_TEXT }}>תיאור המוצר</Text>
-            {descriptionParts.map((part, index) => (
-              <Text key={`${product.id}-desc-${index}`} style={{ color: colors.text, lineHeight: 24, ...RTL_TEXT }}>
-                {part}
-              </Text>
-            ))}
-          </Card>
-        </ScrollView>
-
-        <View
-          pointerEvents="box-none"
+        <Card
           style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: bottomBarOffset,
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            paddingHorizontal: 12,
+            gap: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+            shadowColor: '#0F172A',
+            shadowOpacity: 0.06,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 4,
           }}
         >
-          <View
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 999,
-              padding: 4,
-              borderWidth: 1,
-              borderColor: '#E5E7EB',
-              flexShrink: 0,
-              ...STORE_FLOATING_DOCK_SHADOW,
-            }}
-          >
-            <Pressable
-              onPress={() => navigation.goBack()}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="חזרה"
-              style={({ pressed }) => ({
-                width: 42,
-                height: 42,
-                minWidth: 42,
-                minHeight: 42,
-                maxWidth: 42,
-                maxHeight: 42,
-                borderRadius: 21,
-                alignSelf: 'flex-start',
+          <Text style={{ color: colors.text, fontWeight: '900', fontSize: 17, ...RTL_TEXT }}>תיאור המוצר</Text>
+          {descriptionParts.map((part, index) => (
+            <Text key={`${product.id}-desc-${index}`} style={{ color: colors.muted, lineHeight: 25, fontSize: 15, ...RTL_TEXT }}>
+              {part}
+            </Text>
+          ))}
+        </Card>
+
+        <View
+          style={{
+            backgroundColor: colors.card,
+            borderRadius: 20,
+            paddingVertical: 12,
+            paddingHorizontal: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#0F172A',
+            shadowOpacity: 0.08,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 5,
+          }}
+        >
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <View
+              style={{
+                backgroundColor: '#FAFAFA',
+                borderRadius: 999,
+                padding: 4,
+                borderWidth: 1,
+                borderColor: colors.border,
                 flexShrink: 0,
-                overflow: 'hidden',
-                opacity: pressed ? 0.82 : 1,
-              })}
+                ...STORE_FLOATING_DOCK_SHADOW,
+              }}
             >
-              <View
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 21,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#FFFFFF',
-                  borderWidth: 1,
-                  borderColor: '#E2E8F0',
-                }}
+              <Pressable
+                onPress={() => navigation.goBack()}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="חזרה"
+                style={({ pressed }) => ({
+                  width: 44,
+                  height: 44,
+                  minWidth: 44,
+                  minHeight: 44,
+                  maxWidth: 44,
+                  maxHeight: 44,
+                  borderRadius: 22,
+                  alignSelf: 'flex-start',
+                  flexShrink: 0,
+                  overflow: 'hidden',
+                  opacity: pressed ? 0.82 : 1,
+                })}
               >
-                <Ionicons name="arrow-forward" size={22} color="#0F172A" />
-              </View>
-            </Pressable>
-          </View>
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Ionicons name="arrow-forward" size={22} color={colors.text} />
+                </View>
+              </Pressable>
+            </View>
 
-          <View
-            style={{
-              flexShrink: 0,
-              alignSelf: 'center',
-              backgroundColor: '#FFFFFF',
-              borderRadius: 999,
-              padding: 5,
-              paddingHorizontal: 8,
-              borderWidth: 1,
-              borderColor: '#E5E7EB',
-              ...STORE_FLOATING_DOCK_SHADOW,
-            }}
-          >
-            <Pressable
-              onPress={cartBarStepperExpanded ? undefined : onCollapsedCartBarPress}
-              disabled={isMutating || !product.availableForSale || !product.variantId}
-              style={({ pressed }) => ({
-                opacity: pressed && !cartBarStepperExpanded ? 0.75 : 1,
-              })}
-              accessibilityRole="button"
-              accessibilityLabel="הוסף לעגלה"
+            <View
+              style={{
+                flex: 1,
+                minWidth: 0,
+                maxWidth: 280,
+                alignSelf: 'center',
+                backgroundColor: '#FAFAFA',
+                borderRadius: 999,
+                padding: 5,
+                paddingHorizontal: 8,
+                borderWidth: 1,
+                borderColor: colors.border,
+                ...STORE_FLOATING_DOCK_SHADOW,
+              }}
             >
-              <View style={{ minHeight: 44, justifyContent: 'center', overflow: 'visible' }}>
-                <Animated.View
-                  style={cartBarCollapsedAnimStyle}
-                  pointerEvents={cartBarStepperExpanded ? 'none' : 'box-none'}
-                >
-                  <View
-                    style={{
-                      minHeight: 40,
-                      justifyContent: 'center',
-                      paddingVertical: 8,
-                      paddingHorizontal: 8,
-                      flexDirection: 'row-reverse',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: 6,
-                    }}
+              <Pressable
+                onPress={cartBarStepperExpanded ? undefined : onCollapsedCartBarPress}
+                disabled={isMutating || !product.availableForSale || !product.variantId}
+                style={({ pressed }) => ({
+                  opacity: pressed && !cartBarStepperExpanded ? 0.75 : 1,
+                })}
+                accessibilityRole="button"
+                accessibilityLabel="הוסף לעגלה"
+              >
+                <View style={{ minHeight: 46, justifyContent: 'center', overflow: 'visible' }}>
+                  <Animated.View
+                    style={cartBarCollapsedAnimStyle}
+                    pointerEvents={cartBarStepperExpanded ? 'none' : 'box-none'}
                   >
-                    <Ionicons
-                      name="cart-outline"
-                      size={22}
-                      color={
-                        isMutating || !product.availableForSale || !product.variantId ? '#94A3B8' : '#000000'
-                      }
-                    />
-                    <Text
+                    <View
                       style={{
-                        color:
-                          isMutating || !product.availableForSale || !product.variantId ? '#94A3B8' : '#000000',
-                        fontSize: 14,
-                        fontWeight: '900',
-                        textAlign: 'right',
-                        writingDirection: 'rtl',
-                        flexShrink: 0,
+                        minHeight: 40,
+                        justifyContent: 'center',
+                        paddingVertical: 8,
+                        paddingHorizontal: 8,
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 6,
                       }}
                     >
-                      {isMutating
-                        ? 'מעדכן עגלה...'
-                        : !product.availableForSale || !product.variantId
-                          ? 'לא זמין לרכישה'
-                          : quantityInCart
-                            ? `הוסף עוד לעגלה (${quantityInCart})`
-                            : 'הוסף לעגלה'}
-                    </Text>
-                  </View>
-                </Animated.View>
+                      <Ionicons
+                        name="cart-outline"
+                        size={22}
+                        color={isMutating || !product.availableForSale || !product.variantId ? '#94A3B8' : colors.text}
+                      />
+                      <Text
+                        style={{
+                          color: isMutating || !product.availableForSale || !product.variantId ? '#94A3B8' : colors.text,
+                          fontSize: 14,
+                          fontWeight: '900',
+                          textAlign: 'right',
+                          writingDirection: 'rtl',
+                          flexShrink: 1,
+                        }}
+                        numberOfLines={2}
+                      >
+                        {isMutating
+                          ? 'מעדכן עגלה...'
+                          : !product.availableForSale || !product.variantId
+                            ? 'לא זמין לרכישה'
+                            : quantityInCart
+                              ? `הוסף עוד לעגלה (${quantityInCart})`
+                              : 'הוסף לעגלה'}
+                      </Text>
+                    </View>
+                  </Animated.View>
 
-                <Animated.View
-                  style={[
-                    cartBarStepperAnimStyle,
-                    {
-                      position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    },
-                  ]}
-                  pointerEvents={cartBarStepperExpanded ? 'box-none' : 'none'}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      direction: 'ltr',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      minWidth: 176,
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                      backgroundColor: PRODUCT_CART_STEPPER_BAR_BG,
-                      borderRadius: 999,
-                      gap: 8,
-                    }}
+                  <Animated.View
+                    style={[
+                      cartBarStepperAnimStyle,
+                      {
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      },
+                    ]}
+                    pointerEvents={cartBarStepperExpanded ? 'box-none' : 'none'}
                   >
-                    <Pressable
-                      onPress={cartStepperIncrement}
-                      disabled={isMutating || (quantityInCart === 0 && cartPendingOpen)}
-                      style={productCartStepperCircleBtn}
-                      accessibilityRole="button"
-                      accessibilityLabel="הוסף כמות"
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        direction: 'ltr',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        minWidth: 176,
+                        paddingVertical: 6,
+                        paddingHorizontal: 10,
+                        backgroundColor: PRODUCT_CART_STEPPER_BAR_BG,
+                        borderRadius: 999,
+                        gap: 8,
+                      }}
                     >
+                      <Pressable
+                        onPress={cartStepperIncrement}
+                        disabled={isMutating || (quantityInCart === 0 && cartPendingOpen)}
+                        style={productCartStepperCircleBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="הוסף כמות"
+                      >
+                        <Text
+                          style={{
+                            color: PRODUCT_CART_STEPPER_ACCENT,
+                            fontSize: 20,
+                            fontWeight: '500',
+                            marginTop: -1,
+                          }}
+                        >
+                          +
+                        </Text>
+                      </Pressable>
                       <Text
                         style={{
                           color: PRODUCT_CART_STEPPER_ACCENT,
-                          fontSize: 20,
-                          fontWeight: '500',
-                          marginTop: -1,
+                          fontSize: 17,
+                          fontWeight: '800',
+                          fontVariant: ['tabular-nums'],
                         }}
                       >
-                        +
+                        {cartBarStepperDisplayQty}
                       </Text>
-                    </Pressable>
-                    <Text
-                      style={{
-                        color: PRODUCT_CART_STEPPER_ACCENT,
-                        fontSize: 17,
-                        fontWeight: '800',
-                        fontVariant: ['tabular-nums'],
-                      }}
-                    >
-                      {cartBarStepperDisplayQty}
-                    </Text>
-                    <Pressable
-                      onPress={cartStepperDecrement}
-                      disabled={isMutating || (quantityInCart === 0 && !cartPendingOpen)}
-                      style={productCartStepperCircleBtn}
-                      accessibilityRole="button"
-                      accessibilityLabel="הפחת כמות"
-                    >
-                      <Text
-                        style={{
-                          color: PRODUCT_CART_STEPPER_ACCENT,
-                          fontSize: 22,
-                          fontWeight: '400',
-                          marginTop: -2,
-                        }}
+                      <Pressable
+                        onPress={cartStepperDecrement}
+                        disabled={isMutating || (quantityInCart === 0 && !cartPendingOpen)}
+                        style={productCartStepperCircleBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="הפחת כמות"
                       >
-                        −
-                      </Text>
-                    </Pressable>
-                  </View>
-                </Animated.View>
-              </View>
-            </Pressable>
-          </View>
+                        <Text
+                          style={{
+                            color: PRODUCT_CART_STEPPER_ACCENT,
+                            fontSize: 22,
+                            fontWeight: '400',
+                            marginTop: -2,
+                          }}
+                        >
+                          −
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </Animated.View>
+                </View>
+              </Pressable>
+            </View>
 
-          <View
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 999,
-              padding: 4,
-              borderWidth: 1,
-              borderColor: '#E5E7EB',
-              flexShrink: 0,
-              ...STORE_FLOATING_DOCK_SHADOW,
-            }}
-          >
-            <FavoriteToggleButton
-              active={isFavorite(product.id)}
-              loading={isFavoritePending(product.id)}
-              onPress={handleFavoriteToggle}
-              size={42}
-            />
+            <View
+              style={{
+                backgroundColor: '#FAFAFA',
+                borderRadius: 999,
+                padding: 4,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexShrink: 0,
+                ...STORE_FLOATING_DOCK_SHADOW,
+              }}
+            >
+              <FavoriteToggleButton
+                active={isFavorite(product.id)}
+                loading={isFavoritePending(product.id)}
+                onPress={handleFavoriteToggle}
+                size={44}
+              />
+            </View>
           </View>
         </View>
+      </ScrollView>
+        </Screen>
+        <StoreFloatingTabBar activeTab={null} onTabPress={handleStoreTabPress} />
       </View>
     </SafeAreaView>
   );
 }
-

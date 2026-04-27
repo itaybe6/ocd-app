@@ -1,169 +1,120 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
-import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
 import type { CustomerOrderRow } from '../../types/database';
 
-const RTL_TEXT = {
-  textAlign: 'right' as const,
-  writingDirection: 'rtl' as const,
+/* ─── palette ─────────────────────────────────────────────────────────────── */
+const P = {
+  bg: '#F2F2F7',          // iOS system grouped background
+  card: '#FFFFFF',
+  separator: '#C6C6C8',   // iOS separator colour
+  label: '#000000',
+  secondaryLabel: '#3C3C43CC',
+  tertiaryLabel: '#3C3C4399',
+  accent: '#007AFF',      // iOS blue
+  destructive: '#FF3B30',
+  green: '#34C759',
+  orange: '#FF9500',
+  iconBg: '#F2F2F7',
 };
 
-const SCREEN_HORIZONTAL_PADDING = 16;
-const ACTION_GRID_PADDING = 10;
-const ACTION_GRID_GAP = 12;
-const ACTION_CARD_HEIGHT = 118;
+const RTL = { textAlign: 'right' as const, writingDirection: 'rtl' as const };
 
-function ProfileAction({
+/* ─── sub-components ──────────────────────────────────────────────────────── */
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <Text style={styles.sectionHeader} numberOfLines={1}>
+      {title}
+    </Text>
+  );
+}
+
+function ListRow({
   icon,
-  title,
-  iconColor,
-  iconBackground,
+  iconBg,
+  label,
+  value,
+  chevron = true,
   onPress,
-  cardWidth,
+  destructive,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  iconColor: string;
-  iconBackground: string;
-  onPress: () => void;
-  cardWidth: number;
+  iconBg: string;
+  label: string;
+  value?: string;
+  chevron?: boolean;
+  onPress?: () => void;
+  destructive?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => ({
-        width: cardWidth,
-        flexShrink: 0,
-        opacity: pressed ? 0.94 : 1,
-      })}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <View
-        style={{
-          width: '100%',
-          height: ACTION_CARD_HEIGHT,
-          borderRadius: 22,
-          borderWidth: 1.5,
-          borderColor: '#DCC5A3',
-          backgroundColor: '#FFFFFF',
-          paddingHorizontal: 12,
-          paddingVertical: 14,
-          alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: '#8A6A3B',
-          shadowOpacity: 0.12,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 7 },
-          elevation: 6,
-        }}
-      >
-        <View
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: 25,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: iconBackground,
-          }}
-        >
-          <Ionicons name={icon} size={24} color={iconColor} />
-        </View>
-        <Text
-          numberOfLines={2}
-          style={{
-            color: colors.text,
-            fontWeight: '800',
-            fontSize: 13,
-            lineHeight: 18,
-            marginTop: 14,
-            ...RTL_TEXT,
-          }}
-        >
-          {title}
+      <View style={[styles.rowIconWrap, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={18} color="#FFFFFF" />
+      </View>
+
+      <View style={styles.rowContent}>
+        <Text style={[styles.rowLabel, destructive && { color: P.destructive }]} numberOfLines={1}>
+          {label}
         </Text>
+        {value ? <Text style={styles.rowValue} numberOfLines={1}>{value}</Text> : null}
+        {chevron && (
+          <Ionicons name="chevron-back" size={16} color={P.tertiaryLabel} style={styles.chevron} />
+        )}
       </View>
     </Pressable>
   );
 }
 
-function PromoCtaButton({
-  title,
-  onPress,
-  variant,
-  width,
-  flex,
-}: {
-  title: string;
-  onPress: () => void;
-  variant: 'primary' | 'secondary';
-  width?: number;
-  flex?: number;
-}) {
-  const isPrimary = variant === 'primary';
+function Divider() {
+  return <View style={styles.divider} />;
+}
 
+function StatPill({ value, label }: { value: string; label: string }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        width,
-        flex,
-        opacity: pressed ? 0.94 : 1,
-      })}
-    >
-      <View
-        style={{
-          width: '100%',
-          minHeight: 52,
-          borderRadius: 18,
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: isPrimary ? '#FFF4DE' : '#2B3552',
-          borderWidth: 1,
-          borderColor: isPrimary ? '#E7D0AB' : '#44506E',
-        }}
-      >
-        <Text style={{ color: isPrimary ? '#1F2937' : '#FFFFFF', fontWeight: '900' }}>{title}</Text>
-      </View>
-    </Pressable>
+    <View style={styles.statPill}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
   );
 }
+
+/* ─── main screen ─────────────────────────────────────────────────────────── */
 
 export function CustomerProfileScreen({
   onTabPress,
   onOpenOrders,
   onOpenFavorites,
-  onOpenServices,
 }: {
   onTabPress: (tabId: StoreBottomTabId) => void;
   onOpenOrders: () => void;
   onOpenFavorites: () => void;
   onOpenServices: () => void;
 }) {
-  const { width: windowWidth } = useWindowDimensions();
   const { user, signOut } = useAuth();
   const { favoriteCount } = useFavorites();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(0);
   const [recentOrders, setRecentOrders] = useState<CustomerOrderRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const actionCardWidth = useMemo(() => {
-    const availableWidth =
-      windowWidth - SCREEN_HORIZONTAL_PADDING * 2 - ACTION_GRID_PADDING * 2 - ACTION_GRID_GAP * 2;
-
-    return Math.max(96, Math.floor(availableWidth / 3));
-  }, [windowWidth]);
 
   const fetchAll = useCallback(async () => {
     if (!user?.id) return;
@@ -175,7 +126,6 @@ export function CustomerProfileScreen({
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(3);
-
       if (error) throw error;
       setRecentOrders((data ?? []) as CustomerOrderRow[]);
     } catch (e: any) {
@@ -185,307 +135,184 @@ export function CustomerProfileScreen({
     }
   }, [user?.id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchAll();
-    }, [fetchAll])
-  );
+  useFocusEffect(useCallback(() => { fetchAll(); }, [fetchAll]));
 
   const totalSpent = useMemo(
-    () => recentOrders.reduce((sum, order) => sum + Number(order.total_amount ?? 0), 0),
+    () => recentOrders.reduce((sum, o) => sum + Number(o.total_amount ?? 0), 0),
     [recentOrders]
   );
 
   const memberSinceLabel = useMemo(() => {
-    if (!user?.created_at) return 'לקוח מועדף בחנות';
-
+    if (!user?.created_at) return 'לקוח מועדף';
     try {
-      return `איתנו מ-${new Intl.DateTimeFormat('he-IL', {
-        month: '2-digit',
-        year: 'numeric',
-      }).format(new Date(user.created_at))}`;
+      return `מאז ${new Intl.DateTimeFormat('he-IL', { month: '2-digit', year: 'numeric' }).format(new Date(user.created_at))}`;
     } catch {
-      return 'לקוח מועדף בחנות';
+      return 'לקוח מועדף';
     }
   }, [user?.created_at]);
 
-  const actionItems = useMemo(
-    () => [
-      {
-        key: 'addresses',
-        title: 'כתובות',
-        icon: 'location' as const,
-        iconColor: '#7A5A2D',
-        iconBackground: '#F8EEDC',
-        onPress: () => Toast.show({ type: 'info', text1: 'ניהול כתובות יתווסף בהמשך' }),
-      },
-      {
-        key: 'favorites',
-        title: 'אהבתי',
-        icon: 'heart' as const,
-        iconColor: '#7A5A2D',
-        iconBackground: '#F8EEDC',
-        onPress: onOpenFavorites,
-      },
-      {
-        key: 'orders',
-        title: 'היסטוריית רכישות',
-        icon: 'receipt-outline' as const,
-        iconColor: '#7A5A2D',
-        iconBackground: '#F8EEDC',
-        onPress: onOpenOrders,
-      },
-      {
-        key: 'notifications',
-        title: 'התראות',
-        icon: 'notifications-outline' as const,
-        iconColor: '#7A5A2D',
-        iconBackground: '#F8EEDC',
-        onPress: () => Toast.show({ type: 'info', text1: 'מרכז ההתראות יתווסף בהמשך' }),
-      },
-      {
-        key: 'payment',
-        title: 'אמצעי תשלום',
-        icon: 'card-outline' as const,
-        iconColor: '#7A5A2D',
-        iconBackground: '#F8EEDC',
-        onPress: () => Toast.show({ type: 'info', text1: 'אמצעי תשלום יתווספו בהמשך' }),
-      },
-    ],
-    [onOpenFavorites, onOpenOrders]
+  const header = (
+    <View style={{ gap: 28 }}>
+      {/* ── avatar + name ── */}
+      <View style={styles.avatarSection}>
+        <View style={styles.avatarRing}>
+          <View style={styles.avatarInner}>
+            <Ionicons name="person" size={38} color={P.secondaryLabel} />
+          </View>
+        </View>
+        <Text style={styles.displayName}>{user?.name ?? 'שם משתמש'}</Text>
+        <Text style={styles.memberSince}>{memberSinceLabel}</Text>
+      </View>
+
+      {/* ── stats row ── */}
+      <View style={styles.statsCard}>
+        <StatPill value={String(recentOrders.length)} label="הזמנות" />
+        <View style={styles.statsSep} />
+        <StatPill value={String(favoriteCount)} label="מועדפים" />
+        <View style={styles.statsSep} />
+        <StatPill
+          value={totalSpent > 0 ? `₪${totalSpent.toLocaleString('he-IL')}` : '—'}
+          label="סה״כ רכישות"
+        />
+      </View>
+
+      {/* ── quick actions ── */}
+      <View>
+        <SectionHeader title="פעולות מהירות" />
+        <View style={styles.listCard}>
+          <ListRow
+            icon="heart"
+            iconBg="#FF2D55"
+            label="מועדפים"
+            value={favoriteCount > 0 ? String(favoriteCount) : undefined}
+            onPress={onOpenFavorites}
+          />
+          <Divider />
+          <ListRow
+            icon="bag"
+            iconBg={P.accent}
+            label="היסטוריית הזמנות"
+            onPress={onOpenOrders}
+          />
+          <Divider />
+          <ListRow
+            icon="storefront"
+            iconBg={P.orange}
+            label="לחנות"
+            onPress={() => onTabPress('home')}
+          />
+        </View>
+      </View>
+
+      {/* ── account ── */}
+      <View>
+        <SectionHeader title="חשבון" />
+        <View style={styles.listCard}>
+          <ListRow
+            icon="location"
+            iconBg={P.green}
+            label="כתובות שמורות"
+            onPress={() => Toast.show({ type: 'info', text1: 'ניהול כתובות יתווסף בהמשך' })}
+          />
+          <Divider />
+          <ListRow
+            icon="card"
+            iconBg="#5856D6"
+            label="אמצעי תשלום"
+            onPress={() => Toast.show({ type: 'info', text1: 'אמצעי תשלום יתווספו בהמשך' })}
+          />
+          <Divider />
+          <ListRow
+            icon="notifications"
+            iconBg={P.orange}
+            label="התראות"
+            onPress={() => Toast.show({ type: 'info', text1: 'מרכז ההתראות יתווסף בהמשך' })}
+          />
+        </View>
+      </View>
+
+      {/* ── recent orders header ── */}
+      <View style={styles.sectionTitleRow}>
+        <Pressable onPress={onOpenOrders}>
+          <Text style={styles.seeAll}>הכל</Text>
+        </Pressable>
+        <SectionHeader title="הזמנות אחרונות" />
+      </View>
+    </View>
   );
-  const actionRows = useMemo(() => [actionItems.slice(0, 3), actionItems.slice(3, 6)], [actionItems]);
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: SCREEN_HORIZONTAL_PADDING, paddingTop: 12 }}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
+      <View style={styles.root}>
         <FlatList
           data={recentOrders}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ gap: 14, paddingBottom: contentPaddingBottom + 12 }}
-          ListHeaderComponent={
-            <View style={{ gap: 14 }}>
-              <View style={{ alignItems: 'center', paddingTop: 8 }}>
-                <View
-                  style={{
-                    width: 114,
-                    height: 114,
-                    borderRadius: 57,
-                    borderWidth: 2,
-                    borderColor: '#F5D1A8',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: '#FFFDF9',
-                    shadowColor: '#C8AE86',
-                    shadowOpacity: 0.16,
-                    shadowRadius: 18,
-                    shadowOffset: { width: 0, height: 8 },
-                    elevation: 4,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 92,
-                      height: 92,
-                      borderRadius: 46,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: '#F4F0E8',
-                    }}
-                  >
-                    <Ionicons name="person" size={40} color="#0F172A" />
-                  </View>
-                </View>
-
-                <View
-                  style={{
-                    marginTop: -10,
-                    borderRadius: 999,
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    backgroundColor: '#0F172A',
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 12 }}>לקוח זהב</Text>
-                </View>
-
-                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', marginTop: 14, ...RTL_TEXT }}>{user?.name}</Text>
-                <Text style={{ color: colors.muted, fontSize: 14, marginTop: 4, ...RTL_TEXT }}>{memberSinceLabel}</Text>
-                <Text style={{ color: '#9AA0AE', fontSize: 13, marginTop: 2, ...RTL_TEXT }}>
-                  חבר מועדון יוני 2022 • {favoriteCount.toLocaleString('he-IL')} נקודות
-                </Text>
-              </View>
-
-              <View
-                style={{
-                  padding: ACTION_GRID_PADDING,
-                  borderRadius: 28,
-                  backgroundColor: '#F1EEE7',
-                  gap: ACTION_GRID_GAP,
-                }}
-              >
-                {actionRows.map((row, rowIndex) => (
-                  <View
-                    key={`action-row-${rowIndex}`}
-                    style={{
-                      flexDirection: 'row-reverse',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    {row.map((item) => (
-                      <ProfileAction
-                        key={item.key}
-                        icon={item.icon}
-                        title={item.title}
-                        iconColor={item.iconColor}
-                        iconBackground={item.iconBackground}
-                        onPress={item.onPress}
-                        cardWidth={actionCardWidth}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
-
-              <Card
-                style={{
-                  backgroundColor: '#202841',
-                  borderColor: '#202841',
-                  borderRadius: 22,
-                  padding: 18,
-                  gap: 14,
-                  overflow: 'hidden',
-                }}
-              >
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: -12,
-                    left: -16,
-                    width: 72,
-                    height: 72,
-                    borderRadius: 18,
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    transform: [{ rotate: '-12deg' }],
-                  }}
-                />
-                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', gap: 14 }}>
-                  <View
-                    style={{
-                      width: 58,
-                      height: 58,
-                      borderRadius: 18,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: 'rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    <Ionicons name="bag-handle-outline" size={24} color="#FFFFFF" />
-                  </View>
-
-                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Text style={{ color: '#8D9BC2', fontSize: 11, fontWeight: '900', ...RTL_TEXT }}>במיוחד עבורך</Text>
-                    <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '900', marginTop: 6, ...RTL_TEXT }}>
-                      המשך קניות
-                    </Text>
-                    <Text style={{ color: '#A9B1C7', marginTop: 6, lineHeight: 20, ...RTL_TEXT }}>
-                      פריטים חדשים מחכים לך בסל ובקטלוג המומלץ.
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'stretch' }}>
-                  <PromoCtaButton title="המשך לקנות" onPress={() => onTabPress('home')} variant="primary" flex={1} />
-                  <View style={{ width: 10 }} />
-                  <PromoCtaButton title="לכל המבצעים" onPress={() => onTabPress('home')} variant="secondary" width={128} />
-                </View>
-              </Card>
-
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>הכל</Text>
-                <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900', ...RTL_TEXT }}>הזמנות אחרונות</Text>
-              </View>
-            </View>
-          }
+          contentContainerStyle={{ gap: 1, paddingBottom: contentPaddingBottom + 16 }}
+          ListHeaderComponent={header}
+          ListHeaderComponentStyle={{ marginBottom: 0 }}
           renderItem={({ item, index }) => (
-            <Card
-              style={{
-                gap: 12,
-                borderRadius: 18,
-                padding: 14,
-                backgroundColor: index === 0 ? '#FFFFFF' : '#FBFBFC',
-              }}
+            <Pressable
+              onPress={onOpenOrders}
+              style={({ pressed }) => [
+                styles.orderRow,
+                index === 0 && styles.orderRowFirst,
+                index === recentOrders.length - 1 && styles.orderRowLast,
+                pressed && styles.rowPressed,
+              ]}
             >
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <View
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 14,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: '#F3F4F6',
-                  }}
-                >
-                  <Ionicons
-                    name={index % 2 === 0 ? 'cube-outline' : 'checkmark-done-circle-outline'}
-                    size={22}
-                    color="#394150"
-                  />
-                </View>
-
-                <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 12, ...RTL_TEXT }}>
-                    {formatOrderDate(item.created_at)} • הזמנה #{item.order_number}
-                  </Text>
-                  <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900', marginTop: 6, ...RTL_TEXT }}>
-                    {item.status === 'confirmed' ? 'בדרך אליך' : getOrderStatusLabel(item.status)}
-                  </Text>
-                </View>
+              <View style={[styles.orderIconWrap, { backgroundColor: item.status === 'delivered' ? '#D1FAE5' : '#EFF6FF' }]}>
+                <Ionicons
+                  name={item.status === 'delivered' ? 'checkmark-circle' : 'cube'}
+                  size={22}
+                  color={item.status === 'delivered' ? P.green : P.accent}
+                />
               </View>
-
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Pressable
-                  onPress={onOpenOrders}
-                  style={({ pressed }) => ({
-                    borderRadius: 999,
-                    paddingHorizontal: 16,
-                    paddingVertical: 9,
-                    alignItems: 'center',
-                    backgroundColor: pressed ? '#1E293B' : '#0F172A',
-                  })}
-                >
-                  <Text style={{ color: '#FFFFFF', fontWeight: '900' }}>לצפייה</Text>
-                </Pressable>
-
-                <Text style={{ color: colors.text, fontSize: 24, fontWeight: '900' }}>
-                  {formatOrderPrice(item.total_amount, item.currency_code)}
+              <View style={styles.orderMeta}>
+                <Text style={styles.orderTitle} numberOfLines={1}>
+                  {item.status === 'confirmed' ? 'בדרך אליך' : getOrderStatusLabel(item.status)}
+                </Text>
+                <Text style={styles.orderSub} numberOfLines={1}>
+                  {formatOrderDate(item.created_at)} · #{item.order_number}
                 </Text>
               </View>
-            </Card>
+              <Text style={styles.orderPrice}>{formatOrderPrice(item.total_amount, item.currency_code)}</Text>
+              <Ionicons name="chevron-back" size={16} color={P.tertiaryLabel} />
+            </Pressable>
           )}
           ListEmptyComponent={
             loading ? (
-              <Card style={{ alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 28 }}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={{ color: colors.textMuted, fontWeight: '700' }}>טוען הזמנות…</Text>
-              </Card>
+              <View style={[styles.listCard, styles.emptyCard]}>
+                <ActivityIndicator size="small" color={P.accent} />
+                <Text style={styles.emptyText}>טוען הזמנות…</Text>
+              </View>
             ) : (
-              <Card style={{ alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 28 }}>
-                <Ionicons name="receipt-outline" size={34} color="#94A3B8" />
-                <Text style={{ color: colors.text, fontWeight: '900', fontSize: 20, ...RTL_TEXT }}>עדיין אין הזמנות באפליקציה</Text>
-                <Text style={{ color: colors.textMuted, fontSize: 14, ...RTL_TEXT }}>
-                  ברגע שתבצע רכישה דרך העגלה, היא תופיע כאן.
-                </Text>
-                <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                  <Button title="למעבר לחנות" fullWidth={false} onPress={() => onTabPress('home')} />
+              <View style={[styles.listCard, styles.emptyCard]}>
+                <Ionicons name="bag-outline" size={32} color={P.tertiaryLabel} />
+                <Text style={styles.emptyTitle}>אין הזמנות עדיין</Text>
+                <Text style={styles.emptyText}>ברגע שתבצע רכישה היא תופיע כאן.</Text>
+                <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 4 }}>
+                  <Button title="לחנות" fullWidth={false} onPress={() => onTabPress('home')} />
                   <Button title="התנתקות" fullWidth={false} variant="secondary" onPress={() => void signOut()} />
                 </View>
-              </Card>
+              </View>
             )
           }
         />
+
+        {/* sign-out — only shown when there are orders (otherwise it's in the empty state) */}
+        {recentOrders.length > 0 && (
+          <View style={[styles.listCard, styles.signOutCard]}>
+            <ListRow
+              icon="log-out-outline"
+              iconBg={P.destructive}
+              label="התנתקות"
+              chevron={false}
+              destructive
+              onPress={() => void signOut()}
+            />
+          </View>
+        )}
 
         <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
       </View>
@@ -493,3 +320,148 @@ export function CustomerProfileScreen({
   );
 }
 
+/* ─── styles ──────────────────────────────────────────────────────────────── */
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: P.bg },
+  root: { flex: 1, backgroundColor: P.bg },
+
+  /* avatar */
+  avatarSection: { alignItems: 'center', paddingTop: 32, paddingBottom: 4, gap: 8 },
+  avatarRing: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: P.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  avatarInner: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  displayName: { fontSize: 22, fontWeight: '700', color: P.label, textAlign: 'center' },
+  memberSince: { fontSize: 14, color: P.tertiaryLabel, textAlign: 'center' },
+
+  /* stats */
+  statsCard: {
+    marginHorizontal: 20,
+    backgroundColor: P.card,
+    borderRadius: 14,
+    flexDirection: 'row-reverse',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  statPill: { flex: 1, alignItems: 'center', paddingVertical: 16, gap: 2 },
+  statValue: { fontSize: 20, fontWeight: '700', color: P.label },
+  statLabel: { fontSize: 12, color: P.tertiaryLabel },
+  statsSep: { width: StyleSheet.hairlineWidth, backgroundColor: P.separator, marginVertical: 12 },
+
+  /* sections */
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: P.secondaryLabel,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    paddingHorizontal: 20,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingRight: 0,
+    paddingLeft: 20,
+    marginBottom: 6,
+  },
+  seeAll: { fontSize: 15, color: P.accent, fontWeight: '400' },
+
+  /* list card container */
+  listCard: {
+    marginHorizontal: 20,
+    backgroundColor: P.card,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+
+  /* individual row */
+  row: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 54,
+    backgroundColor: P.card,
+  },
+  rowPressed: { backgroundColor: '#F2F2F7' },
+  rowIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  rowContent: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  rowLabel: { flex: 1, fontSize: 17, color: P.label, textAlign: 'right', writingDirection: 'rtl' },
+  rowValue: { fontSize: 15, color: P.tertiaryLabel, marginLeft: 4 },
+  chevron: { marginLeft: 2 },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: P.separator,
+    marginLeft: 16,
+    marginRight: 60,
+  },
+
+  /* order rows */
+  orderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: P.card,
+    marginHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: P.separator,
+  },
+  orderRowFirst: { borderTopLeftRadius: 14, borderTopRightRadius: 14 },
+  orderRowLast: { borderBottomWidth: 0, borderBottomLeftRadius: 14, borderBottomRightRadius: 14 },
+  orderIconWrap: { width: 44, height: 44, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  orderMeta: { flex: 1, alignItems: 'flex-end', gap: 2 },
+  orderTitle: { fontSize: 16, fontWeight: '600', color: P.label, ...RTL },
+  orderSub: { fontSize: 13, color: P.tertiaryLabel, ...RTL },
+  orderPrice: { fontSize: 16, fontWeight: '600', color: P.label },
+
+  /* empty */
+  emptyCard: { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  emptyTitle: { fontSize: 17, fontWeight: '600', color: P.label },
+  emptyText: { fontSize: 14, color: P.tertiaryLabel, textAlign: 'center' },
+
+  /* sign-out */
+  signOutCard: { marginBottom: 16 },
+});

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { supabase } from '../lib/supabase';
+import { navigationRef } from '../navigation/navigationRef';
 import type { UserRole, UserRow } from '../types/database';
 
 export type AuthUser = Omit<UserRow, 'password'>;
@@ -40,6 +41,21 @@ async function loadPersistedUser(): Promise<AuthUser | null> {
 
 function normalizePhone(phone: string) {
   return phone.trim();
+}
+
+function scheduleResetMainToCustomerProfile() {
+  const run = () => {
+    if (!navigationRef.isReady()) return false;
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: 'Main', params: { initialCustomerProfile: true } }],
+    });
+    return true;
+  };
+  if (run()) return;
+  setTimeout(() => {
+    run();
+  }, 60);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -143,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await setUser(data as AuthUser);
       Toast.show({ type: 'success', text1: 'נרשמת בהצלחה' });
+      scheduleResetMainToCustomerProfile();
     },
     [setUser]
   );

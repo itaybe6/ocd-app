@@ -21,6 +21,7 @@ import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
+import type { CustomerDrawerParamList } from './CustomerDrawer';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -44,8 +45,13 @@ function handleStoreTabNavigation(
     return;
   }
 
+  if (tabId === 'cart') {
+    navigation.navigate('StoreCart');
+    return;
+  }
+
   navigation.navigate('Main', {
-    initialTab: tabId,
+    initialTab: 'home',
     initialTabRequestId: Date.now(),
   });
 }
@@ -60,13 +66,17 @@ function WorkerEntryScreen() {
   return <WorkerDrawer />;
 }
 
-function CustomerEntryScreen() {
-  const CustomerDrawer = require('./CustomerDrawer').CustomerDrawer as React.ComponentType;
-  return <CustomerDrawer />;
+function CustomerEntryScreen({ initialDrawerRoute }: { initialDrawerRoute: keyof CustomerDrawerParamList }) {
+  const CustomerDrawer = require('./CustomerDrawer').CustomerDrawer as React.ComponentType<{
+    initialRouteName?: keyof CustomerDrawerParamList;
+  }>;
+  return <CustomerDrawer initialRouteName={initialDrawerRoute} />;
 }
 
 function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
   const { user } = useAuth();
+  const customerInitialDrawer =
+    user?.role === 'customer' && route.params?.initialCustomerProfile === true ? 'Profile' : 'Store';
 
   if (!user) {
     return (
@@ -96,7 +106,12 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
 
   if (user.role === 'admin') return <AdminEntryScreen />;
   if (user.role === 'worker') return <WorkerEntryScreen />;
-  return <CustomerEntryScreen />;
+  return (
+    <CustomerEntryScreen
+      key={route.params?.initialCustomerProfile === true ? `customer-profile:${user.id}` : `customer:${user.id}`}
+      initialDrawerRoute={customerInitialDrawer}
+    />
+  );
 }
 
 function StoreOcdPlusRoute(props: NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'>) {

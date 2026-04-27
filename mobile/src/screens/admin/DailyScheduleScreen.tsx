@@ -1,26 +1,35 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
+  ArrowUpRight,
   CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock,
-  ClipboardList,
   Droplets,
-  Eye,
   Layers,
+  ListFilter,
+  Pencil,
+  Trash2,
   X,
 } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
 import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
 import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -29,9 +38,16 @@ import { useLoading } from '../../state/LoadingContext';
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
+type FilterType = 'all' | 'pending' | 'completed';
 
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const HE_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+
+const FILTERS: { value: FilterType; label: string }[] = [
+  { value: 'all',       label: 'הכל'    },
+  { value: 'pending',   label: 'ממתין'  },
+  { value: 'completed', label: 'הושלם'  },
+];
 
 type Unified = {
   kind: Kind;
@@ -84,9 +100,9 @@ function updateIsoTime(iso: string, timeHm: string): string {
 }
 
 const KIND_CONFIG = {
-  regular: { label: 'רגילה', accent: 'blue' as const, color: '#0058BC' },
-  installation: { label: 'התקנה', accent: 'purple' as const, color: '#7C3AED' },
-  special: { label: 'מיוחדת', accent: 'orange' as const, color: '#EA580C' },
+  regular:      { label: 'רגילה',  color: colors.primary },
+  installation: { label: 'התקנה',  color: '#7C3AED'      },
+  special:      { label: 'מיוחדת', color: '#EA580C'      },
 } as const;
 
 export function DailyScheduleScreen() {
@@ -97,6 +113,7 @@ export function DailyScheduleScreen() {
   const [workerId, setWorkerId] = useState('');
   const [items, setItems] = useState<Unified[]>([]);
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('all');
 
   const [edit, setEdit] = useState<Unified | null>(null);
   const [newTime, setNewTime] = useState('09:00');
@@ -150,16 +167,19 @@ export function DailyScheduleScreen() {
     return { total, completed, pending };
   }, [items]);
 
+  const filteredItems = useMemo(() => {
+    if (filter === 'pending')   return items.filter((i) => i.status === 'pending');
+    if (filter === 'completed') return items.filter((i) => i.status === 'completed');
+    return items;
+  }, [items, filter]);
+
   const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').order('name');
     if (!error) setUsers((data ?? []) as any);
   }, []);
 
   const fetchOneTimeCustomers = useCallback(async (ids: string[]) => {
-    if (!ids.length) {
-      setOneTimeCustomers([]);
-      return;
-    }
+    if (!ids.length) { setOneTimeCustomers([]); return; }
     const uniqueIds = Array.from(new Set(ids));
     const { data, error } = await supabase.from('one_time_customers').select('id, name').in('id', uniqueIds);
     if (!error) setOneTimeCustomers((data ?? []) as any);
@@ -169,7 +189,7 @@ export function DailyScheduleScreen() {
     try {
       setLoading(true);
       const start = new Date(`${day}T00:00:00`).toISOString();
-      const end = new Date(`${day}T23:59:59`).toISOString();
+      const end   = new Date(`${day}T23:59:59`).toISOString();
 
       const baseFilter = (q: any) => {
         q = q.gte('date', start).lte('date', end);
@@ -179,19 +199,17 @@ export function DailyScheduleScreen() {
 
       const [regRes, instRes, specRes] = await Promise.all([
         baseFilter(supabase.from('jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')),
-        baseFilter(
-          supabase.from('installation_jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes'),
-        ),
+        baseFilter(supabase.from('installation_jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')),
         baseFilter(supabase.from('special_jobs').select('id, date, status, worker_id, order_number, notes')),
       ]);
 
-      if (regRes.error) throw regRes.error;
+      if (regRes.error)  throw regRes.error;
       if (instRes.error) throw instRes.error;
       if (specRes.error) throw specRes.error;
 
-      const regs = (regRes.data ?? []).map((r: any) => ({ kind: 'regular', ...r }) as Unified);
+      const regs  = (regRes.data  ?? []).map((r: any) => ({ kind: 'regular',      ...r }) as Unified);
       const insts = (instRes.data ?? []).map((r: any) => ({ kind: 'installation', ...r }) as Unified);
-      const specs = (specRes.data ?? []).map((r: any) => ({ kind: 'special', ...r }) as Unified);
+      const specs = (specRes.data ?? []).map((r: any) => ({ kind: 'special',      ...r }) as Unified);
 
       const combined = [...regs, ...insts, ...specs].sort((a, b) => {
         const ao = a.order_number == null ? 1e9 : a.order_number;
@@ -201,7 +219,6 @@ export function DailyScheduleScreen() {
       });
 
       setItems(combined);
-
       const oneTimeIds = combined.map((x) => x.one_time_customer_id).filter(Boolean) as string[];
       fetchOneTimeCustomers(oneTimeIds);
     } catch (e: any) {
@@ -220,8 +237,8 @@ export function DailyScheduleScreen() {
 
   const customerLabel = useCallback(
     (x: Unified) => {
-      if (x.customer_id) return userMap.get(x.customer_id) ?? x.customer_id.slice(0, 6);
-      if (x.one_time_customer_id) return oneTimeMap.get(x.one_time_customer_id) ?? x.one_time_customer_id.slice(0, 6);
+      if (x.customer_id)           return userMap.get(x.customer_id)                ?? x.customer_id.slice(0, 6);
+      if (x.one_time_customer_id)  return oneTimeMap.get(x.one_time_customer_id)    ?? x.one_time_customer_id.slice(0, 6);
       return '—';
     },
     [oneTimeMap, userMap],
@@ -234,10 +251,7 @@ export function DailyScheduleScreen() {
     setPointsJob(job);
     setJobPoints([]);
 
-    if (job.kind !== 'regular') {
-      setPointsLoading(false);
-      return;
-    }
+    if (job.kind !== 'regular') { setPointsLoading(false); return; }
 
     try {
       const { data: jsp, error: jspErr } = await supabase
@@ -246,9 +260,9 @@ export function DailyScheduleScreen() {
         .eq('job_id', job.id);
       if (jspErr) throw jspErr;
 
-      const rows = (jsp ?? []) as JobServicePoint[];
+      const rows  = (jsp ?? []) as JobServicePoint[];
       const spIds = rows.map((r) => r.service_point_id);
-      let spMap = new Map<string, ServicePoint>();
+      let spMap   = new Map<string, ServicePoint>();
 
       if (spIds.length) {
         const { data: sps, error: spErr } = await supabase
@@ -298,229 +312,263 @@ export function DailyScheduleScreen() {
 
   const listHeader = useMemo(
     () => (
-      <View style={{ gap: 14 }}>
-        {/* ── iOS-style Calendar ────────────────────────── */}
-        <View style={st.iosCard}>
-          {/* Month navigation header */}
-          <View style={st.iosMonthRow}>
+      <View style={{ gap: 11 }}>
+        {/* ── Calendar Card ─────────────────────────────── */}
+        <View style={st.calCard}>
+          <View style={st.calMonthRow}>
             <Pressable
-              onPress={() => {
-                const d = new Date(`${day}T00:00:00`);
-                d.setDate(1);
-                d.setMonth(d.getMonth() - 1);
-                setDay(yyyyMmDd(d));
-              }}
-              style={({ pressed }) => [st.iosMonthBtn, pressed && { opacity: 0.5 }]}
+              onPress={() => { const d = new Date(`${day}T00:00:00`); d.setDate(1); d.setMonth(d.getMonth() - 1); setDay(yyyyMmDd(d)); }}
+              style={({ pressed }) => [st.calNavBtn, pressed && { opacity: 0.5 }]}
               hitSlop={8}
             >
-              <ChevronRight size={20} color={colors.text} strokeWidth={2.5} />
+              <ChevronLeft size={18} color={colors.text} strokeWidth={2.5} />
             </Pressable>
 
             <Pressable
               onPress={() => setDay(todayStr)}
-              style={({ pressed }) => [st.iosMonthLabelWrap, pressed && { opacity: 0.75 }]}
+              style={({ pressed }) => [st.calMonthLabelWrap, pressed && { opacity: 0.75 }]}
             >
-              <Text style={st.iosMonthText}>{calMonthLabel}</Text>
-              {day !== todayStr && (
-                <View style={st.iosTodayPill}>
-                  <Text style={st.iosTodayPillText}>היום</Text>
-                </View>
-              )}
+              <Text style={st.calMonthText}>{calMonthLabel}</Text>
             </Pressable>
 
             <Pressable
-              onPress={() => {
-                const d = new Date(`${day}T00:00:00`);
-                d.setDate(1);
-                d.setMonth(d.getMonth() + 1);
-                setDay(yyyyMmDd(d));
-              }}
-              style={({ pressed }) => [st.iosMonthBtn, pressed && { opacity: 0.5 }]}
+              onPress={() => { const d = new Date(`${day}T00:00:00`); d.setDate(1); d.setMonth(d.getMonth() + 1); setDay(yyyyMmDd(d)); }}
+              style={({ pressed }) => [st.calNavBtn, pressed && { opacity: 0.5 }]}
               hitSlop={8}
             >
-              <ChevronLeft size={20} color={colors.text} strokeWidth={2.5} />
+              <ChevronRight size={18} color={colors.text} strokeWidth={2.5} />
             </Pressable>
           </View>
 
-          {/* Day-of-week headers */}
-          <View style={st.iosDayHeaders}>
+          {/* Day-of-week labels */}
+          <View style={st.calDowRow}>
             {HE_DAYS.map((label) => (
-              <View key={label} style={st.iosDayHeaderCell}>
-                <Text style={st.iosDayHeaderText}>{label}</Text>
+              <View key={label} style={st.calDowCell}>
+                <Text style={st.calDowText}>{label}</Text>
               </View>
             ))}
           </View>
 
           {/* Week strip */}
-          <View style={st.iosWeekRow}>
-            {weekDates.map((d) => {
-              const ds = yyyyMmDd(d);
-              const isSelected = ds === day;
-              const isToday = ds === todayStr;
-              const isOtherMonth = d.getMonth() !== parsedDay.getMonth();
-              return (
-                <Pressable
-                  key={ds}
-                  onPress={() => setDay(ds)}
-                  style={st.iosDayCell}
-                >
-                  <View
-                    style={[
-                      st.iosDayBubble,
-                      isSelected && st.iosDayBubbleSelected,
-                      isToday && !isSelected && st.iosDayBubbleToday,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        st.iosDayNum,
-                        isSelected && st.iosDayNumSelected,
-                        isToday && !isSelected && st.iosDayNumToday,
-                        isOtherMonth && !isSelected && st.iosDayNumFaded,
-                      ]}
-                    >
-                      {d.getDate()}
-                    </Text>
-                  </View>
-                  {isSelected && <View style={st.iosSelDot} />}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Week navigation row */}
-          <View style={st.iosWeekNavRow}>
-            <Pressable
-              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 7)))}
-              style={({ pressed }) => [st.iosWeekNavBtn, pressed && { opacity: 0.5 }]}
-            >
-              <ChevronLeft size={16} color={colors.muted} strokeWidth={2.5} />
-              <Text style={st.iosWeekNavText}>שבוע הבא</Text>
-            </Pressable>
-            <View style={st.iosWeekNavSep} />
-            <Text style={st.iosPrettyDay}>{prettyDay}</Text>
-            <View style={st.iosWeekNavSep} />
+          <View style={st.calWeekRow}>
             <Pressable
               onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -7)))}
-              style={({ pressed }) => [st.iosWeekNavBtn, pressed && { opacity: 0.5 }]}
+              style={({ pressed }) => [st.calWeekNav, pressed && { opacity: 0.5 }]}
             >
-              <Text style={st.iosWeekNavText}>שבוע קודם</Text>
-              <ChevronRight size={16} color={colors.muted} strokeWidth={2.5} />
+              <ChevronLeft size={15} color='#C7C7CC' strokeWidth={2.5} />
             </Pressable>
+
+            <View style={{ flex: 1, flexDirection: 'row-reverse' }}>
+              {weekDates.map((d) => {
+                const ds = yyyyMmDd(d);
+                const isSelected   = ds === day;
+                const isToday      = ds === todayStr;
+                const isOtherMonth = d.getMonth() !== parsedDay.getMonth();
+                return (
+                  <Pressable key={ds} onPress={() => setDay(ds)} style={st.calDayCell}>
+                    <View style={[
+                      st.calDayBubble,
+                      isSelected && st.calDayBubbleSel,
+                      isToday && !isSelected && st.calDayBubbleToday,
+                    ]}>
+                      <Text style={[
+                        st.calDayNum,
+                        isSelected && st.calDayNumSel,
+                        isToday && !isSelected && st.calDayNumToday,
+                        isOtherMonth && !isSelected && st.calDayNumFaded,
+                      ]}>
+                        {d.getDate()}
+                      </Text>
+                    </View>
+                    <View style={[st.calDayDot, isSelected && st.calDayDotVisible]} />
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable
+              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 7)))}
+              style={({ pressed }) => [st.calWeekNav, pressed && { opacity: 0.5 }]}
+            >
+              <ChevronRight size={15} color='#C7C7CC' strokeWidth={2.5} />
+            </Pressable>
+          </View>
+
+          <View style={st.calPrettyRow}>
+            <Text style={st.calPrettyText}>{prettyDay}</Text>
           </View>
         </View>
 
         {/* ── Worker Filter ─────────────────────────────── */}
         <SelectSheet label="עובד" value={workerId} options={workerOptions} onChange={setWorkerId} />
 
-        {/* ── Stats Bar ─────────────────────────────────── */}
+        {/* ── Stats Card ────────────────────────────────── */}
         {items.length > 0 && (
-          <View style={st.statsRow}>
+          <View style={st.statsCard}>
             <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: colors.primary }]} />
-              <Text style={st.statValue}>{stats.total}</Text>
-              <Text style={st.statLabel}>סה״כ</Text>
+              <View style={[st.statDot, { backgroundColor: '#34C759' }]} />
+              <Text style={[st.statNumber, { color: '#34C759' }]}>{stats.completed}</Text>
+              <Text style={st.statLabel}>הושלמו</Text>
             </View>
-            <View style={st.statSeparator} />
+            <View style={st.statDivider} />
             <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={st.statValue}>{stats.pending}</Text>
+              <View style={[st.statDot, { backgroundColor: '#FF9500' }]} />
+              <Text style={[st.statNumber, { color: '#FF9500' }]}>{stats.pending}</Text>
               <Text style={st.statLabel}>ממתינות</Text>
             </View>
-            <View style={st.statSeparator} />
+            <View style={st.statDivider} />
             <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: colors.success }]} />
-              <Text style={st.statValue}>{stats.completed}</Text>
-              <Text style={st.statLabel}>הושלמו</Text>
+              <View style={[st.statDot, { backgroundColor: '#C7C7CC' }]} />
+              <Text style={[st.statNumber, { color: colors.text }]}>{stats.total}</Text>
+              <Text style={st.statLabel}>סה״כ</Text>
             </View>
           </View>
         )}
 
-        {/* ── Section Header ───────────────────────────── */}
-        <View style={st.sectionHeader}>
-          <View style={st.sectionIconWrap}>
-            <ClipboardList size={14} color={colors.primary} strokeWidth={2.2} />
+        {/* ── Section Header ────────────────────────────── */}
+        <View style={st.secHeader}>
+          <View style={st.secTitleGroup}>
+            <Text style={st.secTitle}>משימות</Text>
+            <View style={st.secBadge}>
+              <Text style={st.secBadgeText}>{filteredItems.length}</Text>
+            </View>
           </View>
-          <Text style={st.sectionLabel}>משימות</Text>
-          <View style={st.countBadge}>
-            <Text style={st.countText}>{items.length}</Text>
+          <View style={st.secFilterBtn}>
+            <ListFilter size={14} color={colors.muted} strokeWidth={2} />
           </View>
         </View>
+
+        {/* ── Filter Chips ──────────────────────────────── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={st.filterBar}
+        >
+          {FILTERS.map((f) => (
+            <Pressable
+              key={f.value}
+              style={({ pressed }) => [
+                st.filterChip,
+                filter === f.value && st.filterChipActive,
+                pressed && { opacity: 0.75 },
+              ]}
+              onPress={() => setFilter(f.value)}
+            >
+              <Text style={[st.filterChipText, filter === f.value && st.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
     ),
-    [calMonthLabel, day, items.length, parsedDay, prettyDay, stats, todayStr, weekDates, workerId, workerOptions],
+    [calMonthLabel, day, filter, filteredItems.length, items.length, parsedDay, prettyDay, stats, todayStr, weekDates, workerId, workerOptions],
   );
 
   return (
     <View style={st.screen}>
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={st.listContent}
         refreshing={loading}
-        onRefresh={() => {
-          fetchUsers();
-          fetchDay();
-        }}
+        onRefresh={() => { fetchUsers(); fetchDay(); }}
         ListHeaderComponent={listHeader}
-        renderItem={({ item }) => (
-          <JobCard
-            style={{ borderRadius: 18 }}
-            kind={item.kind}
-            title={customerLabel(item)}
-            status={item.status}
-            primaryNode={
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                <Avatar
-                  size={24}
-                  uri={userAvatarMap.get(item.worker_id) ?? null}
-                  name={userMap.get(item.worker_id) ?? ''}
-                  style={{ backgroundColor: '#fff' }}
-                />
-                <Text
-                  style={{
-                    color: KIND_CONFIG[item.kind].color,
-                    fontWeight: '700',
-                    fontSize: 13,
-                    textAlign: 'right',
-                    flex: 1,
-                  }}
-                  numberOfLines={1}
-                >
-                  #{item.order_number ?? '—'} עובד: {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
-                </Text>
+        renderItem={({ item }) => {
+          const stripeColor = item.status === 'completed' ? '#34C759' : '#FF9500';
+          const kindConf    = KIND_CONFIG[item.kind];
+          const workerName  = userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6);
+
+          return (
+            <View style={[st.taskWrap, item.status === 'completed' && { opacity: 0.68 }]}>
+              {/* ── White card (overflow:hidden for rounded corners) ── */}
+              <View style={st.taskInner}>
+
+                {/* Body */}
+                <View style={st.taskBody}>
+                  {/* Row 1: avatar + worker name (right) | kind chip + time (left) */}
+                  <View style={st.taskTopRow}>
+                    <View style={st.taskWho}>
+                      <Avatar
+                        size={24}
+                        uri={userAvatarMap.get(item.worker_id) ?? null}
+                        name={workerName}
+                      />
+                      <Text style={st.taskWorkerName} numberOfLines={1}>{workerName}</Text>
+                    </View>
+                    <View style={st.taskTopLeft}>
+                      <View style={st.taskTimePill}>
+                        <Text style={st.taskTimeText}>{formatHm(item.date)}</Text>
+                      </View>
+                      <View style={[
+                        st.kindChip,
+                        { backgroundColor: `${kindConf.color}15`, borderColor: `${kindConf.color}30` },
+                      ]}>
+                        <Text style={[st.kindChipText, { color: kindConf.color }]}>
+                          {kindConf.label}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Row 2: customer / location */}
+                  <Text style={st.taskCustomer} numberOfLines={1}>
+                    {customerLabel(item)}
+                  </Text>
+
+                  {!!item.notes && (
+                    <Text style={st.taskNotes} numberOfLines={1}>{item.notes}</Text>
+                  )}
+                </View>
+
+                {/* Action strip */}
+                <View style={st.taskActions}>
+                  {/* Complete button */}
+                  <Pressable
+                    style={[st.tcBtn, st.tcBtnGo, item.status === 'completed' && st.tcBtnDone]}
+                    onPress={() => {
+                      setEdit(item);
+                      setNewTime(new Date(item.date).toISOString().slice(11, 16));
+                    }}
+                    accessibilityLabel="ביצוע"
+                  >
+                    {item.status === 'completed'
+                      ? <Check size={15} color='#34C759' strokeWidth={2.2} />
+                      : <ArrowUpRight size={15} color={colors.primary} strokeWidth={2.2} />
+                    }
+                  </Pressable>
+
+                  {/* Delete button (UI only) */}
+                  <Pressable style={[st.tcBtn, st.tcBtnDel]} accessibilityLabel="מחיקה">
+                    <Trash2 size={14} color='#FF3B30' strokeWidth={2} />
+                  </Pressable>
+
+                  {/* Edit / pencil button */}
+                  <Pressable
+                    style={st.tcBtn}
+                    onPress={() => {
+                      setEdit(item);
+                      setNewTime(new Date(item.date).toISOString().slice(11, 16));
+                    }}
+                    accessibilityLabel="עריכה"
+                  >
+                    <Pencil size={14} color='#8E8E93' strokeWidth={2} />
+                  </Pressable>
+
+                  <View style={{ flex: 1 }} />
+                </View>
               </View>
-            }
-            description={item.notes ?? null}
-            onPress={() => {
-              setEdit(item);
-              setNewTime(new Date(item.date).toISOString().slice(11, 16));
-            }}
-            faded={item.status === 'completed'}
-            actions={
-              <JobCardAction
-                label="נקודות משימה"
-                onPress={() => openJobPoints(item)}
-                onOriginRect={(r) => {
-                  pointsOriginRectRef.current = r;
-                }}
-              >
-                <Eye size={20} color="#414755" />
-              </JobCardAction>
-            }
-            chips={
-              <>
-                <JobChip text={KIND_CONFIG[item.kind].label} accent={KIND_CONFIG[item.kind].accent} />
-                <JobChip text={formatHm(item.date)} muted />
-              </>
-            }
-          />
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+
+              {/* ── Status stripe (absolute, outside overflow:hidden) ── */}
+              <View style={[st.taskStripe, { backgroundColor: stripeColor }]} />
+            </View>
+          );
+        }}
+        ItemSeparatorComponent={() => <View style={{ height: 9 }} />}
         ListEmptyComponent={
           <View style={st.emptyWrap}>
-            <View style={st.emptyIcon}>
-              <CalendarDays size={28} color={colors.muted} strokeWidth={1.5} />
+            <View style={st.emptyIconWrap}>
+              <CalendarDays size={26} color={colors.muted} strokeWidth={1.5} />
             </View>
             <Text style={st.emptyTitle}>אין משימות ליום הזה</Text>
             <Text style={st.emptySubtitle}>שייך תבנית לתאריך ליצירת משימות</Text>
@@ -540,7 +588,7 @@ export function DailyScheduleScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={st.editTitle}>עריכת שעה</Text>
                 <Text style={st.editSubtitle}>
-                  {KIND_CONFIG[edit.kind].label} • #{edit.order_number ?? '—'}
+                  {KIND_CONFIG[edit.kind].label} · #{edit.order_number ?? '—'}
                 </Text>
               </View>
             </View>
@@ -554,14 +602,8 @@ export function DailyScheduleScreen() {
               <View style={st.editDetailRow}>
                 <Text style={st.editDetailLabel}>עובד</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Avatar
-                    size={20}
-                    uri={userAvatarMap.get(edit.worker_id) ?? null}
-                    name={userMap.get(edit.worker_id) ?? ''}
-                  />
-                  <Text style={st.editDetailValue}>
-                    {userMap.get(edit.worker_id) ?? edit.worker_id.slice(0, 6)}
-                  </Text>
+                  <Avatar size={20} uri={userAvatarMap.get(edit.worker_id) ?? null} name={userMap.get(edit.worker_id) ?? ''} />
+                  <Text style={st.editDetailValue}>{userMap.get(edit.worker_id) ?? edit.worker_id.slice(0, 6)}</Text>
                 </View>
               </View>
               <View style={st.editDetailDivider} />
@@ -597,30 +639,15 @@ export function DailyScheduleScreen() {
               onChange={setNewTime}
             />
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Button
-                title="ביטול"
-                variant="secondary"
-                fullWidth={false}
-                style={{ flex: 1, borderRadius: 14 }}
-                onPress={() => setEdit(null)}
-              />
-              <Button
-                title="שמור"
-                fullWidth={false}
-                style={{ flex: 1, borderRadius: 14 }}
-                onPress={saveTime}
-              />
+              <Button title="ביטול" variant="secondary" fullWidth={false} style={{ flex: 1, borderRadius: 14 }} onPress={() => setEdit(null)} />
+              <Button title="שמור"  fullWidth={false}  style={{ flex: 1, borderRadius: 14 }} onPress={saveTime} />
             </View>
           </View>
         )}
       </ModalSheet>
 
       {/* ── Service Points Window ───────────────────────── */}
-      <OriginWindow
-        visible={pointsOpen}
-        originRect={pointsOriginRect}
-        onClose={closePoints}
-      >
+      <OriginWindow visible={pointsOpen} originRect={pointsOriginRect} onClose={closePoints}>
         <View style={{ flex: 1, padding: 16, gap: 14 }}>
           <View style={st.pointsHeader}>
             <View style={st.pointsIconBubble}>
@@ -630,15 +657,11 @@ export function DailyScheduleScreen() {
               <Text style={st.pointsTitle}>נקודות שירות</Text>
               {!!pointsJob && (
                 <Text style={st.pointsSubtitle} numberOfLines={1}>
-                  {customerLabel(pointsJob)} • {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id.slice(0, 6)}
+                  {customerLabel(pointsJob)} · {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id.slice(0, 6)}
                 </Text>
               )}
             </View>
-            <Pressable
-              onPress={closePoints}
-              hitSlop={8}
-              style={({ pressed }) => [st.pointsCloseBtn, pressed && { opacity: 0.6 }]}
-            >
+            <Pressable onPress={closePoints} hitSlop={8} style={({ pressed }) => [st.pointsCloseBtn, pressed && { opacity: 0.6 }]}>
               <X size={16} color={colors.muted} strokeWidth={2.5} />
             </Pressable>
           </View>
@@ -649,9 +672,7 @@ export function DailyScheduleScreen() {
             </View>
           ) : pointsJob?.kind !== 'regular' ? (
             <View style={st.pointsEmptyWrap}>
-              <View style={st.pointsEmptyIcon}>
-                <Layers size={22} color={colors.muted} strokeWidth={1.5} />
-              </View>
+              <View style={st.pointsEmptyIcon}><Layers size={22} color={colors.muted} strokeWidth={1.5} /></View>
               <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
             </View>
           ) : (
@@ -666,9 +687,7 @@ export function DailyScheduleScreen() {
                     <View style={st.pointDeviceIcon}>
                       <Droplets size={14} color={colors.primary} strokeWidth={2} />
                     </View>
-                    <Text style={st.pointDeviceText}>
-                      {item.sp?.device_type ?? item.service_point_id}
-                    </Text>
+                    <Text style={st.pointDeviceText}>{item.sp?.device_type ?? item.service_point_id}</Text>
                   </View>
                   <View style={st.pointCardDivider} />
                   <View style={st.pointMetaRow}>
@@ -676,41 +695,30 @@ export function DailyScheduleScreen() {
                       <Text style={st.pointMetaLabel}>ניחוח</Text>
                       <Text style={st.pointMetaValue}>{item.sp?.scent_type ?? '-'}</Text>
                     </View>
-                    <View style={st.pointMetaSeparator} />
+                    <View style={st.pointMetaSep} />
                     <View style={st.pointMetaItem}>
                       <Text style={st.pointMetaLabel}>מילוי</Text>
-                      <Text style={st.pointMetaValue}>
-                        {item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}
-                      </Text>
+                      <Text style={st.pointMetaValue}>{item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}</Text>
                     </View>
                   </View>
                   {!!item.sp?.notes && (
                     <>
                       <View style={st.pointCardDivider} />
-                      <Text style={st.pointNotes} numberOfLines={2}>
-                        {item.sp.notes}
-                      </Text>
+                      <Text style={st.pointNotes} numberOfLines={2}>{item.sp.notes}</Text>
                     </>
                   )}
                 </View>
               )}
               ListEmptyComponent={
                 <View style={st.pointsEmptyWrap}>
-                  <View style={st.pointsEmptyIcon}>
-                    <Layers size={22} color={colors.muted} strokeWidth={1.5} />
-                  </View>
+                  <View style={st.pointsEmptyIcon}><Layers size={22} color={colors.muted} strokeWidth={1.5} /></View>
                   <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
                 </View>
               }
             />
           )}
 
-          <Button
-            title="סגור"
-            variant="secondary"
-            onPress={closePoints}
-            style={{ borderRadius: 14 }}
-          />
+          <Button title="סגור" variant="secondary" onPress={closePoints} style={{ borderRadius: 14 }} />
         </View>
       </OriginWindow>
     </View>
@@ -723,246 +731,386 @@ const st = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 13,
+    paddingTop: 14,
     paddingBottom: 16,
+    gap: 11,
   },
 
-  // ── iOS Calendar Card ──────────────────────────────
-  iosCard: {
-    backgroundColor: colors.elevated,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
+  // ── Calendar Card ──────────────────────────────────
+  calCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     overflow: 'hidden',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
-      android: { elevation: 3 },
+      ios:     { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 16, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 2 },
     }),
   },
-  iosMonthRow: {
+  calMonthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 18,
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
-  iosMonthBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+  calNavBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#F2F2F7',
   },
-  iosMonthLabelWrap: {
+  calMonthLabelWrap: {
     flex: 1,
-    alignItems: 'center',
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  iosMonthText: {
-    fontSize: 18,
-    fontWeight: '900',
+  calMonthText: {
+    fontSize: 20,
+    fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.3,
   },
-  iosTodayPill: {
+  todayPill: {
     backgroundColor: colors.primary,
     borderRadius: 10,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  iosTodayPillText: {
+  todayPillText: {
     color: '#fff',
     fontSize: 11,
     fontWeight: '800',
   },
-  iosDayHeaders: {
-    flexDirection: 'row',
+  calDowRow: {
+    flexDirection: 'row-reverse',
     paddingHorizontal: 8,
     paddingBottom: 6,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     paddingTop: 10,
-    backgroundColor: colors.bg,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
   },
-  iosDayHeaderCell: {
+  calDowCell: {
     flex: 1,
     alignItems: 'center',
   },
-  iosDayHeaderText: {
-    fontSize: 12,
+  calDowText: {
+    fontSize: 10,
     fontWeight: '700',
-    color: colors.muted,
-    letterSpacing: 0.2,
+    color: '#AEAEB2',
+    letterSpacing: 0.3,
   },
-  iosWeekRow: {
+  calWeekRow: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    paddingBottom: 14,
-    backgroundColor: colors.bg,
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
-  iosDayCell: {
+  calWeekNav: {
+    width: 26,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  calDayCell: {
     flex: 1,
     alignItems: 'center',
     gap: 5,
+    paddingVertical: 2,
+    borderRadius: 12,
   },
-  iosDayBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  calDayBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iosDayBubbleSelected: {
+  calDayBubbleSel: {
     backgroundColor: colors.primary,
     ...Platform.select({
-      ios: { shadowColor: colors.primary, shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      ios:     { shadowColor: colors.primary, shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
       android: { elevation: 4 },
     }),
   },
-  iosDayBubbleToday: {
-    borderWidth: 2,
+  calDayBubbleToday: {
+    borderWidth: 1.5,
     borderColor: colors.primary,
   },
-  iosDayNum: {
-    fontSize: 16,
-    fontWeight: '700',
+  calDayNum: {
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.text,
   },
-  iosDayNumSelected: {
+  calDayNumSel: {
     color: '#fff',
-    fontWeight: '900',
+    fontWeight: '700',
   },
-  iosDayNumToday: {
+  calDayNumToday: {
     color: colors.primary,
-    fontWeight: '900',
+    fontWeight: '700',
   },
-  iosDayNumFaded: {
-    color: colors.border,
+  calDayNumFaded: {
+    color: '#D1D1D6',
   },
-  iosSelDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+  calDayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: colors.primary,
+    opacity: 0,
   },
-  iosWeekNavRow: {
-    flexDirection: 'row',
+  calDayDotVisible: {
+    opacity: 1,
+  },
+  calPrettyRow: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.elevated,
+    borderTopColor: '#F2F2F7',
   },
-  iosWeekNavBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  iosWeekNavText: {
+  calPrettyText: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.muted,
   },
-  iosWeekNavSep: {
-    width: 1,
-    height: 14,
-    backgroundColor: colors.border,
-  },
-  iosPrettyDay: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'center',
-    flex: 1,
-  },
 
-  // ── Stats Bar ──────────────────────────────────────
-  statsRow: {
-    flexDirection: 'row-reverse',
-    backgroundColor: colors.elevated,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+  // ── Stats Card ─────────────────────────────────────
+  statsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-      android: { elevation: 1 },
+      ios:     { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 16, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 2 },
     }),
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
   statDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     marginBottom: 2,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '900',
+  statNumber: {
+    fontSize: 27,
+    fontWeight: '800',
+    lineHeight: 30,
     color: colors.text,
   },
   statLabel: {
     fontSize: 11,
-    fontWeight: '700',
     color: colors.muted,
+    fontWeight: '500',
   },
-  statSeparator: {
+  statDivider: {
     width: 1,
     height: '70%' as any,
-    backgroundColor: colors.border,
+    backgroundColor: '#F0F0F5',
     alignSelf: 'center',
   },
 
   // ── Section Header ─────────────────────────────────
-  sectionHeader: {
+  secHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  secTitleGroup: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 2,
-    marginTop: 2,
   },
-  sectionIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(37,99,235,0.1)',
+  secTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  secBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 11,
+    paddingVertical: 3,
+  },
+  secBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  secFilterBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionLabel: {
+
+  // ── Filter Chips ───────────────────────────────────
+  filterBar: {
+    flexDirection: 'row-reverse',
+    gap: 7,
+    paddingBottom: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: '#fff',
+  },
+  filterChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+  },
+  filterChipText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '600',
     color: colors.muted,
-    letterSpacing: 0.4,
+  },
+  filterChipTextActive: {
+    color: colors.primary,
+  },
+
+  // ── Task Card ──────────────────────────────────────
+  taskWrap: {
+    borderRadius: 20,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 3 },
+    }),
+  },
+  taskInner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.07)',
+    overflow: 'hidden',
+  },
+  taskStripe: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  taskBody: {
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 13,
+  },
+  taskTopRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  taskWho: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 7,
+    flex: 1,
+    marginLeft: 8,
+  },
+  taskTopLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  taskWorkerName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    flex: 1,
     textAlign: 'right',
   },
-  countBadge: {
-    backgroundColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 24,
-    alignItems: 'center',
+  taskTimePill: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 20,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
   },
-  countText: {
+  taskTimeText: {
     fontSize: 11,
+    fontWeight: '700',
+    color: '#3A3A3C',
+    letterSpacing: 0.4,
+  },
+  taskCustomer: {
+    fontSize: 16,
     fontWeight: '800',
+    color: colors.text,
+    textAlign: 'right',
+    lineHeight: 22,
+  },
+  taskNotes: {
+    fontSize: 12,
+    fontWeight: '500',
     color: colors.muted,
+    textAlign: 'right',
+    marginTop: 5,
+    lineHeight: 17,
+  },
+  taskActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
+  },
+  kindChip: {
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderWidth: 1,
+  },
+  kindChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tcBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#F9F9FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tcBtnGo: {
+    borderColor: '#DDDCF5',
+    backgroundColor: '#F0F0FF',
+  },
+  tcBtnDone: {
+    borderColor: '#C8F0D0',
+    backgroundColor: '#F0FFF4',
+  },
+  tcBtnDel: {
+    borderColor: '#FFE5E5',
+    backgroundColor: '#FFF5F5',
   },
 
   // ── Empty State ────────────────────────────────────
@@ -971,7 +1119,7 @@ const st = StyleSheet.create({
     paddingVertical: 40,
     gap: 8,
   },
-  emptyIcon: {
+  emptyIconWrap: {
     width: 64,
     height: 64,
     borderRadius: 22,
@@ -1184,7 +1332,7 @@ const st = StyleSheet.create({
     fontWeight: '800',
     color: colors.text,
   },
-  pointMetaSeparator: {
+  pointMetaSep: {
     width: 1,
     height: 28,
     backgroundColor: colors.border,

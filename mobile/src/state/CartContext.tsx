@@ -161,11 +161,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         });
 
         await syncCart(nextCart);
-        Toast.show({
-          type: 'success',
-          text1: 'המוצר נוסף לעגלה',
-          text2: product.name,
-        });
       } catch (error: any) {
         Toast.show({
           type: 'error',

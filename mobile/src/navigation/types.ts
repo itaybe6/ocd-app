@@ -11,8 +11,10 @@ export type StoreCategoryRouteParams = {
 export type RootStackParamList = {
   Main:
     | {
-        initialTab?: 'home' | 'categories' | 'search';
+        initialTab?: 'home' | 'search';
         initialTabRequestId?: number;
+        /** After customer sign-up, open profile (home with user details) once. */
+        initialCustomerProfile?: boolean;
       }
     | undefined;
   Login: undefined;
