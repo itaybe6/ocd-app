@@ -2,12 +2,10 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { addDays, format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
   CalendarDays,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -15,7 +13,6 @@ import {
   Droplets,
   Eye,
   Layers,
-  User,
   X,
 } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
@@ -33,17 +30,8 @@ import { useLoading } from '../../state/LoadingContext';
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
 
-LocaleConfig.locales.he = {
-  monthNames: [
-    'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
-    'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
-  ],
-  monthNamesShort: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יונ׳', 'יול׳', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'],
-  dayNames: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
-  dayNamesShort: ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'],
-  today: 'היום',
-};
-LocaleConfig.defaultLocale = 'he';
+const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const HE_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
 type Unified = {
   kind: Kind;
@@ -104,8 +92,6 @@ const KIND_CONFIG = {
 export function DailyScheduleScreen() {
   const { setIsLoading } = useLoading();
   const [day, setDay] = useState(yyyyMmDd(new Date()));
-  const [dateSheetOpen, setDateSheetOpen] = useState(false);
-  const [tempDay, setTempDay] = useState(day);
   const [users, setUsers] = useState<UserLite[]>([]);
   const [oneTimeCustomers, setOneTimeCustomers] = useState<OneTimeCustomerLite[]>([]);
   const [workerId, setWorkerId] = useState('');
@@ -139,10 +125,18 @@ export function DailyScheduleScreen() {
     return Number.isNaN(d.getTime()) ? new Date() : d;
   }, [day]);
 
-  const openDatePicker = useCallback(() => {
-    setTempDay(day);
-    setDateSheetOpen(true);
-  }, [day]);
+  const todayStr = useMemo(() => yyyyMmDd(new Date()), []);
+
+  const weekDates = useMemo(() => {
+    const dow = parsedDay.getDay();
+    const sunday = addDays(parsedDay, -dow);
+    return Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
+  }, [parsedDay]);
+
+  const calMonthLabel = useMemo(
+    () => `${HE_MONTHS[parsedDay.getMonth()]} ${parsedDay.getFullYear()}`,
+    [parsedDay],
+  );
 
   const prettyDay = useMemo(() => {
     const d = toDate(day);
@@ -305,41 +299,113 @@ export function DailyScheduleScreen() {
   const listHeader = useMemo(
     () => (
       <View style={{ gap: 14 }}>
-        {/* ── Date Navigation ───────────────────────────── */}
-        <View style={st.dateCard}>
-          <View style={st.dateCardHeader}>
-            <View style={st.dateIconBubble}>
-              <CalendarDays size={16} color="#fff" strokeWidth={2.5} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.dateCardTitle}>תאריך</Text>
-              <Text style={st.dateCardSubtitle}>בחר יום לצפייה במשימות</Text>
-            </View>
+        {/* ── iOS-style Calendar ────────────────────────── */}
+        <View style={st.iosCard}>
+          {/* Month navigation header */}
+          <View style={st.iosMonthRow}>
+            <Pressable
+              onPress={() => {
+                const d = new Date(`${day}T00:00:00`);
+                d.setDate(1);
+                d.setMonth(d.getMonth() - 1);
+                setDay(yyyyMmDd(d));
+              }}
+              style={({ pressed }) => [st.iosMonthBtn, pressed && { opacity: 0.5 }]}
+              hitSlop={8}
+            >
+              <ChevronRight size={20} color={colors.text} strokeWidth={2.5} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => setDay(todayStr)}
+              style={({ pressed }) => [st.iosMonthLabelWrap, pressed && { opacity: 0.75 }]}
+            >
+              <Text style={st.iosMonthText}>{calMonthLabel}</Text>
+              {day !== todayStr && (
+                <View style={st.iosTodayPill}>
+                  <Text style={st.iosTodayPillText}>היום</Text>
+                </View>
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                const d = new Date(`${day}T00:00:00`);
+                d.setDate(1);
+                d.setMonth(d.getMonth() + 1);
+                setDay(yyyyMmDd(d));
+              }}
+              style={({ pressed }) => [st.iosMonthBtn, pressed && { opacity: 0.5 }]}
+              hitSlop={8}
+            >
+              <ChevronLeft size={20} color={colors.text} strokeWidth={2.5} />
+            </Pressable>
           </View>
 
-          <View style={st.dateDivider} />
-
-          <View style={st.dateNavRow}>
-            <Pressable
-              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -1)))}
-              style={({ pressed }) => [st.dateNavBtn, pressed && { opacity: 0.6 }]}
-            >
-              <ChevronLeft size={18} color={colors.text} strokeWidth={2.5} />
-            </Pressable>
-
-            <Pressable onPress={openDatePicker} style={({ pressed }) => [st.dateDisplay, pressed && { opacity: 0.85 }]}>
-              <CalendarDays size={18} color={colors.primary} strokeWidth={2} />
-              <View style={{ flex: 1 }}>
-                <Text style={st.dateMainText}>{prettyDay}</Text>
-                <Text style={st.dateSub}>{day}</Text>
+          {/* Day-of-week headers */}
+          <View style={st.iosDayHeaders}>
+            {HE_DAYS.map((label) => (
+              <View key={label} style={st.iosDayHeaderCell}>
+                <Text style={st.iosDayHeaderText}>{label}</Text>
               </View>
-            </Pressable>
+            ))}
+          </View>
 
+          {/* Week strip */}
+          <View style={st.iosWeekRow}>
+            {weekDates.map((d) => {
+              const ds = yyyyMmDd(d);
+              const isSelected = ds === day;
+              const isToday = ds === todayStr;
+              const isOtherMonth = d.getMonth() !== parsedDay.getMonth();
+              return (
+                <Pressable
+                  key={ds}
+                  onPress={() => setDay(ds)}
+                  style={st.iosDayCell}
+                >
+                  <View
+                    style={[
+                      st.iosDayBubble,
+                      isSelected && st.iosDayBubbleSelected,
+                      isToday && !isSelected && st.iosDayBubbleToday,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        st.iosDayNum,
+                        isSelected && st.iosDayNumSelected,
+                        isToday && !isSelected && st.iosDayNumToday,
+                        isOtherMonth && !isSelected && st.iosDayNumFaded,
+                      ]}
+                    >
+                      {d.getDate()}
+                    </Text>
+                  </View>
+                  {isSelected && <View style={st.iosSelDot} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Week navigation row */}
+          <View style={st.iosWeekNavRow}>
             <Pressable
-              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 1)))}
-              style={({ pressed }) => [st.dateNavBtn, pressed && { opacity: 0.6 }]}
+              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 7)))}
+              style={({ pressed }) => [st.iosWeekNavBtn, pressed && { opacity: 0.5 }]}
             >
-              <ChevronRight size={18} color={colors.text} strokeWidth={2.5} />
+              <ChevronLeft size={16} color={colors.muted} strokeWidth={2.5} />
+              <Text style={st.iosWeekNavText}>שבוע הבא</Text>
+            </Pressable>
+            <View style={st.iosWeekNavSep} />
+            <Text style={st.iosPrettyDay}>{prettyDay}</Text>
+            <View style={st.iosWeekNavSep} />
+            <Pressable
+              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -7)))}
+              style={({ pressed }) => [st.iosWeekNavBtn, pressed && { opacity: 0.5 }]}
+            >
+              <Text style={st.iosWeekNavText}>שבוע קודם</Text>
+              <ChevronRight size={16} color={colors.muted} strokeWidth={2.5} />
             </Pressable>
           </View>
         </View>
@@ -382,7 +448,7 @@ export function DailyScheduleScreen() {
         </View>
       </View>
     ),
-    [day, items.length, openDatePicker, parsedDay, prettyDay, stats, workerId, workerOptions],
+    [calMonthLabel, day, items.length, parsedDay, prettyDay, stats, todayStr, weekDates, workerId, workerOptions],
   );
 
   return (
@@ -462,69 +528,6 @@ export function DailyScheduleScreen() {
         }
         ListFooterComponent={<View style={{ height: 40 }} />}
       />
-
-      {/* ── Calendar Sheet ──────────────────────────────── */}
-      <ModalSheet visible={dateSheetOpen} onClose={() => setDateSheetOpen(false)} containerStyle={{ paddingBottom: 18 }}>
-        <View style={{ gap: 12 }}>
-          <View style={st.calendarHeader}>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flex: 1 }}>
-              <View style={st.calendarIconBubble}>
-                <CalendarDays size={16} color="#fff" strokeWidth={2.5} />
-              </View>
-              <Text style={st.calendarTitle}>בחירת תאריך</Text>
-            </View>
-            <Pressable
-              onPress={() => setTempDay(yyyyMmDd(new Date()))}
-              style={({ pressed }) => [st.todayBtn, pressed && { opacity: 0.6 }]}
-            >
-              <Text style={st.todayBtnText}>היום</Text>
-            </Pressable>
-          </View>
-
-          <Calendar
-            current={tempDay}
-            onDayPress={(d) => setTempDay(d.dateString)}
-            markedDates={{
-              [tempDay]: { selected: true, selectedColor: colors.primary, selectedTextColor: '#fff' },
-            }}
-            enableSwipeMonths
-            firstDay={0}
-            style={st.calendar}
-            theme={{
-              calendarBackground: colors.card,
-              textSectionTitleColor: colors.muted,
-              todayTextColor: colors.primary,
-              dayTextColor: colors.text,
-              monthTextColor: colors.text,
-              textMonthFontWeight: '900',
-              textDayFontWeight: '700',
-              textDayHeaderFontWeight: '800',
-              arrowColor: colors.text,
-              selectedDayBackgroundColor: colors.primary,
-              selectedDayTextColor: '#fff',
-            }}
-          />
-
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Button
-              title="ביטול"
-              variant="secondary"
-              fullWidth={false}
-              style={{ flex: 1, borderRadius: 14 }}
-              onPress={() => setDateSheetOpen(false)}
-            />
-            <Button
-              title="אישור"
-              fullWidth={false}
-              style={{ flex: 1, borderRadius: 14 }}
-              onPress={() => {
-                setDay(tempDay);
-                setDateSheetOpen(false);
-              }}
-            />
-          </View>
-        </View>
-      </ModalSheet>
 
       {/* ── Edit Time Sheet ─────────────────────────────── */}
       <ModalSheet visible={!!edit} onClose={() => setEdit(null)}>
@@ -725,88 +728,162 @@ const st = StyleSheet.create({
     paddingBottom: 16,
   },
 
-  // ── Date Card ──────────────────────────────────────
-  dateCard: {
+  // ── iOS Calendar Card ──────────────────────────────
+  iosCard: {
     backgroundColor: colors.elevated,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    overflow: 'hidden',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
-      android: { elevation: 2 },
+      ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
+      android: { elevation: 3 },
     }),
   },
-  dateCardHeader: {
-    flexDirection: 'row-reverse',
+  iosMonthRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 14,
   },
-  dateIconBubble: {
-    width: 38,
-    height: 38,
+  iosMonthBtn: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  dateCardTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: colors.text,
-    textAlign: 'right',
-  },
-  dateCardSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
-    textAlign: 'right',
-    marginTop: 1,
-  },
-  dateDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 14,
-  },
-  dateNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dateNavBtn: {
-    width: 42,
-    height: 48,
-    borderRadius: 14,
     backgroundColor: colors.bg,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  iosMonthLabelWrap: {
+    flex: 1,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  iosMonthText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  iosTodayPill: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  iosTodayPillText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  iosDayHeaders: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    backgroundColor: colors.bg,
+  },
+  iosDayHeaderCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  iosDayHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+    letterSpacing: 0.2,
+  },
+  iosWeekRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 14,
+    backgroundColor: colors.bg,
+  },
+  iosDayCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+  },
+  iosDayBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dateDisplay: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 14,
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
+  iosDayBubbleSelected: {
+    backgroundColor: colors.primary,
+    ...Platform.select({
+      ios: { shadowColor: colors.primary, shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 4 },
+    }),
   },
-  dateMainText: {
+  iosDayBubbleToday: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  iosDayNum: {
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.text,
-    fontWeight: '900',
-    fontSize: 14,
-    textAlign: 'right',
   },
-  dateSub: {
+  iosDayNumSelected: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  iosDayNumToday: {
+    color: colors.primary,
+    fontWeight: '900',
+  },
+  iosDayNumFaded: {
+    color: colors.border,
+  },
+  iosSelDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.primary,
+  },
+  iosWeekNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.elevated,
+  },
+  iosWeekNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  iosWeekNavText: {
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.muted,
-    fontWeight: '600',
-    fontSize: 11,
-    textAlign: 'right',
-    marginTop: 1,
+  },
+  iosWeekNavSep: {
+    width: 1,
+    height: 14,
+    backgroundColor: colors.border,
+  },
+  iosPrettyDay: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    flex: 1,
   },
 
   // ── Stats Bar ──────────────────────────────────────
@@ -913,46 +990,6 @@ const st = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
-  },
-
-  // ── Calendar Sheet ─────────────────────────────────
-  calendarHeader: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  calendarIconBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  calendarTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  todayBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(37,99,235,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.15)',
-  },
-  todayBtnText: {
-    color: colors.primary,
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  calendar: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
 
   // ── Edit Time Sheet ────────────────────────────────
