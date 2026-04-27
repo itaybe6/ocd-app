@@ -99,8 +99,6 @@ function CustomerProfileRoute({ navigation }: DrawerScreenProps<CustomerDrawerPa
   return (
     <CustomerProfileScreen
       onOpenOrders={() => navigation.navigate('Orders')}
-      onOpenFavorites={() => navigation.navigate('Favorites')}
-      onOpenServices={() => navigation.navigate('Services')}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
   );

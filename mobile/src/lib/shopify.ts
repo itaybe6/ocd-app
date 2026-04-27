@@ -9,6 +9,16 @@ export type ShopifyImage = {
   altText: string | null;
 };
 
+export type ShopifyProductVariant = {
+  id: string;
+  title: string;
+  availableForSale: boolean;
+  price: number;
+  currencyCode: string;
+  imageUrl: string | null;
+  imageAltText: string | null;
+};
+
 export type ShopifyProduct = {
   id: string;
   title: string;
@@ -23,6 +33,7 @@ export type ShopifyProduct = {
   variantId: string | null;
   variantTitle: string | null;
   availableForSale: boolean;
+  variants: ShopifyProductVariant[];
 };
 
 export type ShopifyCollection = {
@@ -104,6 +115,7 @@ type ShopifyProductVariantNode = {
   title: string;
   availableForSale: boolean;
   price: ShopifyMoneyV2;
+  image: ShopifyImage | null;
 };
 
 type ShopifyProductNode = {
@@ -183,6 +195,24 @@ type ShopifyCollectionProductsQueryResponse = {
       products: {
         edges: Array<{
           node: ShopifyProductNode;
+        }>;
+      };
+    } | null;
+  };
+  errors?: Array<{
+    message: string;
+  }>;
+};
+
+type ShopifyCollectionImageQueryResponse = {
+  data?: {
+    collection: {
+      image: ShopifyImage | null;
+      products: {
+        edges: Array<{
+          node: {
+            featuredImage: ShopifyImage | null;
+          };
         }>;
       };
     } | null;
@@ -331,7 +361,7 @@ const PRODUCT_FIELDS = `
       }
     }
   }
-  variants(first: 1) {
+  variants(first: 20) {
     edges {
       node {
         id
@@ -340,6 +370,10 @@ const PRODUCT_FIELDS = `
         price {
           amount
           currencyCode
+        }
+        image {
+          url
+          altText
         }
       }
     }
@@ -445,6 +479,16 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
   const variant = getVariant(node);
   const fallbackPrice = node.priceRange.minVariantPrice;
 
+  const variants: ShopifyProductVariant[] = (node.variants?.edges ?? []).map((edge) => ({
+    id: edge.node.id,
+    title: edge.node.title,
+    availableForSale: edge.node.availableForSale,
+    price: toNumber(edge.node.price.amount),
+    currencyCode: edge.node.price.currencyCode,
+    imageUrl: edge.node.image?.url ?? null,
+    imageAltText: edge.node.image?.altText ?? null,
+  }));
+
   return {
     id: node.id,
     title: node.title,
@@ -459,6 +503,7 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     variantId: variant?.id ?? null,
     variantTitle: variant?.title ?? null,
     availableForSale: variant?.availableForSale ?? false,
+    variants,
   };
 }
 
@@ -770,6 +815,36 @@ export async function fetchCollectionProducts(handle: string, first = 40): Promi
   }
 
   return payload.data?.collection?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
+}
+
+export async function fetchCollectionImage(handle: string): Promise<string | null> {
+  const query = `
+    query GetCollectionImage($handle: String!) {
+      collection(handle: $handle) {
+        image {
+          url
+        }
+        products(first: 6, sortKey: BEST_SELLING) {
+          edges {
+            node {
+              featuredImage {
+                url
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyCollectionImageQueryResponse>(query, { handle });
+  const collection = payload.data?.collection;
+  if (!collection) return null;
+
+  if (collection.image?.url) return collection.image.url;
+
+  const firstProductImage = collection.products.edges.find((e) => e.node.featuredImage?.url)?.node.featuredImage?.url;
+  return firstProductImage ?? null;
 }
 
 export async function fetchProductByHandle(handle: string): Promise<ShopifyProduct | null> {

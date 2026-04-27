@@ -32,6 +32,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import {
+  fetchCollectionImage,
   fetchCollectionProducts,
   fetchCollections,
   fetchMenuItems,
@@ -1080,19 +1081,22 @@ function StoreSubcategoryCircleStrip({
   scrollViewRef?: React.RefObject<ScrollView | null>;
   scrollToEndOnContentSize?: boolean;
 }) {
-  const visible = items.length > 0;
-  const heightAnim = useSharedValue(visible ? SUBCATEGORY_STRIP_HEIGHT : 0);
-  const opacityAnim = useSharedValue(visible ? 1 : 0);
+  const heightAnim = useSharedValue(0);
+  const opacityAnim = useSharedValue(0);
 
   useEffect(() => {
-    if (visible) {
-      heightAnim.value = withTiming(SUBCATEGORY_STRIP_HEIGHT, { duration: 280 });
-      opacityAnim.value = withTiming(1, { duration: 240 });
+    if (items.length > 0) {
+      heightAnim.value = withSpring(SUBCATEGORY_STRIP_HEIGHT, {
+        damping: 18,
+        stiffness: 160,
+        mass: 0.7,
+      });
+      opacityAnim.value = withTiming(1, { duration: 220 });
     } else {
-      opacityAnim.value = withTiming(0, { duration: 180 });
-      heightAnim.value = withTiming(0, { duration: 260 });
+      opacityAnim.value = withTiming(0, { duration: 150 });
+      heightAnim.value = withTiming(0, { duration: 250 });
     }
-  }, [visible, heightAnim, opacityAnim]);
+  }, [items.length, heightAnim, opacityAnim]);
 
   const animStyle = useAnimatedStyle(() => ({
     height: heightAnim.value,
@@ -1679,17 +1683,15 @@ export function StoreHomeScreen({
       const next: Record<string, string | undefined> = {};
       await Promise.all(
         selectedCategoryDirectSubcategories.map(async (sub) => {
+          if (sub.imageUrl) {
+            next[sub.id] = sub.imageUrl;
+            return;
+          }
           try {
-            const prods = await fetchCollectionProducts(sub.id, 16);
-            const withImg = prods.filter((p) => p.imageUrl);
-            if (!withImg.length) {
-              next[sub.id] = sub.imageUrl ?? undefined;
-              return;
-            }
-            const pick = withImg[Math.floor(Math.random() * withImg.length)];
-            next[sub.id] = pick.imageUrl ?? sub.imageUrl ?? undefined;
+            const img = await fetchCollectionImage(sub.id);
+            next[sub.id] = img ?? undefined;
           } catch {
-            next[sub.id] = sub.imageUrl ?? undefined;
+            next[sub.id] = undefined;
           }
         }),
       );
@@ -1697,19 +1699,14 @@ export function StoreHomeScreen({
         let allPreview: string | undefined;
         for (const sub of selectedCategoryDirectSubcategories) {
           const u = next[sub.id];
-          if (u) {
-            allPreview = u;
-            break;
-          }
+          if (u) { allPreview = u; break; }
         }
-        next[STORE_CATEGORY_ALL_SUBS_ID] = allPreview ?? selectedCategoryDirectSubcategories[0]?.imageUrl ?? undefined;
+        next[STORE_CATEGORY_ALL_SUBS_ID] = allPreview ?? undefined;
         setHomeSubcategoryPreviewUrls(next);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [homeSubcategoryListKey, selectedCategory, selectedCategoryDirectSubcategories]);
 
   const toggleSection = (sectionId: string) => {
@@ -2243,16 +2240,14 @@ export function StoreHomeScreen({
               })}
             </ScrollView>
 
-            {!!homeSubcategoriesStripItems.length && (
-              <StoreSubcategoryCircleStrip
-                items={homeSubcategoriesStripItems}
-                selectedId={selectedHomeSubcategoryId}
-                onSelect={setSelectedHomeSubcategoryId}
-                previewUrls={homeSubcategoryPreviewUrls}
-                scrollViewRef={homeSubcategoryTabsRef}
-                scrollToEndOnContentSize
-              />
-            )}
+            <StoreSubcategoryCircleStrip
+              items={homeSubcategoriesStripItems}
+              selectedId={selectedHomeSubcategoryId}
+              onSelect={setSelectedHomeSubcategoryId}
+              previewUrls={homeSubcategoryPreviewUrls}
+              scrollViewRef={homeSubcategoryTabsRef}
+              scrollToEndOnContentSize
+            />
 
             {selectedCategory !== 'all' && !categoryLoading && !!categoryPreviewProducts.length && (
               <View style={{ gap: 14 }}>
@@ -2362,11 +2357,6 @@ export function StoreHomeScreen({
               </View>
             )}
 
-            <View style={{ alignItems: 'flex-end', gap: 4 }}>
-              <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>הנמכרים ביותר</Text>
-              <Text style={{ color: '#B1B6C1', fontSize: 11 }}>the lifestyle and fragrance collection</Text>
-            </View>
-
             {(loading || categoryLoading) && (
               <View
                 style={{
@@ -2397,107 +2387,6 @@ export function StoreHomeScreen({
                 <Text style={{ color: '#B91C1C', marginTop: 6, textAlign: 'right' }}>{error}</Text>
               </View>
             )}
-
-            <View
-              style={{
-                flexDirection: 'row-reverse',
-                justifyContent: 'flex-start',
-                alignItems: 'flex-start',
-                gap: 14,
-              }}
-            >
-              {featuredProducts.map((product) => (
-                <View
-                  key={product.id}
-                  style={{
-                    width: 156,
-                    borderRadius: 18,
-                    ...storeProductCardShadowStyle,
-                  }}
-                >
-                  <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                    <Pressable
-                      onPress={() => onProductPress?.(product.handle)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.95 : 1,
-                        transform: [{ scale: pressed ? 0.99 : 1 }],
-                      })}
-                    >
-                      {/* Image area */}
-                      <View style={{ height: 152, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
-                        <ProductImage product={product} height={152} bottomRadius={0} />
-
-                        <StoreProductCardQuantityControl product={product} closedSize={40} />
-
-                        {/* Favorite — top-right */}
-                        <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
-                          <FavoriteToggleButton
-                            active={isFavorite(product.id)}
-                            loading={isFavoritePending(product.id)}
-                            onPress={(event) => {
-                              event?.stopPropagation();
-                              void toggleFavorite(favoriteInputFromStoreProduct(product));
-                            }}
-                            size={32}
-                          />
-                        </View>
-
-                        {/* Badge — below favorite */}
-                        {!!product.badge && (
-                          <View
-                            style={{
-                              position: 'absolute',
-                              top: 48,
-                              right: 10,
-                              backgroundColor: '#111827',
-                              borderRadius: 999,
-                              paddingHorizontal: 7,
-                              paddingVertical: 3,
-                              zIndex: 1,
-                            }}
-                          >
-                            <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                              {product.badge}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </Pressable>
-
-                    <View style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4 }}>
-                      <OcdPlusProductPriceBlock
-                        regularPrice={product.price}
-                        isOcdPlusSubscriber={isOcdPlusSubscriber}
-                        onSubscribePress={onOcdPlusSubscribePress}
-                        titleSize={15}
-                      />
-                    </View>
-
-                    <Pressable onPress={() => onProductPress?.(product.handle)}>
-                      <View style={{ paddingHorizontal: 10, paddingTop: 0, paddingBottom: 12 }}>
-                        <Text
-                          numberOfLines={2}
-                          style={{
-                            color: '#111827',
-                            fontSize: 12,
-                            lineHeight: 17,
-                            fontWeight: '700',
-                            textAlign: 'right',
-                          }}
-                        >
-                          {product.name}
-                        </Text>
-                        {!!product.subtitle && (
-                          <Text numberOfLines={1} style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}>
-                            {product.subtitle}
-                          </Text>
-                        )}
-                      </View>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-            </View>
 
             {selectedCategory === 'all' && (
               <>
@@ -2788,17 +2677,15 @@ export function StoreCategoryScreen({
       const next: Record<string, string | undefined> = {};
       await Promise.all(
         subcategories.map(async (sub) => {
+          if (sub.imageUrl) {
+            next[sub.id] = sub.imageUrl;
+            return;
+          }
           try {
-            const prods = await fetchCollectionProducts(sub.id, 16);
-            const withImg = prods.filter((p) => p.imageUrl);
-            if (!withImg.length) {
-              next[sub.id] = sub.imageUrl ?? undefined;
-              return;
-            }
-            const pick = withImg[Math.floor(Math.random() * withImg.length)];
-            next[sub.id] = pick.imageUrl ?? sub.imageUrl ?? undefined;
+            const img = await fetchCollectionImage(sub.id);
+            next[sub.id] = img ?? undefined;
           } catch {
-            next[sub.id] = sub.imageUrl ?? undefined;
+            next[sub.id] = undefined;
           }
         }),
       );
@@ -2806,19 +2693,14 @@ export function StoreCategoryScreen({
         let allPreview: string | undefined;
         for (const sub of subcategories) {
           const u = next[sub.id];
-          if (u) {
-            allPreview = u;
-            break;
-          }
+          if (u) { allPreview = u; break; }
         }
-        next[STORE_CATEGORY_ALL_SUBS_ID] = allPreview ?? subcategories[0]?.imageUrl ?? undefined;
+        next[STORE_CATEGORY_ALL_SUBS_ID] = allPreview ?? undefined;
         setSubcategoryPreviewUrls(next);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [subcategoryListKey, subcategories]);
 
   useEffect(() => {
@@ -3071,14 +2953,12 @@ export function StoreCategoryScreen({
           <View style={{ gap: 16 }}>
             {renderCategoryHeaderRow()}
 
-            {!!subcategoriesWithAll.length && (
-              <StoreSubcategoryCircleStrip
-                items={subcategoriesWithAll}
-                selectedId={selectedSubcategoryId}
-                onSelect={setSelectedSubcategoryId}
-                previewUrls={subcategoryPreviewUrls}
-              />
-            )}
+            <StoreSubcategoryCircleStrip
+              items={subcategoriesWithAll}
+              selectedId={selectedSubcategoryId}
+              onSelect={setSelectedSubcategoryId}
+              previewUrls={subcategoryPreviewUrls}
+            />
 
             <View style={{ gap: 12 }}>
               <View
@@ -3331,16 +3211,18 @@ export function StoreSearchScreen({
       .slice(0, 30);
   }, [normalizedQuery, products]);
 
-  const gridGap = 3;
-  const horizontalPadding = 3;
-  const gridItemSize = Math.floor((windowWidth - horizontalPadding * 2 - gridGap * 2) / 3);
+  const gridColumns = 3;
+  const gridGap = 12;
+  const horizontalPadding = 14;
+  const gridItemWidth = Math.floor((windowWidth - horizontalPadding * 2 - gridGap * (gridColumns - 1)) / gridColumns);
+  const gridImageHeight = Math.floor(gridItemWidth * 1.1);
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F7F8FB' }}>
       <View style={{ flex: 1 }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingTop: 6, paddingBottom: contentPaddingBottom }}
+          contentContainerStyle={{ paddingTop: 10, paddingBottom: contentPaddingBottom }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -3354,31 +3236,35 @@ export function StoreSearchScreen({
             />
           }
         >
-          <View style={{ gap: 3 }}>
+          <View style={{ gap: 14 }}>
             <View
               style={{
-                paddingHorizontal: 12,
-                paddingBottom: 10,
-                backgroundColor: '#FFFFFF',
+                paddingHorizontal: horizontalPadding,
+                paddingBottom: 4,
               }}
             >
               <View
                 style={{
                   flexDirection: 'row-reverse',
                   alignItems: 'center',
-                  backgroundColor: '#EFF1F4',
-                  borderRadius: 12,
-                  paddingHorizontal: 12,
-                  height: 42,
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 16,
+                  paddingHorizontal: 14,
+                  height: 46,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 4,
+                  elevation: 2,
                 }}
               >
-                <Ionicons name="search-outline" size={18} color="#8E8E93" style={{ marginLeft: 8 }} />
+                <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
                 <TextInput
                   ref={searchInputRef}
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="חיפוש"
-                  placeholderTextColor="#8E8E93"
+                  placeholder="חיפוש מוצר..."
+                  placeholderTextColor="#B0B7C3"
                   style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 14 }}
                 />
               </View>
@@ -3387,7 +3273,7 @@ export function StoreSearchScreen({
             {loading && (
               <View
                 style={{
-                  minHeight: 180,
+                  minHeight: 220,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
@@ -3399,9 +3285,9 @@ export function StoreSearchScreen({
             {!!error && !loading && (
               <View
                 style={{
-                  marginHorizontal: 12,
-                  borderRadius: 16,
-                  padding: 16,
+                  marginHorizontal: horizontalPadding,
+                  borderRadius: 18,
+                  padding: 18,
                   backgroundColor: '#FFF4F4',
                   alignItems: 'flex-end',
                 }}
@@ -3424,23 +3310,67 @@ export function StoreSearchScreen({
                   <Pressable
                     key={`search-${product.id}`}
                     onPress={() => onOpenProduct?.(product)}
-                    style={{
-                      width: gridItemSize,
-                      height: gridItemSize,
-                      backgroundColor: '#F4F4F5',
+                    style={({ pressed }) => ({
+                      width: gridItemWidth,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 18,
                       overflow: 'hidden',
-                    }}
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: pressed ? 0.04 : 0.08,
+                      shadowRadius: 8,
+                      elevation: pressed ? 1 : 3,
+                      opacity: pressed ? 0.93 : 1,
+                    })}
                   >
-                    {product.imageUrl ? (
-                      <Image
-                        source={{ uri: product.imageUrl }}
-                        resizeMode="cover"
-                        accessibilityLabel={product.imageAltText ?? product.name}
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    ) : (
-                      <ProductImage product={product} height={gridItemSize} />
-                    )}
+                    <View
+                      style={{
+                        width: '100%',
+                        height: gridImageHeight,
+                        backgroundColor: '#F0F1F3',
+                        borderTopLeftRadius: 18,
+                        borderTopRightRadius: 18,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {product.imageUrl ? (
+                        <Image
+                          source={{ uri: product.imageUrl }}
+                          resizeMode="cover"
+                          accessibilityLabel={product.imageAltText ?? product.name}
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      ) : (
+                        <ProductImage product={product} height={gridImageHeight} />
+                      )}
+                    </View>
+                    <View style={{ padding: 10, paddingTop: 8 }}>
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          color: '#111827',
+                          fontSize: 13,
+                          lineHeight: 18,
+                          fontWeight: '700',
+                          textAlign: 'right',
+                        }}
+                      >
+                        {product.name}
+                      </Text>
+                      {!!product.subtitle && (
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            color: '#9AA3B2',
+                            fontSize: 11,
+                            textAlign: 'right',
+                            marginTop: 3,
+                          }}
+                        >
+                          {product.subtitle}
+                        </Text>
+                      )}
+                    </View>
                   </Pressable>
                 ))}
               </View>
