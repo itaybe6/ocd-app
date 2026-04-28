@@ -17,7 +17,12 @@ import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../li
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
-import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
+import {
+  getStoreBottomBarMetrics,
+  STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG,
+  StoreFloatingTabBar,
+  type StoreBottomTabId,
+} from '../store/StoreHomeScreen';
 import type { CustomerOrderRow } from '../../types/database';
 
 /* ─── palette (minimal, monochrome) ───────────────────────────────────────── */
@@ -176,16 +181,18 @@ export function CustomerProfileScreen({
 
   const header = (
     <View style={styles.headerStack}>
-      {/* ── top bar: logo + greeting ── */}
-      <View style={styles.topBar}>
-        <View style={styles.logoWrap}>
-          <OcdLogo height={54} />
-        </View>
-        <View style={styles.greetingWrap}>
-          <Text style={styles.greetingLine}>{greeting},</Text>
-          <Text style={styles.greetingName} numberOfLines={1}>
-            {user?.name ?? 'שם משתמש'}
-          </Text>
+      {/* ── top bar: dark panel + centered logo, greeting on the right ── */}
+      <View style={styles.headerBg}>
+        <View style={styles.topBar}>
+          <View style={styles.greetingWrap}>
+            <Text style={styles.greetingLine}>{greeting},</Text>
+            <Text style={styles.greetingName} numberOfLines={1}>
+              {user?.name ?? 'שם משתמש'}
+            </Text>
+          </View>
+          <View style={styles.logoWrap} pointerEvents="none">
+            <OcdLogo height={72} />
+          </View>
         </View>
       </View>
 
@@ -318,37 +325,53 @@ const ICON_SIZE = 32;
 const SIDE_PADDING = 16;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#1F2937' },
+  safe: { flex: 1, backgroundColor: STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG },
   root: { flex: 1, backgroundColor: P.bg },
 
   headerStack: { gap: 16, paddingTop: 0 },
 
-  /* top bar */
-  topBar: {
-    backgroundColor: '#1F2937',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  /* top bar — dark slab with rounded bottom corners */
+  headerBg: {
+    backgroundColor: STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
   },
-  logoWrap: {
-    alignItems: 'center',
+  topBar: {
+    position: 'relative',
+    paddingTop: 20,
+    paddingBottom: 26,
+    minHeight: 96,
     justifyContent: 'center',
   },
+  logoWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  /** Right half of header — avoids overlapping centered logo; extra inset from screen edge */
   greetingWrap: {
-    alignItems: 'flex-end',
-    flex: 1,
-    paddingRight: 16,
+    position: 'absolute',
+    right: 24,
+    width: '50%',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'stretch',
   },
   greetingLine: {
+    width: '100%',
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
     textAlign: 'right',
     letterSpacing: 0.2,
   },
   greetingName: {
+    width: '100%',
     fontSize: 22,
     fontWeight: '700',
     color: '#FFFFFF',

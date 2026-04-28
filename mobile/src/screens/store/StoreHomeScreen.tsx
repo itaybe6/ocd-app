@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Image,
   type LayoutChangeEvent,
   Modal,
@@ -612,14 +613,6 @@ function StoreOcdLogoMark({ fill, height }: { fill: string; height: number }) {
   );
 }
 
-function HeaderLogo() {
-  return (
-    <View style={{ width: 56, height: 76, alignItems: 'center', justifyContent: 'center' }}>
-      <StoreOcdLogoMark fill="#1F2937" height={66} />
-    </View>
-  );
-}
-
 function PromoCarousel() {
   const scrollRef = useRef<ScrollView | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1215,6 +1208,9 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorO
   return <Ionicons name={iconName} size={size} color={color} />;
 }
 
+/** Focused bottom-tab bubble fill — keep in sync with headers that should match the bar */
+export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = '#000000';
+
 function AnimatedStoreTabButton({
   focused,
   onPress,
@@ -1234,7 +1230,7 @@ function AnimatedStoreTabButton({
   }, [focused, progress]);
 
   const animatedBubbleStyle = useAnimatedStyle(() => {
-    const backgroundColor = interpolateColor(progress.value, [0, 1], ['transparent', '#000000']);
+    const backgroundColor = interpolateColor(progress.value, [0, 1], ['transparent', STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG]);
     const scale = withTiming(pressed.value ? 0.94 : 1, { duration: 140 });
 
     return {
@@ -1557,7 +1553,6 @@ export function StoreHomeScreen({
     if (activePrimaryTab === 'search') return 'search';
     return 'home';
   }, [activePrimaryTab]);
-  const { itemCount, addItem } = useCart();
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
 
   useEffect(() => {
@@ -2114,54 +2109,6 @@ export function StoreHomeScreen({
           showsVerticalScrollIndicator={false}
         >
           <View style={{ gap: 18 }}>
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingVertical: 4,
-                minHeight: 60,
-              }}
-            >
-              <View style={{ width: 42 }} />
-
-              <View style={{ alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 42 }}>
-                <HeaderLogo />
-              </View>
-
-              <View style={{ width: 42 }} />
-            </View>
-
-            <View
-              style={{
-                backgroundColor: '#F7F8FB',
-                borderRadius: 20,
-                borderWidth: 1,
-                borderColor: '#EEF0F3',
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                flexDirection: 'row-reverse',
-                alignItems: 'center',
-              }}
-            >
-              <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
-              <TextInput
-                ref={searchInputRef}
-                value={query}
-                onChangeText={(text) => {
-                  setQuery(text);
-                  if (text.trim()) {
-                    setActivePrimaryTab('search');
-                  }
-                }}
-                placeholder="מה אתם רוצים לחפש?"
-                placeholderTextColor="#B7BDC8"
-                style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
-              />
-            </View>
-
-            {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
-
             <ScrollView
               ref={categoryTabsRef}
               horizontal
@@ -2248,6 +2195,57 @@ export function StoreHomeScreen({
               scrollViewRef={homeSubcategoryTabsRef}
               scrollToEndOnContentSize
             />
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Pressable
+                onPress={() => setMenuOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="קטגוריות"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 1,
+                  borderColor: '#E8ECF2',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="menu-outline" size={22} color="#111827" />
+              </Pressable>
+
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: '#F7F8FB',
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: '#EEF0F3',
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                }}
+              >
+                <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
+                <TextInput
+                  ref={searchInputRef}
+                  value={query}
+                  onChangeText={(text) => {
+                    setQuery(text);
+                    if (text.trim()) {
+                      setActivePrimaryTab('search');
+                    }
+                  }}
+                  placeholder="מה אתם רוצים לחפש?"
+                  placeholderTextColor="#B7BDC8"
+                  style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
+                />
+              </View>
+            </View>
+
+            {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
 
             {selectedCategory !== 'all' && !categoryLoading && !!categoryPreviewProducts.length && (
               <View style={{ gap: 14 }}>
@@ -3167,7 +3165,7 @@ export function StoreSearchScreen({
       }
 
       setError(null);
-      const liveProducts = await fetchProducts(80);
+      const liveProducts = await fetchProducts(30);
       const shuffledProducts = liveProducts
         .map((product, index) => toStoreProduct(product, index))
         .sort(() => Math.random() - 0.5);
@@ -3189,207 +3187,175 @@ export function StoreSearchScreen({
     void loadProducts();
   }, [loadProducts]);
 
-  useEffect(() => {
-    const frameId = requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-
-    return () => cancelAnimationFrame(frameId);
-  }, []);
-
   const normalizedQuery = query.trim().toLowerCase();
   const filteredProducts = useMemo(() => {
-    return products
-      .filter((product) => {
-        return (
-          !normalizedQuery ||
-          product.name.toLowerCase().includes(normalizedQuery) ||
-          product.subtitle.toLowerCase().includes(normalizedQuery) ||
-          product.description.toLowerCase().includes(normalizedQuery)
-        );
-      })
-      .slice(0, 30);
+    if (!normalizedQuery) return products;
+    return products.filter((product) => {
+      return (
+        product.name.toLowerCase().includes(normalizedQuery) ||
+        product.subtitle.toLowerCase().includes(normalizedQuery) ||
+        product.description.toLowerCase().includes(normalizedQuery)
+      );
+    });
   }, [normalizedQuery, products]);
 
-  const gridColumns = 3;
-  const gridGap = 12;
-  const horizontalPadding = 14;
-  const gridItemWidth = Math.floor((windowWidth - horizontalPadding * 2 - gridGap * (gridColumns - 1)) / gridColumns);
-  const gridImageHeight = Math.floor(gridItemWidth * 1.1);
+  const gridGap = 2;
+  const gridItemWidth = Math.floor((windowWidth - gridGap * 2) / 3);
+  const gridImageSize = gridItemWidth;
+
+  // Build skeleton placeholder data when loading
+  const skeletonItems = useMemo(
+    () =>
+      Array.from({ length: 18 }, (_, i) => ({
+        id: `skeleton-${i}`,
+        isSkeleton: true as const,
+      })),
+    []
+  );
+
+  type SearchListItem =
+    | StoreProduct
+    | { id: string; isSkeleton: true };
+
+  const listData: SearchListItem[] = loading ? skeletonItems : filteredProducts;
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F7F8FB' }}>
-      <View style={{ flex: 1 }}>
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingTop: 10, paddingBottom: contentPaddingBottom }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                void loadProducts(true);
-              }}
-              tintColor="#111827"
-              colors={['#111827']}
-              progressViewOffset={18}
-            />
-          }
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
+      <View style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
+        <View
+          style={{
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: 8,
+            backgroundColor: '#FAFAFA',
+          }}
         >
-          <View style={{ gap: 14 }}>
-            <View
-              style={{
-                paddingHorizontal: horizontalPadding,
-                paddingBottom: 4,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: 'row-reverse',
-                  alignItems: 'center',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: 16,
-                  paddingHorizontal: 14,
-                  height: 46,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.06,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}
-              >
-                <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
-                <TextInput
-                  ref={searchInputRef}
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="חיפוש מוצר..."
-                  placeholderTextColor="#B0B7C3"
-                  style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 14 }}
-                />
-              </View>
-            </View>
-
-            {loading && (
-              <View
-                style={{
-                  minHeight: 220,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <ActivityIndicator color="#111827" />
-              </View>
-            )}
-
-            {!!error && !loading && (
-              <View
-                style={{
-                  marginHorizontal: horizontalPadding,
-                  borderRadius: 18,
-                  padding: 18,
-                  backgroundColor: '#FFF4F4',
-                  alignItems: 'flex-end',
-                }}
-              >
-                <Text style={{ color: '#991B1B', fontWeight: '800' }}>לא הצלחנו לטעון את החיפוש</Text>
-                <Text style={{ color: '#B91C1C', marginTop: 6, textAlign: 'right' }}>{error}</Text>
-              </View>
-            )}
-
-            {!loading && !error && (
-              <View
-                style={{
-                  flexDirection: 'row-reverse',
-                  flexWrap: 'wrap',
-                  paddingHorizontal: horizontalPadding,
-                  gap: gridGap,
-                }}
-              >
-                {filteredProducts.map((product) => (
-                  <Pressable
-                    key={`search-${product.id}`}
-                    onPress={() => onOpenProduct?.(product)}
-                    style={({ pressed }) => ({
-                      width: gridItemWidth,
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 18,
-                      overflow: 'hidden',
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: pressed ? 0.04 : 0.08,
-                      shadowRadius: 8,
-                      elevation: pressed ? 1 : 3,
-                      opacity: pressed ? 0.93 : 1,
-                    })}
-                  >
-                    <View
-                      style={{
-                        width: '100%',
-                        height: gridImageHeight,
-                        backgroundColor: '#F0F1F3',
-                        borderTopLeftRadius: 18,
-                        borderTopRightRadius: 18,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {product.imageUrl ? (
-                        <Image
-                          source={{ uri: product.imageUrl }}
-                          resizeMode="cover"
-                          accessibilityLabel={product.imageAltText ?? product.name}
-                          style={{ width: '100%', height: '100%' }}
-                        />
-                      ) : (
-                        <ProductImage product={product} height={gridImageHeight} />
-                      )}
-                    </View>
-                    <View style={{ padding: 10, paddingTop: 8 }}>
-                      <Text
-                        numberOfLines={2}
-                        style={{
-                          color: '#111827',
-                          fontSize: 13,
-                          lineHeight: 18,
-                          fontWeight: '700',
-                          textAlign: 'right',
-                        }}
-                      >
-                        {product.name}
-                      </Text>
-                      {!!product.subtitle && (
-                        <Text
-                          numberOfLines={1}
-                          style={{
-                            color: '#9AA3B2',
-                            fontSize: 11,
-                            textAlign: 'right',
-                            marginTop: 3,
-                          }}
-                        >
-                          {product.subtitle}
-                        </Text>
-                      )}
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-
-            {!loading && !error && !filteredProducts.length && (
-              <View
-                style={{
-                  minHeight: 180,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingHorizontal: 24,
-                }}
-              >
-                <Text style={{ color: '#111827', fontWeight: '900' }}>לא נמצאו מוצרים</Text>
-              </View>
-            )}
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              backgroundColor: '#EFEFEF',
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              height: 40,
+            }}
+          >
+            <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
+            <TextInput
+              ref={searchInputRef}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="חיפוש..."
+              placeholderTextColor="#AEAEB2"
+              returnKeyType="search"
+              style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
+            />
           </View>
-        </ScrollView>
+        </View>
+
+        {!!error && !loading ? (
+          <View
+            style={{
+              margin: 20,
+              borderRadius: 16,
+              padding: 20,
+              backgroundColor: '#FFF4F4',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <Ionicons name="alert-circle-outline" size={36} color="#DC2626" />
+            <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 15, textAlign: 'center' }}>
+              לא הצלחנו לטעון מוצרים
+            </Text>
+            <Text style={{ color: '#B91C1C', fontSize: 13, textAlign: 'center' }}>{error}</Text>
+            <Pressable
+              onPress={() => void loadProducts()}
+              style={({ pressed }) => ({
+                backgroundColor: '#111827',
+                paddingHorizontal: 24,
+                paddingVertical: 10,
+                borderRadius: 10,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>נסה שנית</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlatList<SearchListItem>
+            data={listData}
+            keyExtractor={(item) => item.id}
+            numColumns={3}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: contentPaddingBottom }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  void loadProducts(true);
+                }}
+                tintColor="#111827"
+                colors={['#111827']}
+                progressViewOffset={8}
+              />
+            }
+            ListEmptyComponent={
+              !loading ? (
+                <View style={{ minHeight: 300, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                  <Ionicons name="search-outline" size={48} color="#C7C7CC" />
+                  <Text style={{ color: '#8E8E93', fontWeight: '700', fontSize: 16 }}>
+                    {query ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
+                  </Text>
+                </View>
+              ) : null
+            }
+            renderItem={({ item, index }) => {
+              const isLastInRow = (index + 1) % 3 === 0;
+              if ('isSkeleton' in item) {
+                return (
+                  <View
+                    style={{
+                      width: gridItemWidth,
+                      height: gridImageSize,
+                      marginRight: isLastInRow ? 0 : gridGap,
+                      marginBottom: gridGap,
+                      backgroundColor: '#E8E8E8',
+                    }}
+                  />
+                );
+              }
+
+              const product = item;
+              return (
+                <Pressable
+                  onPress={() => onOpenProduct?.(product)}
+                  style={({ pressed }) => ({
+                    width: gridItemWidth,
+                    height: gridImageSize,
+                    marginRight: isLastInRow ? 0 : gridGap,
+                    marginBottom: gridGap,
+                    backgroundColor: '#E5E5EA',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  {product.imageUrl ? (
+                    <Image
+                      source={{ uri: product.imageUrl }}
+                      resizeMode="cover"
+                      accessibilityLabel={product.imageAltText ?? product.name}
+                      style={{ width: '100%', height: '100%' }}
+                    />
+                  ) : (
+                    <ProductImage product={product} height={gridImageSize} />
+                  )}
+                </Pressable>
+              );
+            }}
+          />
+        )}
         <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
       </View>
     </SafeAreaView>

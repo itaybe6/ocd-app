@@ -19,10 +19,12 @@ npm install
 ```
 
 ### הגדרת Env (חובה)
-צור קובץ `.env` בתיקיית `mobile/` לפי `.env.example`:
+צור או עדכן קובץ `.env` בתיקיית `mobile/`. Expo טוען משתנים שמתחילים ב־`EXPO_PUBLIC_` לתוך האפליקציה (כולל חנות Shopify וקופה):
 
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_SHOPIFY_DOMAIN` — דומיין החנות (למשל `your-store.myshopify.com`)
+- `EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN` — Storefront API access token
 
 לאחר שינוי `.env` צריך לעצור ולהרים מחדש את Expo.
 

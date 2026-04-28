@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import Toast from 'react-native-toast-message';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -19,6 +20,7 @@ import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { colors } from '../../theme/colors';
+import { createCheckout } from '../../services/shopify';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
 
@@ -140,6 +142,7 @@ export function ProductScreen({ navigation, route }: Props) {
 
   const [cartStepperOpen, setCartStepperOpen] = useState(false);
   const [cartPendingOpen, setCartPendingOpen] = useState(false);
+  const [buyNowLoading, setBuyNowLoading] = useState(false);
   const cartStepperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearCartStepperTimer = useCallback(() => {
@@ -196,7 +199,7 @@ export function ProductScreen({ navigation, route }: Props) {
   }, [addFirstToCartAndOpenStepper, displayAvailableForSale, displayVariantId, isMutating, openCartStepper, quantityInCart]);
 
   const cartStepperIncrement = useCallback(() => {
-    if (!displayAvailableForSale || isMutating) return;
+    if (!product || !displayAvailableForSale || isMutating) return;
     if (quantityInCart === 0) {
       if (cartPendingOpen) return;
       void addFirstToCartAndOpenStepper();
@@ -311,6 +314,35 @@ export function ProductScreen({ navigation, route }: Props) {
       // share dismissed or failed silently
     }
   }, [product]);
+
+  /**
+   * Opens Shopify-hosted checkout for the selected variant only (Cart API `cartCreate`).
+   * Quantity follows the in-product stepper when already in cart, otherwise 1.
+   */
+  const handleBuyNow = useCallback(async () => {
+    if (!displayVariantId || !displayAvailableForSale || buyNowLoading) return;
+    const qty = quantityInCart > 0 ? quantityInCart : 1;
+    setBuyNowLoading(true);
+    try {
+      const { checkoutUrl } = await createCheckout([{ variantId: displayVariantId, quantity: qty }]);
+      navigation.navigate('StoreCheckout', { checkoutUrl });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'נסה שוב בעוד רגע';
+      Toast.show({
+        type: 'error',
+        text1: 'לא ניתן לפתוח תשלום',
+        text2: message,
+      });
+    } finally {
+      setBuyNowLoading(false);
+    }
+  }, [
+    buyNowLoading,
+    displayAvailableForSale,
+    displayVariantId,
+    navigation,
+    quantityInCart,
+  ]);
 
   if (loading) {
     return (
@@ -607,8 +639,42 @@ export function ProductScreen({ navigation, route }: Props) {
             borderTopWidth: 1,
             borderTopColor: colors.border,
             backgroundColor: colors.card,
+            gap: 10,
           }}
         >
+          <Pressable
+            onPress={() => void handleBuyNow()}
+            disabled={isMutating || !displayAvailableForSale || !displayVariantId || buyNowLoading}
+            accessibilityRole="button"
+            accessibilityLabel="קנה עכשיו"
+            style={({ pressed }) => ({
+              borderRadius: 14,
+              paddingVertical: 14,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1.5,
+              borderColor: !displayAvailableForSale || !displayVariantId ? colors.border : '#0F172A',
+              backgroundColor: colors.card,
+              opacity: pressed && displayAvailableForSale && displayVariantId && !buyNowLoading ? 0.88 : 1,
+            })}
+          >
+            {buyNowLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text
+                style={{
+                  color: !displayAvailableForSale || !displayVariantId ? colors.muted : '#0F172A',
+                  fontSize: 15,
+                  fontWeight: '900',
+                  textAlign: 'center',
+                  writingDirection: 'rtl',
+                }}
+              >
+                קנה עכשיו · תשלום מאובטח ב־Shopify
+              </Text>
+            )}
+          </Pressable>
+
           <Pressable
             onPress={cartBarStepperExpanded ? undefined : onCollapsedCartBarPress}
             disabled={isMutating || !displayAvailableForSale || !displayVariantId}

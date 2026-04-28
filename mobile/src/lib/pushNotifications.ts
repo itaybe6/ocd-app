@@ -1,7 +1,16 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import { supabase } from './supabase';
+
+function getEasProjectId(): string | undefined {
+  const fromConfig = Constants.expoConfig?.extra?.eas?.projectId;
+  if (typeof fromConfig === 'string' && fromConfig.trim()) return fromConfig.trim();
+  const legacy = (Constants as { easConfig?: { projectId?: string } }).easConfig?.projectId;
+  if (typeof legacy === 'string' && legacy.trim()) return legacy.trim();
+  return undefined;
+}
 
 export type PushIdentity = { userId?: string | null; role?: string | null };
 
@@ -48,7 +57,12 @@ export async function registerForPushNotifications(identity?: PushIdentity) {
       }
     }
 
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    const projectId = getEasProjectId();
+    if (!projectId) {
+      return { status: 'no_project' as const };
+    }
+
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     await upsertExpoPushToken(token, identity);
     return { status: 'ok' as const, token };
   } catch (e: any) {

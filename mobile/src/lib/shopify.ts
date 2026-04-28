@@ -1,7 +1,15 @@
-const SHOPIFY_API_VERSION = '2025-01';
+/** Pinned Storefront API version (see https://shopify.dev/docs/api/usage/versioning) */
+const SHOPIFY_API_VERSION = '2026-04';
 
-const SHOPIFY_DOMAIN = process.env.EXPO_PUBLIC_SHOPIFY_DOMAIN?.trim();
-const SHOPIFY_STOREFRONT_TOKEN = process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN?.trim();
+const SHOPIFY_DOMAIN =
+  process.env.EXPO_PUBLIC_SHOPIFY_DOMAIN?.trim() ||
+  process.env.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN?.trim() ||
+  process.env.SHOPIFY_STORE_DOMAIN?.trim();
+
+const SHOPIFY_STOREFRONT_TOKEN =
+  process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN?.trim() ||
+  process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN?.trim() ||
+  process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN?.trim();
 const SHOPIFY_MENU_HANDLE = process.env.EXPO_PUBLIC_SHOPIFY_MENU_HANDLE?.trim() || 'main-menu';
 
 export type ShopifyImage = {

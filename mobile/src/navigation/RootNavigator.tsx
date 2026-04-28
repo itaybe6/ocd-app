@@ -15,7 +15,8 @@ import {
   type StoreBottomTabId,
 } from '../screens/store/StoreHomeScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
-import { StoreCheckoutScreen } from '../screens/store/StoreCheckoutScreen';
+import { CheckoutScreen } from '../screens/store/CheckoutScreen';
+import { OrderSuccessScreen } from '../screens/store/OrderSuccessScreen';
 import { StoreFavoritesScreen } from '../screens/store/StoreFavoritesScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
@@ -226,7 +227,17 @@ function StoreCheckoutRoute({
   navigation,
   route,
 }: NativeStackScreenProps<RootStackParamList, 'StoreCheckout'>) {
-  return <StoreCheckoutScreen checkoutUrl={route.params.checkoutUrl} onBack={() => navigation.goBack()} />;
+  return (
+    <CheckoutScreen
+      checkoutUrl={route.params.checkoutUrl}
+      onBack={() => navigation.goBack()}
+      onCheckoutComplete={() => navigation.replace('OrderSuccess')}
+    />
+  );
+}
+
+function OrderSuccessRoute(props: NativeStackScreenProps<RootStackParamList, 'OrderSuccess'>) {
+  return <OrderSuccessScreen {...props} />;
 }
 
 export function RootNavigator() {
@@ -286,6 +297,14 @@ export function RootNavigator() {
         <Stack.Screen
           name="StoreCheckout"
           component={StoreCheckoutRoute}
+          options={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        />
+        <Stack.Screen
+          name="OrderSuccess"
+          component={OrderSuccessRoute}
           options={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.bg },

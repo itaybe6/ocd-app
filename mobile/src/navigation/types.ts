@@ -26,5 +26,6 @@ export type RootStackParamList = {
   StoreProduct: { product: StoreProduct };
   StoreCart: undefined;
   StoreCheckout: { checkoutUrl: string };
+  OrderSuccess: undefined;
 };
 

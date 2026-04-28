@@ -3,7 +3,7 @@ import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { ArrowRight, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../state/CartContext';
 
@@ -16,10 +16,12 @@ const RTL_TEXT = {
 const CART_QUANTITY_STEPPER_AUTO_CLOSE_MS = 3200;
 
 const COLORS = {
-  background: '#FFFFFF',
+  /** רקע ראשי — אוף-וייט עדין שמרים את האפליקציה אווירירית */
+  background: '#F6F7F9',
   surface: '#FFFFFF',
-  border: '#E2E8F0',
-  divider: '#EDF1F6',
+  surfaceMuted: '#FAFBFC',
+  border: '#E5E8EE',
+  divider: '#F0F2F5',
   text: '#0F172A',
   muted: '#64748B',
   softText: '#94A3B8',
@@ -31,10 +33,10 @@ const COLORS = {
   quantityStepperTrack: '#EEF1F5',
   quantityStepperBorder: '#D1D5DB',
   /** תיבת כמות סגורה — מסגרת עדינה */
-  quantityChipBorder: '#D1D5DB',
+  quantityChipBorder: '#D5D9E0',
   quantityCircleBorder: '#E2E8F0',
   /** בר תשלום צף תחתון */
-  checkoutBar: '#000000',
+  checkoutBar: '#0B1220',
 };
 
 function formatPrice(price: number, currencyCode: string) {
@@ -66,12 +68,24 @@ function CartProductImage({
 }) {
   if (imageUrl) {
     return (
-      <Image
-        source={{ uri: imageUrl }}
-        resizeMode="cover"
-        accessibilityLabel={imageAltText ?? name}
-        style={{ width: '100%', height: '100%', borderRadius: 14 }}
-      />
+      <View
+        style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: 16,
+          overflow: 'hidden',
+          backgroundColor: '#F4F6F9',
+          borderWidth: 1,
+          borderColor: '#EEF1F5',
+        }}
+      >
+        <Image
+          source={{ uri: imageUrl }}
+          resizeMode="cover"
+          accessibilityLabel={imageAltText ?? name}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </View>
     );
   }
 
@@ -79,7 +93,7 @@ function CartProductImage({
     <View
       style={{
         flex: 1,
-        borderRadius: 14,
+        borderRadius: 16,
         backgroundColor: coverColor,
         justifyContent: 'center',
         alignItems: 'center',
@@ -365,11 +379,8 @@ export function StoreCartScreen({
           <View
             style={{
               backgroundColor: COLORS.surface,
-              shadowColor: '#0F172A',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.08,
-              shadowRadius: 12,
-              elevation: 6,
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.divider,
               zIndex: 2,
             }}
           >
@@ -384,25 +395,7 @@ export function StoreCartScreen({
                 paddingBottom: 14,
               }}
             >
-              <Pressable
-                onPress={onBack}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="חזרה"
-                style={({ pressed }) => ({
-                  width: 44,
-                  height: 44,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: COLORS.pill,
-                  borderWidth: 1,
-                  borderColor: COLORS.border,
-                  opacity: pressed ? 0.65 : 1,
-                })}
-              >
-                <ArrowRight size={22} color={COLORS.text} strokeWidth={2.2} />
-              </Pressable>
+              <View style={{ width: 42, height: 42 }} />
 
               <View
                 style={{
@@ -414,12 +407,14 @@ export function StoreCartScreen({
                   justifyContent: 'center',
                   alignItems: 'center',
                   pointerEvents: 'none',
+                  flexDirection: 'row-reverse',
+                  gap: 8,
                 }}
               >
                 <Text
                   style={{
                     color: COLORS.text,
-                    fontSize: 20,
+                    fontSize: 19,
                     fontWeight: '800',
                     letterSpacing: -0.3,
                     textAlign: 'center',
@@ -427,9 +422,52 @@ export function StoreCartScreen({
                 >
                   העגלה שלך
                 </Text>
+                {totalItemCount > 0 ? (
+                  <View
+                    style={{
+                      minWidth: 26,
+                      height: 22,
+                      paddingHorizontal: 8,
+                      borderRadius: 11,
+                      backgroundColor: COLORS.pill,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: COLORS.muted,
+                        fontSize: 12,
+                        fontWeight: '700',
+                        lineHeight: 16,
+                        includeFontPadding: false,
+                      }}
+                    >
+                      {totalItemCount > 99 ? '99+' : totalItemCount}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
-              <View style={{ width: 44, height: 44 }} />
+              <Pressable
+                onPress={onBack}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="חזרה"
+                style={({ pressed }) => ({
+                  width: 42,
+                  height: 42,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: COLORS.surfaceMuted,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  opacity: pressed ? 0.65 : 1,
+                })}
+              >
+                <ArrowLeft size={21} color={COLORS.text} strokeWidth={2.2} />
+              </Pressable>
             </View>
           </View>
 
@@ -437,9 +475,9 @@ export function StoreCartScreen({
             style={{ flex: 1, backgroundColor: COLORS.background }}
             contentContainerStyle={{
               paddingHorizontal: 16,
-              paddingTop: 16,
+              paddingTop: 18,
               paddingBottom: scrollBottomPadding,
-              gap: 16,
+              gap: 14,
             }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -449,17 +487,22 @@ export function StoreCartScreen({
             <View
               style={{
                 backgroundColor: COLORS.surface,
-                borderRadius: 20,
+                borderRadius: 22,
                 borderWidth: 1,
-                borderColor: COLORS.border,
-                paddingVertical: 32,
+                borderColor: COLORS.divider,
+                paddingVertical: 36,
                 paddingHorizontal: 22,
                 alignItems: 'center',
                 gap: 14,
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.04,
+                shadowRadius: 12,
+                elevation: 2,
               }}
             >
-              <ActivityIndicator size="large" color={COLORS.accent} />
-              <Text style={{ color: COLORS.text, fontSize: 16, fontWeight: '700', ...RTL_TEXT }}>טוען את העגלה…</Text>
+              <ActivityIndicator size="large" color={COLORS.dark} />
+              <Text style={{ color: COLORS.text, fontSize: 15, fontWeight: '700', ...RTL_TEXT }}>טוען את העגלה…</Text>
             </View>
           )}
 
@@ -467,134 +510,270 @@ export function StoreCartScreen({
             <View
               style={{
                 backgroundColor: COLORS.surface,
-                borderRadius: 20,
+                borderRadius: 24,
                 borderWidth: 1,
-                borderColor: COLORS.border,
+                borderColor: COLORS.divider,
                 paddingHorizontal: 24,
-                paddingVertical: 36,
+                paddingVertical: 40,
                 alignItems: 'center',
                 gap: 14,
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.05,
+                shadowRadius: 16,
+                elevation: 3,
               }}
             >
               <View
                 style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 22,
+                  width: 84,
+                  height: 84,
+                  borderRadius: 28,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: COLORS.pill,
+                  backgroundColor: COLORS.surfaceMuted,
                   borderWidth: 1,
                   borderColor: COLORS.divider,
                 }}
               >
-                <ShoppingCart size={28} color={COLORS.muted} strokeWidth={1.75} />
+                <ShoppingCart size={32} color={COLORS.muted} strokeWidth={1.75} />
               </View>
-              <Text style={{ color: COLORS.text, fontSize: 19, fontWeight: '800', ...RTL_TEXT }}>העגלה עדיין ריקה</Text>
-              <Text style={{ color: COLORS.muted, fontSize: 13, lineHeight: 21, writingDirection: 'rtl', textAlign: 'center' }}>
+              <Text style={{ color: COLORS.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.3, ...RTL_TEXT }}>
+                העגלה עדיין ריקה
+              </Text>
+              <Text
+                style={{
+                  color: COLORS.muted,
+                  fontSize: 13.5,
+                  lineHeight: 21,
+                  writingDirection: 'rtl',
+                  textAlign: 'center',
+                  paddingHorizontal: 6,
+                }}
+              >
                 ברגע שתוסיף מוצרים מהחנות, הם יופיעו כאן — עם סיכום ברור ומעבר מהיר לתשלום.
               </Text>
               <Pressable
                 onPress={onBack}
                 style={({ pressed }) => ({
-                  marginTop: 6,
-                  minWidth: 168,
+                  marginTop: 8,
+                  minWidth: 180,
                   borderRadius: 16,
                   backgroundColor: COLORS.dark,
                   paddingHorizontal: 22,
                   paddingVertical: 14,
+                  alignItems: 'center',
                   opacity: pressed ? 0.88 : 1,
+                  shadowColor: '#0B1220',
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 12,
+                  elevation: 4,
                 })}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', ...RTL_TEXT }}>חזרה לחנות</Text>
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', letterSpacing: -0.2 }}>
+                  חזרה לחנות
+                </Text>
               </Pressable>
             </View>
           )}
 
           {!!items.length && (
-            <View
-              style={{
-                backgroundColor: COLORS.surface,
-                borderRadius: 20,
-              }}
-            >
-              {items.map((item, index) => {
-                const category = (item.product.subtitle ?? '').trim();
-                const variantPart =
-                  item.product.variantTitle && item.product.variantTitle !== 'Default Title'
-                    ? item.product.variantTitle.trim()
-                    : '';
-                const pageLabel = (item.product.collectionTitle ?? '').trim();
-                const subtextLine =
-                  category || variantPart
-                    ? [category, variantPart].filter(Boolean).join(' • ')
-                    : pageLabel;
+            <>
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 4,
+                  marginBottom: -4,
+                }}
+              >
+                <Text
+                  style={{
+                    color: COLORS.muted,
+                    fontSize: 12.5,
+                    fontWeight: '700',
+                    letterSpacing: 0.2,
+                    ...RTL_TEXT,
+                  }}
+                >
+                  {totalItemCount} {totalItemCount === 1 ? 'פריט' : 'פריטים'}
+                </Text>
+                <Text
+                  style={{
+                    color: COLORS.softText,
+                    fontSize: 11.5,
+                    fontWeight: '600',
+                    ...RTL_TEXT,
+                  }}
+                >
+                  החלק שמאלה למחיקה
+                </Text>
+              </View>
 
-                return (
-                  <View key={item.id}>
-                    {index > 0 ? <View style={{ height: 1, backgroundColor: COLORS.divider }} /> : null}
-                    <CartLineSwipeable
-                      disabled={isMutating}
-                      removeLabel={`הסר ${item.product.name} מהעגלה`}
-                      onRemove={() => {
-                        void removeItem(item.product.id);
-                      }}
-                    >
-                      <View style={{ paddingHorizontal: 14, paddingVertical: 14 }}>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                          <View style={{ flexShrink: 0 }}>
-                            <CartQuantityPicker
-                              productId={item.product.id}
-                              quantity={item.quantity}
-                              disabled={isMutating}
-                              expanded={openQuantityLineId === item.id}
-                              onExpand={() => handleOpenQuantityLine(item.id)}
-                              onQuantityChange={handleCartQuantityChange}
-                            />
-                          </View>
+              <View
+                style={{
+                  backgroundColor: COLORS.surface,
+                  borderRadius: 22,
+                  borderWidth: 1,
+                  borderColor: COLORS.divider,
+                  overflow: 'hidden',
+                  shadowColor: '#0F172A',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.04,
+                  shadowRadius: 12,
+                  elevation: 2,
+                }}
+              >
+                {items.map((item, index) => {
+                  const category = (item.product.subtitle ?? '').trim();
+                  const variantPart =
+                    item.product.variantTitle && item.product.variantTitle !== 'Default Title'
+                      ? item.product.variantTitle.trim()
+                      : '';
+                  const pageLabel = (item.product.collectionTitle ?? '').trim();
+                  const subtextLine =
+                    category || variantPart
+                      ? [category, variantPart].filter(Boolean).join(' • ')
+                      : pageLabel;
 
-                          <View style={{ flex: 1, minWidth: 0, gap: 5, alignItems: 'flex-end', justifyContent: 'center' }}>
-                            <Text
-                              numberOfLines={3}
-                              style={{
-                                color: COLORS.text,
-                                fontSize: 15,
-                                fontWeight: '800',
-                                lineHeight: 21,
-                                ...RTL_TEXT,
-                              }}
-                            >
-                              {item.product.name}
-                            </Text>
-                            {!!subtextLine && (
+                  return (
+                    <View key={item.id}>
+                      {index > 0 ? (
+                        <View style={{ paddingHorizontal: 16 }}>
+                          <View style={{ height: 1, backgroundColor: COLORS.divider }} />
+                        </View>
+                      ) : null}
+                      <CartLineSwipeable
+                        disabled={isMutating}
+                        removeLabel={`הסר ${item.product.name} מהעגלה`}
+                        onRemove={() => {
+                          void removeItem(item.product.id);
+                        }}
+                      >
+                        <View style={{ paddingHorizontal: 14, paddingVertical: 16 }}>
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                            <View style={{ flexShrink: 0 }}>
+                              <CartQuantityPicker
+                                productId={item.product.id}
+                                quantity={item.quantity}
+                                disabled={isMutating}
+                                expanded={openQuantityLineId === item.id}
+                                onExpand={() => handleOpenQuantityLine(item.id)}
+                                onQuantityChange={handleCartQuantityChange}
+                              />
+                            </View>
+
+                            <View style={{ flex: 1, minWidth: 0, gap: 6, alignItems: 'flex-end', justifyContent: 'center' }}>
                               <Text
                                 numberOfLines={2}
-                                style={{ color: COLORS.muted, fontSize: 12.5, lineHeight: 18, ...RTL_TEXT }}
+                                style={{
+                                  color: COLORS.text,
+                                  fontSize: 15,
+                                  fontWeight: '800',
+                                  lineHeight: 21,
+                                  letterSpacing: -0.2,
+                                  ...RTL_TEXT,
+                                }}
                               >
-                                {subtextLine}
+                                {item.product.name}
                               </Text>
-                            )}
-                            <Text style={{ color: COLORS.text, fontSize: 17, fontWeight: '800', ...RTL_TEXT }}>
-                              {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
-                            </Text>
-                          </View>
+                              {!!subtextLine && (
+                                <Text
+                                  numberOfLines={1}
+                                  style={{ color: COLORS.muted, fontSize: 12.5, lineHeight: 17, ...RTL_TEXT }}
+                                >
+                                  {subtextLine}
+                                </Text>
+                              )}
+                              <Text
+                                style={{
+                                  color: COLORS.text,
+                                  fontSize: 17,
+                                  fontWeight: '800',
+                                  letterSpacing: -0.3,
+                                  marginTop: 2,
+                                  ...RTL_TEXT,
+                                }}
+                              >
+                                {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
+                              </Text>
+                            </View>
 
-                          <View style={{ width: 72, height: 72 }}>
-                            <CartProductImage
-                              imageUrl={item.product.imageUrl}
-                              imageAltText={item.product.imageAltText}
-                              name={item.product.name}
-                              coverColor={item.product.coverColor}
-                              accentColor={item.product.accentColor}
-                            />
+                            <View style={{ width: 76, height: 76 }}>
+                              <CartProductImage
+                                imageUrl={item.product.imageUrl}
+                                imageAltText={item.product.imageAltText}
+                                name={item.product.name}
+                                coverColor={item.product.coverColor}
+                                accentColor={item.product.accentColor}
+                              />
+                            </View>
                           </View>
                         </View>
-                      </View>
-                    </CartLineSwipeable>
-                  </View>
-                );
-              })}
-            </View>
+                      </CartLineSwipeable>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View
+                style={{
+                  backgroundColor: COLORS.surface,
+                  borderRadius: 22,
+                  borderWidth: 1,
+                  borderColor: COLORS.divider,
+                  paddingHorizontal: 18,
+                  paddingVertical: 18,
+                  shadowColor: '#0F172A',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.04,
+                  shadowRadius: 12,
+                  elevation: 2,
+                  gap: 14,
+                }}
+              >
+                <Text
+                  style={{
+                    color: COLORS.muted,
+                    fontSize: 12,
+                    fontWeight: '800',
+                    letterSpacing: 0.6,
+                    ...RTL_TEXT,
+                  }}
+                >
+                  סיכום הזמנה
+                </Text>
+
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>
+                    סכום ביניים
+                  </Text>
+                  <Text style={{ color: COLORS.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
+                    {formatPrice(subtotal, currencyCode)}
+                  </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>משלוח</Text>
+                  <Text style={{ color: COLORS.softText, fontSize: 13, fontWeight: '600', ...RTL_TEXT }}>
+                    מחושב בקופה
+                  </Text>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: COLORS.divider, marginVertical: 2 }} />
+
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ color: COLORS.text, fontSize: 16, fontWeight: '800', letterSpacing: -0.2, ...RTL_TEXT }}>
+                    סך הכל
+                  </Text>
+                  <Text style={{ color: COLORS.text, fontSize: 19, fontWeight: '900', letterSpacing: -0.4 }}>
+                    {formatPrice(subtotal, currencyCode)}
+                  </Text>
+                </View>
+              </View>
+            </>
           )}
         </ScrollView>
 
@@ -607,14 +786,14 @@ export function StoreCartScreen({
                 right: 16,
                 bottom: Math.max(10, insets.bottom + 8),
                 zIndex: 9999,
-                borderRadius: 16,
+                borderRadius: 18,
                 backgroundColor: isMutating || !checkoutUrl ? '#4B5563' : COLORS.checkoutBar,
-                shadowColor: '#000000',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.35,
-                shadowRadius: 14,
-                elevation: 20,
-                minHeight: 60,
+                shadowColor: '#0B1220',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.22,
+                shadowRadius: 20,
+                elevation: 18,
+                minHeight: 62,
               }}
             >
               <Pressable
@@ -624,11 +803,11 @@ export function StoreCartScreen({
                 accessibilityLabel={`מעבר לתשלום, סה״כ ${totalItemCount} פריטים, ${formatPrice(subtotal, currencyCode)}`}
                 style={({ pressed }) => ({
                   flex: 1,
-                  minHeight: 60,
+                  minHeight: 62,
                   width: '100%',
                   justifyContent: 'center',
                   backgroundColor: 'transparent',
-                  opacity: pressed && !isMutating && checkoutUrl ? 0.88 : 1,
+                  opacity: pressed && !isMutating && checkoutUrl ? 0.9 : 1,
                 })}
               >
                 <View
@@ -637,17 +816,18 @@ export function StoreCartScreen({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     width: '100%',
-                    paddingHorizontal: 16,
+                    paddingHorizontal: 18,
                     paddingVertical: 14,
                   }}
                 >
                   <Text
                     style={{
                       color: '#FFFFFF',
-                      fontSize: 17,
+                      fontSize: 18,
                       fontWeight: '800',
+                      letterSpacing: -0.3,
                       flexShrink: 0,
-                      lineHeight: 22,
+                      lineHeight: 23,
                       includeFontPadding: false,
                     }}
                   >
@@ -664,16 +844,16 @@ export function StoreCartScreen({
                   >
                     <View
                       style={{
-                        minWidth: 32,
-                        height: 32,
-                        paddingHorizontal: totalItemCount > 9 ? 7 : 0,
-                        borderRadius: 16,
-                        backgroundColor: '#FFFFFF',
+                        minWidth: 28,
+                        height: 28,
+                        paddingHorizontal: totalItemCount > 9 ? 8 : 0,
+                        borderRadius: 14,
+                        backgroundColor: 'rgba(255,255,255,0.16)',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
-                      <Text style={{ color: '#000000', fontSize: 15, fontWeight: '800', lineHeight: 20, includeFontPadding: false }}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '800', lineHeight: 18, includeFontPadding: false }}>
                         {totalItemCount > 99 ? '99+' : totalItemCount}
                       </Text>
                     </View>
@@ -682,6 +862,7 @@ export function StoreCartScreen({
                         color: '#FFFFFF',
                         fontSize: 16,
                         fontWeight: '800',
+                        letterSpacing: -0.2,
                         lineHeight: 21,
                         includeFontPadding: false,
                       }}
