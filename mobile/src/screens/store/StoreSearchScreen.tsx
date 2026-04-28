@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchProducts } from '../../lib/shopify';
+import { fetchProducts, searchProducts } from '../../lib/shopify';
 import {
   getStoreBottomBarMetrics,
   ProductImage,
@@ -36,32 +36,36 @@ export function StoreSearchScreen({
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { width: windowWidth } = useWindowDimensions();
-  const tileSize = Math.floor(windowWidth / 3) - 1;
 
-  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const TILE_GAP = 2;
+  const tileWidth = Math.floor((windowWidth - TILE_GAP * 2) / 3);
+
+  const [browsing, setBrowsing] = useState<StoreProduct[]>([]);
+  const [results, setResults] = useState<StoreProduct[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Displayed list: search results when query exists, else browse grid
+  const displayed = query.trim() ? results : browsing;
 
   const doLoad = useCallback(async (isRefresh = false) => {
-    console.log('[StoreSearch] doLoad start, isRefresh=', isRefresh);
     try {
       if (isRefresh) setRefreshing(true);
       setError(null);
       const raw = await fetchProducts(30);
-      console.log('[StoreSearch] fetchProducts returned', raw.length, 'products');
       const mapped = raw
         .map((p, i) => toStoreProduct(p, i))
         .sort(() => Math.random() - 0.5);
-      setProducts(mapped);
+      setBrowsing(mapped);
     } catch (e) {
-      console.log('[StoreSearch] fetchProducts ERROR:', e);
       setError(e instanceof Error ? e.message : 'שגיאה בטעינת מוצרים');
     } finally {
       setInitialLoading(false);
       if (isRefresh) setRefreshing(false);
-      console.log('[StoreSearch] doLoad done');
     }
   }, []);
 
@@ -69,42 +73,63 @@ export function StoreSearchScreen({
     void doLoad();
   }, [doLoad]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.subtitle.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q)
-    );
-  }, [query, products]);
-
-  console.log('[StoreSearch] render — initialLoading:', initialLoading, 'products:', products.length, 'filtered:', filtered.length);
+  // Live search with 400ms debounce
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const raw = await searchProducts(q, 40);
+        setResults(raw.map((p, i) => toStoreProduct(p, i)));
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
       {/* Search bar */}
-      <View style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FAFAFA' }}>
+      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14, backgroundColor: '#FAFAFA' }}>
         <View
           style={{
             flexDirection: 'row-reverse',
             alignItems: 'center',
             backgroundColor: '#EFEFEF',
-            borderRadius: 12,
+            borderRadius: 14,
             paddingHorizontal: 12,
-            height: 40,
+            height: 42,
           }}
         >
-          <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
+          {searching ? (
+            <ActivityIndicator size="small" color="#8E8E93" style={{ marginLeft: 6 }} />
+          ) : (
+            <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
+          )}
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="חיפוש..."
+            placeholder="חיפוש מוצרים..."
             placeholderTextColor="#AEAEB2"
             returnKeyType="search"
             style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
           />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color="#AEAEB2" style={{ marginRight: 4 }} />
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -116,7 +141,7 @@ export function StoreSearchScreen({
       )}
 
       {/* Error (shown only after load attempted and still no data) */}
-      {!initialLoading && !!error && filtered.length === 0 && (
+      {!initialLoading && !!error && displayed.length === 0 && (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <Ionicons name="alert-circle-outline" size={40} color="#DC2626" />
           <Text style={{ color: '#991B1B', fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 20 }}>
@@ -138,31 +163,28 @@ export function StoreSearchScreen({
       )}
 
       {/* Empty state */}
-      {!initialLoading && !error && filtered.length === 0 && (
+      {!initialLoading && !searching && !error && displayed.length === 0 && (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="search-outline" size={48} color="#C7C7CC" />
           <Text style={{ color: '#8E8E93', fontWeight: '700', marginTop: 12, fontSize: 16 }}>
-            {query ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
+            {query.trim() ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
           </Text>
         </View>
       )}
 
       {/* Grid — FlatList with numColumns for reliable 3-column layout */}
-      {!initialLoading && filtered.length > 0 && (
+      {!initialLoading && displayed.length > 0 && (
         <FlatList
-          data={filtered}
+          data={displayed}
           keyExtractor={(item) => item.id}
           numColumns={3}
-          style={{ flex: 1, backgroundColor: 'red' }}
+          style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: contentPaddingBottom }}
-          columnWrapperStyle={{ gap: 2 }}
-          ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
+          columnWrapperStyle={{ gap: TILE_GAP }}
+          ItemSeparatorComponent={() => <View style={{ height: TILE_GAP }} />}
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          onLayout={(e) =>
-            console.log('[StoreSearch] FlatList layout:', JSON.stringify(e.nativeEvent.layout))
-          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -171,30 +193,58 @@ export function StoreSearchScreen({
               colors={['#555']}
             />
           }
-          renderItem={({ item: product, index }) => {
-            if (index < 3) console.log('[StoreSearch] renderItem', index, product.id, product.imageUrl?.slice(0, 60));
-            return (
-              <Pressable
-                onPress={() => onOpenProduct?.(product)}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  aspectRatio: 1,
-                  backgroundColor: '#D1D5DB',
-                  opacity: pressed ? 0.8 : 1,
-                })}
+          renderItem={({ item: product }) => (
+            <Pressable
+              onPress={() => onOpenProduct?.(product)}
+              style={({ pressed }) => ({
+                width: tileWidth,
+                height: tileWidth,
+                backgroundColor: '#D1D5DB',
+                opacity: pressed ? 0.82 : 1,
+                overflow: 'hidden',
+              })}
+            >
+              {product.imageUrl ? (
+                <Image
+                  source={{ uri: product.imageUrl }}
+                  resizeMode="cover"
+                  style={{ width: tileWidth, height: tileWidth }}
+                />
+              ) : (
+                <ProductImage product={product} height={tileWidth} />
+              )}
+
+              {/* Name overlay */}
+              <View
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  paddingHorizontal: 6,
+                  paddingTop: 18,
+                  paddingBottom: 6,
+                  backgroundColor: 'rgba(0,0,0,0.38)',
+                }}
               >
-                {product.imageUrl ? (
-                  <Image
-                    source={{ uri: product.imageUrl }}
-                    resizeMode="cover"
-                    style={{ width: '100%', height: '100%' }}
-                  />
-                ) : (
-                  <ProductImage product={product} height={tileSize} />
-                )}
-              </Pressable>
-            );
-          }}
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: '#FFFFFF',
+                    fontSize: 10,
+                    fontWeight: '700',
+                    textAlign: 'right',
+                    letterSpacing: 0.1,
+                    textShadowColor: 'rgba(0,0,0,0.5)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }}
+                >
+                  {product.name}
+                </Text>
+              </View>
+            </Pressable>
+          )}
         />
       )}
 

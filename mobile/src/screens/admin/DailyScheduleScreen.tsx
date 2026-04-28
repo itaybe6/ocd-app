@@ -358,7 +358,7 @@ export function DailyScheduleScreen() {
               <ChevronLeft size={15} color='#C7C7CC' strokeWidth={2.5} />
             </Pressable>
 
-            <View style={{ flex: 1, flexDirection: 'row-reverse' }}>
+            <View style={{ flex: 1, flexDirection: 'row' }}>
               {weekDates.map((d) => {
                 const ds = yyyyMmDd(d);
                 const isSelected   = ds === day;
@@ -788,8 +788,8 @@ const st = StyleSheet.create({
     fontWeight: '800',
   },
   calDowRow: {
-    flexDirection: 'row-reverse',
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    paddingHorizontal: 30,
     paddingBottom: 6,
     paddingTop: 10,
     borderTopWidth: 1,

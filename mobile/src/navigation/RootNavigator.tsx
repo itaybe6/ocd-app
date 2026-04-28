@@ -136,7 +136,13 @@ function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamL
       onBack={() => navigation.goBack()}
       onOpenCart={() => navigation.navigate('StoreCart')}
       onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
-      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+      onTabPress={(tabId) => {
+        if (tabId === 'home') {
+          navigation.goBack();
+          return;
+        }
+        handleStoreTabNavigation(navigation, tabId);
+      }}
     />
   );
 }

@@ -152,9 +152,13 @@ export function ProductScreen({ navigation, route }: Props) {
   const displayVariantId = activeVariant?.id ?? product?.variantId ?? null;
 
   const [cartStepperOpen, setCartStepperOpen] = useState(false);
-  const [cartPendingOpen, setCartPendingOpen] = useState(false);
+  // Local quantity selected before the first add — doesn't touch the cart until confirmed
+  const [pendingQty, setPendingQty] = useState(1);
   const [buyNowLoading, setBuyNowLoading] = useState(false);
   const cartStepperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Pre-confirm = stepper is open but product not yet in cart (selecting quantity)
+  const isPreConfirm = cartStepperOpen && quantityInCart === 0;
 
   const clearCartStepperTimer = useCallback(() => {
     if (cartStepperTimerRef.current !== null) {
@@ -173,89 +177,68 @@ export function ProductScreen({ navigation, route }: Props) {
 
   useEffect(() => () => clearCartStepperTimer(), [clearCartStepperTimer]);
 
-  const openCartStepper = useCallback(() => {
-    setCartStepperOpen(true);
-    scheduleCartStepperClose();
-  }, [scheduleCartStepperClose]);
-
-  useEffect(() => {
-    if (quantityInCart > 0) setCartPendingOpen(false);
-  }, [quantityInCart]);
-
   useEffect(() => {
     setCartStepperOpen(false);
-    setCartPendingOpen(false);
+    setPendingQty(1);
     setActiveVariantIndex(0);
     clearCartStepperTimer();
   }, [product?.id, clearCartStepperTimer]);
 
-  const addFirstToCartAndOpenStepper = useCallback(() => {
-    if (!displayAvailableForSale || !displayVariantId || isMutating) return;
-    setCartPendingOpen(true);
-    openCartStepper();
-    void addItem(getCartProduct(product!, activeVariant)).catch(() => {
-      setCartPendingOpen(false);
-      setCartStepperOpen(false);
-      clearCartStepperTimer();
-    });
-  }, [addItem, activeVariant, clearCartStepperTimer, displayAvailableForSale, displayVariantId, isMutating, openCartStepper, product]);
-
   const onCollapsedCartBarPress = useCallback(() => {
     if (!displayAvailableForSale || !displayVariantId || isMutating) return;
     if (quantityInCart === 0) {
-      void addFirstToCartAndOpenStepper();
-      return;
+      // Open pre-confirm stepper — user selects qty, nothing added to cart yet
+      setPendingQty(1);
+      setCartStepperOpen(true);
+    } else {
+      setCartStepperOpen(true);
+      scheduleCartStepperClose();
     }
-    openCartStepper();
-  }, [addFirstToCartAndOpenStepper, displayAvailableForSale, displayVariantId, isMutating, openCartStepper, quantityInCart]);
+  }, [displayAvailableForSale, displayVariantId, isMutating, quantityInCart, scheduleCartStepperClose]);
 
   const cartStepperIncrement = useCallback(() => {
-    if (!product || !displayAvailableForSale || isMutating) return;
-    if (quantityInCart === 0) {
-      if (cartPendingOpen) return;
-      void addFirstToCartAndOpenStepper();
-      return;
+    if (isMutating) return;
+    if (isPreConfirm) {
+      setPendingQty((prev) => prev + 1);
+    } else {
+      if (!product || !displayAvailableForSale) return;
+      void updateQuantity(product.id, quantityInCart + 1);
+      scheduleCartStepperClose();
     }
-    void updateQuantity(product.id, quantityInCart + 1);
-    scheduleCartStepperClose();
-  }, [
-    addFirstToCartAndOpenStepper,
-    cartPendingOpen,
-    isMutating,
-    product,
-    quantityInCart,
-    scheduleCartStepperClose,
-    updateQuantity,
-  ]);
+  }, [displayAvailableForSale, isPreConfirm, isMutating, product, quantityInCart, scheduleCartStepperClose, updateQuantity]);
 
   const cartStepperDecrement = useCallback(() => {
-    if (!product || isMutating) return;
-    if (quantityInCart <= 0) {
-      if (cartPendingOpen) {
-        setCartPendingOpen(false);
+    if (isMutating) return;
+    if (isPreConfirm) {
+      if (pendingQty > 1) {
+        setPendingQty((prev) => prev - 1);
+      } else {
+        // Cancel pre-confirm
         setCartStepperOpen(false);
         clearCartStepperTimer();
       }
-      return;
+    } else {
+      if (!product) return;
+      if (quantityInCart <= 1) {
+        setCartStepperOpen(false);
+        clearCartStepperTimer();
+      }
+      void updateQuantity(product.id, quantityInCart - 1);
+      if (quantityInCart > 1) scheduleCartStepperClose();
     }
-    if (quantityInCart <= 1) {
-      setCartStepperOpen(false);
-      clearCartStepperTimer();
-    }
-    void updateQuantity(product.id, quantityInCart - 1);
-    if (quantityInCart > 1) scheduleCartStepperClose();
-  }, [
-    cartPendingOpen,
-    clearCartStepperTimer,
-    isMutating,
-    product,
-    quantityInCart,
-    scheduleCartStepperClose,
-    updateQuantity,
-  ]);
+  }, [clearCartStepperTimer, isPreConfirm, isMutating, pendingQty, product, quantityInCart, scheduleCartStepperClose, updateQuantity]);
 
-  const cartBarStepperExpanded = cartStepperOpen && (quantityInCart > 0 || cartPendingOpen);
-  const cartBarStepperDisplayQty = quantityInCart > 0 ? quantityInCart : cartPendingOpen ? 1 : 0;
+  // Pre-confirm: actually add to cart with selected qty. Post-add: just close.
+  const confirmCartStepper = useCallback(() => {
+    clearCartStepperTimer();
+    if (isPreConfirm && product) {
+      void addItem(getCartProduct(product, activeVariant), pendingQty);
+    }
+    setCartStepperOpen(false);
+  }, [activeVariant, addItem, clearCartStepperTimer, isPreConfirm, pendingQty, product]);
+
+  const cartBarStepperExpanded = cartStepperOpen;
+  const cartBarStepperDisplayQty = isPreConfirm ? pendingQty : quantityInCart;
 
   const cartBarMorph = useSharedValue(0);
 
@@ -767,42 +750,84 @@ export function ProductScreen({ navigation, route }: Props) {
             gap: 10,
           }}
         >
-          {/* קנה עכשיו — כפתור משני נקי */}
-          <Pressable
-            onPress={() => void handleBuyNow()}
-            disabled={isMutating || isCartCtaDisabled || buyNowLoading}
-            accessibilityRole="button"
-            accessibilityLabel="קנה עכשיו"
-            style={({ pressed }) => ({
-              borderRadius: 14,
-              paddingVertical: 13,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: isCartCtaDisabled ? PALETTE.border : PALETTE.border,
-              backgroundColor: PALETTE.surfaceMuted,
-              opacity: pressed && !isCartCtaDisabled && !buyNowLoading ? 0.88 : 1,
-            })}
-          >
-            {buyNowLoading ? (
-              <ActivityIndicator size="small" color={PALETTE.dark} />
-            ) : (
-              <Text
-                style={{
-                  color: isCartCtaDisabled ? PALETTE.softText : PALETTE.text,
-                  fontSize: 14.5,
-                  fontWeight: '800',
-                  letterSpacing: -0.2,
-                  textAlign: 'center',
-                  writingDirection: 'rtl',
-                }}
-              >
-                קנה עכשיו · תשלום מאובטח ב־Shopify
-              </Text>
-            )}
-          </Pressable>
+          {/*
+            כפתור עליון:
+            • ב־pre-confirm → "הוסף X לעגלה" ירוק (מאשר ומוסיף)
+            • רגיל           → "קנה עכשיו"
+          */}
+          {isPreConfirm ? (
+            <Pressable
+              onPress={confirmCartStepper}
+              disabled={isMutating}
+              accessibilityRole="button"
+              accessibilityLabel="אשר והוסף לעגלה"
+              style={({ pressed }) => ({
+                borderRadius: 14,
+                paddingVertical: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: isMutating ? '#86EFAC' : '#22C55E',
+                flexDirection: 'row-reverse',
+                gap: 8,
+                opacity: pressed ? 0.88 : 1,
+              })}
+            >
+              {isMutating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="cart-outline" size={18} color="#FFFFFF" />
+                  <Text
+                    style={{
+                      color: '#FFFFFF',
+                      fontSize: 15,
+                      fontWeight: '800',
+                      letterSpacing: -0.2,
+                      writingDirection: 'rtl',
+                    }}
+                  >
+                    {`הוסף ${pendingQty} לעגלה · ${formatPrice(pendingQty * displayPrice, displayCurrencyCode)}`}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => void handleBuyNow()}
+              disabled={isMutating || isCartCtaDisabled || buyNowLoading}
+              accessibilityRole="button"
+              accessibilityLabel="קנה עכשיו"
+              style={({ pressed }) => ({
+                borderRadius: 14,
+                paddingVertical: 13,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: PALETTE.border,
+                backgroundColor: PALETTE.surfaceMuted,
+                opacity: pressed && !isCartCtaDisabled && !buyNowLoading ? 0.88 : 1,
+              })}
+            >
+              {buyNowLoading ? (
+                <ActivityIndicator size="small" color={PALETTE.dark} />
+              ) : (
+                <Text
+                  style={{
+                    color: isCartCtaDisabled ? PALETTE.softText : PALETTE.text,
+                    fontSize: 14.5,
+                    fontWeight: '800',
+                    letterSpacing: -0.2,
+                    textAlign: 'center',
+                    writingDirection: 'rtl',
+                  }}
+                >
+                  קנה עכשיו · תשלום מאובטח ב־Shopify
+                </Text>
+              )}
+            </Pressable>
+          )}
 
-          {/* CTA ראשי — מורף בין כותרת לסטפר, בסגנון בר התשלום בעמוד העגלה */}
+          {/* CTA ראשי — מורף בין כותרת לסטפר */}
           <Pressable
             onPress={cartBarStepperExpanded ? undefined : onCollapsedCartBarPress}
             disabled={isMutating || isCartCtaDisabled}
@@ -887,16 +912,15 @@ export function ProductScreen({ navigation, route }: Props) {
                     flexDirection: 'row',
                     direction: 'ltr',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    minWidth: 200,
+                    justifyContent: 'center',
                     paddingVertical: 8,
                     paddingHorizontal: 14,
-                    gap: 14,
+                    gap: 18,
                   }}
                 >
                   <Pressable
                     onPress={cartStepperIncrement}
-                    disabled={isMutating || (quantityInCart === 0 && cartPendingOpen)}
+                    disabled={isMutating}
                     style={productCartStepperCircleBtn}
                     accessibilityRole="button"
                     accessibilityLabel="הוסף כמות"
@@ -906,23 +930,44 @@ export function ProductScreen({ navigation, route }: Props) {
                   <Text
                     style={{
                       color: '#FFFFFF',
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: '800',
                       letterSpacing: -0.3,
                       fontVariant: ['tabular-nums'],
+                      minWidth: 32,
+                      textAlign: 'center',
                     }}
                   >
                     {cartBarStepperDisplayQty}
                   </Text>
                   <Pressable
                     onPress={cartStepperDecrement}
-                    disabled={isMutating || (quantityInCart === 0 && !cartPendingOpen)}
+                    disabled={isMutating}
                     style={productCartStepperCircleBtn}
                     accessibilityRole="button"
                     accessibilityLabel="הפחת כמות"
                   >
                     <Text style={{ color: PRODUCT_CART_STEPPER_ACCENT, fontSize: 24, fontWeight: '400', marginTop: -2 }}>−</Text>
                   </Pressable>
+                  {/* ✓ לסגירת הסטפר — רק כשהמוצר כבר בעגלה */}
+                  {!isPreConfirm && (
+                    <Pressable
+                      onPress={confirmCartStepper}
+                      style={({ pressed }) => ({
+                        width: 34,
+                        height: 34,
+                        borderRadius: 17,
+                        backgroundColor: 'rgba(255,255,255,0.18)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                      accessibilityRole="button"
+                      accessibilityLabel="סגור"
+                    >
+                      <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                    </Pressable>
+                  )}
                 </View>
               </Animated.View>
             </View>

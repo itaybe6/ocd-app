@@ -693,6 +693,32 @@ export async function fetchProducts(first = 12): Promise<ShopifyProduct[]> {
   return payload.data?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
 }
 
+export async function searchProducts(searchQuery: string, first = 30): Promise<ShopifyProduct[]> {
+  const query = `
+    query SearchProducts($first: Int!, $query: String!) {
+      products(first: $first, query: $query) {
+        edges {
+          node {
+            ${PRODUCT_FIELDS}
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, {
+    first,
+    query: searchQuery,
+  });
+  const messages = getGraphQlErrors(payload.errors);
+
+  if (messages.length) {
+    throw new Error(messages.join(', '));
+  }
+
+  return payload.data?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
+}
+
 export async function fetchCollections(first = 50): Promise<ShopifyCollection[]> {
   const query = `
     query GetCollections($first: Int!) {

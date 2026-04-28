@@ -34,19 +34,31 @@ function AuthModeButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.94 : 1 })}>
+    <Pressable onPress={onPress} style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.88 : 1 })}>
       <View
         style={{
-          borderRadius: 14,
-          paddingVertical: 12,
+          borderRadius: 12,
+          paddingVertical: 13,
+          minHeight: 46,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: active ? colors.primary : '#FFFFFF',
-          borderWidth: active ? 0 : 1,
-          borderColor: colors.border,
+          backgroundColor: active ? colors.primary : 'transparent',
+          shadowColor: active ? colors.primary : 'transparent',
+          shadowOpacity: active ? 0.28 : 0,
+          shadowRadius: active ? 8 : 0,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: active ? 4 : 0,
         }}
       >
-        <Text style={{ color: active ? '#FFFFFF' : colors.text, fontWeight: '900' }}>{title}</Text>
+        <Text
+          style={{
+            color: active ? '#FFFFFF' : colors.muted,
+            fontWeight: '800',
+            fontSize: 14,
+          }}
+        >
+          {title}
+        </Text>
       </View>
     </Pressable>
   );
@@ -243,9 +255,9 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                   <View
                     style={{
                       flexDirection: 'row-reverse',
-                      gap: 10,
+                      gap: 4,
                       padding: 4,
-                      borderRadius: 18,
+                      borderRadius: 16,
                       backgroundColor: colors.elevated,
                       borderWidth: 1,
                       borderColor: colors.border,

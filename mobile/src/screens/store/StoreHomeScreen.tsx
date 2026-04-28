@@ -1077,110 +1077,146 @@ function StoreSubcategoryCircleStrip({
   scrollToEndOnContentSize?: boolean;
 }) {
   const heightAnim = useSharedValue(0);
-  const opacityAnim = useSharedValue(0);
+  const containerOpacity = useSharedValue(0);
+  const contentOpacity = useSharedValue(1);
+
+  // displayedItems lags behind `items` during cross-fade so old content is
+  // visible while fading out before the new content fades in.
+  const [displayedItems, setDisplayedItems] = useState<StoreSubcategory[]>(items);
+
+  const itemsKey = items.map((i) => i.id).join('\0');
+  const prevItemsKeyRef = useRef('');
+  const prevHasItemsRef = useRef(false);
 
   useEffect(() => {
-    if (items.length > 0) {
+    const prevKey = prevItemsKeyRef.current;
+    const prevHasItems = prevHasItemsRef.current;
+    const hasItems = items.length > 0;
+
+    prevItemsKeyRef.current = itemsKey;
+    prevHasItemsRef.current = hasItems;
+
+    if (hasItems && !prevHasItems) {
+      // Appearing: update content immediately then animate the container in.
+      setDisplayedItems(items);
+      contentOpacity.value = 1;
       heightAnim.value = withSpring(SUBCATEGORY_STRIP_HEIGHT, {
         damping: 18,
         stiffness: 160,
         mass: 0.7,
       });
-      opacityAnim.value = withTiming(1, { duration: 220 });
-    } else {
-      opacityAnim.value = withTiming(0, { duration: 150 });
+      containerOpacity.value = withTiming(1, { duration: 220 });
+    } else if (!hasItems && prevHasItems) {
+      // Disappearing: fade + collapse, keep old content visible during animation.
+      containerOpacity.value = withTiming(0, { duration: 150 });
       heightAnim.value = withTiming(0, { duration: 250 });
+    } else if (hasItems && itemsKey !== prevKey) {
+      // Switching between two non-empty sets: cross-fade the content.
+      const captured = items;
+      contentOpacity.value = withTiming(0, { duration: 110 }, (finished) => {
+        if (finished) {
+          runOnJS(setDisplayedItems)(captured);
+          contentOpacity.value = withTiming(1, { duration: 190 });
+        }
+      });
     }
-  }, [items.length, heightAnim, opacityAnim]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsKey]);
 
   const animStyle = useAnimatedStyle(() => ({
     height: heightAnim.value,
-    opacity: opacityAnim.value,
+    opacity: containerOpacity.value,
     overflow: 'hidden',
+  }));
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
   }));
 
   return (
     <Animated.View style={animStyle}>
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        onContentSizeChange={
-          scrollToEndOnContentSize
-            ? () => {
-                requestAnimationFrame(() => {
-                  scrollViewRef?.current?.scrollToEnd({ animated: false });
-                });
-              }
-            : undefined
-        }
-        contentContainerStyle={{
-          flexDirection: 'row-reverse',
-          justifyContent: 'flex-start',
-          alignItems: 'flex-start',
-          gap: 20,
-          paddingHorizontal: 4,
-          paddingBottom: 2,
-        }}
-      >
-        {items.map((sub) => {
-          const isSelected = selectedId === sub.id;
-          const previewUri = previewUrls[sub.id] ?? sub.imageUrl ?? undefined;
-          return (
-            <Pressable key={sub.id} onPress={() => onSelect(sub.id)}>
-              <View style={{ alignItems: 'center', gap: 4, width: 82 }}>
-                <View
-                  style={{
-                    width: 70,
-                    height: 70,
-                    borderRadius: 35,
-                    padding: 3,
-                    backgroundColor: isSelected ? '#111827' : '#FFFFFF',
-                    borderWidth: 1,
-                    borderColor: isSelected ? '#111827' : '#E7ECF3',
-                  }}
-                >
+      <Animated.View style={contentStyle}>
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          onContentSizeChange={
+            scrollToEndOnContentSize
+              ? () => {
+                  requestAnimationFrame(() => {
+                    scrollViewRef?.current?.scrollToEnd({ animated: false });
+                  });
+                }
+              : undefined
+          }
+          contentContainerStyle={{
+            flexDirection: 'row-reverse',
+            justifyContent: 'flex-start',
+            alignItems: 'flex-start',
+            gap: 20,
+            paddingHorizontal: 4,
+            paddingBottom: 2,
+          }}
+        >
+          {displayedItems.map((sub) => {
+            const isSelected = selectedId === sub.id;
+            const previewUri = previewUrls[sub.id] ?? sub.imageUrl ?? undefined;
+            return (
+              <Pressable key={sub.id} onPress={() => onSelect(sub.id)}>
+                <View style={{ alignItems: 'center', gap: 4, width: 82 }}>
                   <View
                     style={{
-                      flex: 1,
-                      borderRadius: 32,
-                      overflow: 'hidden',
-                      backgroundColor: '#F4F6FA',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      width: 70,
+                      height: 70,
+                      borderRadius: 35,
+                      padding: 3,
+                      backgroundColor: isSelected ? '#111827' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: isSelected ? '#111827' : '#E7ECF3',
                     }}
                   >
-                    {previewUri ? (
-                      <Image
-                        source={{ uri: previewUri }}
-                        resizeMode="cover"
-                        accessibilityLabel={sub.title}
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    ) : (
-                      <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
-                        {getCategoryAvatarLabel(sub.title)}
-                      </Text>
-                    )}
+                    <View
+                      style={{
+                        flex: 1,
+                        borderRadius: 32,
+                        overflow: 'hidden',
+                        backgroundColor: '#F4F6FA',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {previewUri ? (
+                        <Image
+                          source={{ uri: previewUri }}
+                          resizeMode="cover"
+                          accessibilityLabel={sub.title}
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      ) : (
+                        <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
+                          {getCategoryAvatarLabel(sub.title)}
+                        </Text>
+                      )}
+                    </View>
                   </View>
+                  <Text
+                    numberOfLines={2}
+                    style={{
+                      color: isSelected ? '#111827' : '#9CA3AF',
+                      fontWeight: isSelected ? '900' : '600',
+                      fontSize: 12,
+                      lineHeight: 15,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {sub.title}
+                  </Text>
                 </View>
-                <Text
-                  numberOfLines={2}
-                  style={{
-                    color: isSelected ? '#111827' : '#9CA3AF',
-                    fontWeight: isSelected ? '900' : '600',
-                    fontSize: 12,
-                    lineHeight: 15,
-                    textAlign: 'center',
-                  }}
-                >
-                  {sub.title}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -1739,10 +1775,7 @@ export function StoreHomeScreen({
 
     searchInputRef.current?.blur();
     setActivePrimaryTab('home');
-    if (topLevelCategories.length) {
-      setSelectedCategory(topLevelCategories[0].id);
-    }
-  }, [initialTab, initialTabRequestId, topLevelCategories]);
+  }, [initialTab, initialTabRequestId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -2286,16 +2319,14 @@ export function StoreHomeScreen({
               })}
             </ScrollView>
 
-            {homeSubcategoriesStripItems.length > 0 ? (
-              <StoreSubcategoryCircleStrip
-                items={homeSubcategoriesStripItems}
-                selectedId={selectedHomeSubcategoryId}
-                onSelect={setSelectedHomeSubcategoryId}
-                previewUrls={homeSubcategoryPreviewUrls}
-                scrollViewRef={homeSubcategoryTabsRef}
-                scrollToEndOnContentSize
-              />
-            ) : null}
+            <StoreSubcategoryCircleStrip
+              items={homeSubcategoriesStripItems}
+              selectedId={selectedHomeSubcategoryId}
+              onSelect={setSelectedHomeSubcategoryId}
+              previewUrls={homeSubcategoryPreviewUrls}
+              scrollViewRef={homeSubcategoryTabsRef}
+              scrollToEndOnContentSize
+            />
 
             <View
               style={{

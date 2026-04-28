@@ -27,7 +27,7 @@ type CartContextValue = {
   currencyCode: string;
   isBootstrapping: boolean;
   isMutating: boolean;
-  addItem: (product: CartProduct) => Promise<void>;
+  addItem: (product: CartProduct, quantity?: number) => Promise<void>;
   removeItem: (productId: string) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -141,7 +141,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [cart?.id, runCartMutation, syncCart]);
 
   const addItem = useCallback(
-    async (product: CartProduct) => {
+    async (product: CartProduct, quantity = 1) => {
       if (!product.variantId) {
         Toast.show({
           type: 'error',
@@ -151,13 +151,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const qty = Math.max(1, Math.round(quantity));
+
       try {
         const nextCart = await runCartMutation(async () => {
           if (cart?.id) {
-            return addCartLines(cart.id, [{ merchandiseId: product.variantId, quantity: 1 }]);
+            return addCartLines(cart.id, [{ merchandiseId: product.variantId, quantity: qty }]);
           }
 
-          return createCart([{ merchandiseId: product.variantId, quantity: 1 }]);
+          return createCart([{ merchandiseId: product.variantId, quantity: qty }]);
         });
 
         await syncCart(nextCart);

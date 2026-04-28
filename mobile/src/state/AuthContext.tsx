@@ -43,12 +43,12 @@ function normalizePhone(phone: string) {
   return phone.trim();
 }
 
-function scheduleResetMainToCustomerProfile() {
+function scheduleResetMain(params?: object) {
   const run = () => {
     if (!navigationRef.isReady()) return false;
     navigationRef.reset({
       index: 0,
-      routes: [{ name: 'Main', params: { initialCustomerProfile: true } }],
+      routes: [{ name: 'Main', params: params ?? {} }],
     });
     return true;
   };
@@ -56,6 +56,10 @@ function scheduleResetMainToCustomerProfile() {
   setTimeout(() => {
     run();
   }, 60);
+}
+
+function scheduleResetMainToCustomerProfile() {
+  scheduleResetMain({ initialCustomerProfile: true });
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -113,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { password: _pw, ...safeUser } = data as UserRow;
       await setUser(safeUser as AuthUser);
       Toast.show({ type: 'success', text1: 'התחברת בהצלחה' });
+      scheduleResetMain();
     },
     [setUser]
   );

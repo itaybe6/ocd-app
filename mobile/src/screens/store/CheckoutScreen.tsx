@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,11 +9,32 @@ const RTL_TEXT = {
   writingDirection: 'rtl' as const,
 };
 
-/** Injected early so price strings stay LTR inside an RTL WebView host. */
+/**
+ * Injected early so price strings stay LTR inside an RTL WebView host.
+ *
+ * Important implementation notes:
+ *  - The previous version of this script wrote text nodes (and called `node.textContent = ...`)
+ *    on every MutationObserver tick, which fed back into the same observer and produced
+ *    an infinite character-data mutation loop. That loop pegged the WebView's JS thread
+ *    on slower devices and left the checkout page blank, so the React Native loader
+ *    ("טוען את הקופה המאובטחת...") never went away.
+ *  - This version is idempotent: it only mutates a node if the desired value is actually
+ *    different from the current value, it tags processed elements with a data attribute,
+ *    and it temporarily disconnects the observer while it applies its own changes.
+ *  - We also throttle the observer callback with `requestAnimationFrame` so a burst of
+ *    mutations from Shopify hydrating the checkout page doesn't trigger N synchronous
+ *    re-walks of the DOM.
+ */
 const CHECKOUT_DIRECTION_FIX_SCRIPT = `
   (function() {
+    if (window.__ocdCheckoutDirectionFixInstalled) {
+      return;
+    }
+    window.__ocdCheckoutDirectionFixInstalled = true;
+
     var styleId = 'ocd-checkout-direction-fix';
     var LRM = '\\u200E';
+    var PROCESSED_ATTR = 'data-ocd-direction-fixed';
     var selectors = [
       '[data-checkout-payment-due-target]',
       '[data-checkout-subtotal-price-target]',
@@ -51,7 +72,7 @@ const CHECKOUT_DIRECTION_FIX_SCRIPT = `
     ];
 
     function ensureFixStyle() {
-      if (document.getElementById(styleId)) return;
+      if (!document.head || document.getElementById(styleId)) return;
 
       var style = document.createElement('style');
       style.id = styleId;
@@ -117,6 +138,18 @@ const CHECKOUT_DIRECTION_FIX_SCRIPT = `
       });
     }
 
+    function setStyleIfDifferent(node, prop, value) {
+      if (node.style[prop] !== value) {
+        node.style[prop] = value;
+      }
+    }
+
+    function setAttrIfDifferent(node, name, value) {
+      if (node.getAttribute(name) !== value) {
+        node.setAttribute(name, value);
+      }
+    }
+
     function normalizePaymentDueValue(node) {
       var amountValue = parseAmountValue(node.textContent);
       if (amountValue == null) return;
@@ -125,20 +158,26 @@ const CHECKOUT_DIRECTION_FIX_SCRIPT = `
       if (normalizePriceText(node.textContent) === formattedValue) return;
 
       node.textContent = formattedValue;
-      node.style.direction = 'ltr';
-      node.style.unicodeBidi = 'isolate';
-      node.style.textAlign = 'left';
-      node.style.whiteSpace = 'nowrap';
-      node.setAttribute('dir', 'ltr');
+      setStyleIfDifferent(node, 'direction', 'ltr');
+      setStyleIfDifferent(node, 'unicodeBidi', 'isolate');
+      setStyleIfDifferent(node, 'textAlign', 'left');
+      setStyleIfDifferent(node, 'whiteSpace', 'nowrap');
+      setAttrIfDifferent(node, 'dir', 'ltr');
     }
 
     function applyLtrMarks(root) {
+      if (!root || !root.childNodes) return;
       var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       var current;
       while ((current = walker.nextNode())) {
-        var normalized = normalizePriceText(fixMirroredAmountTokens(current.nodeValue));
+        var raw = current.nodeValue;
+        if (!raw) continue;
+        var normalized = normalizePriceText(fixMirroredAmountTokens(raw));
         if (!/[\\d₪]/.test(normalized)) continue;
-        current.nodeValue = LRM + normalized + LRM;
+
+        var desired = LRM + normalized + LRM;
+        if (raw === desired) continue;
+        current.nodeValue = desired;
       }
     }
 
@@ -147,22 +186,25 @@ const CHECKOUT_DIRECTION_FIX_SCRIPT = `
 
       var nodes = document.querySelectorAll(selectors.join(','));
       nodes.forEach(function(node) {
-        node.style.direction = 'ltr';
-        node.style.unicodeBidi = 'isolate';
-        node.style.textAlign = 'left';
-        node.style.display = 'inline-block';
-        node.setAttribute('dir', 'ltr');
+        setStyleIfDifferent(node, 'direction', 'ltr');
+        setStyleIfDifferent(node, 'unicodeBidi', 'isolate');
+        setStyleIfDifferent(node, 'textAlign', 'left');
+        setStyleIfDifferent(node, 'display', 'inline-block');
+        setAttrIfDifferent(node, 'dir', 'ltr');
         applyLtrMarks(node);
+        if (!node.hasAttribute(PROCESSED_ATTR)) {
+          node.setAttribute(PROCESSED_ATTR, '1');
+        }
       });
 
       var paymentDueNodes = document.querySelectorAll(paymentDueContainerSelectors.join(','));
       paymentDueNodes.forEach(function(node) {
-        node.style.display = 'inline-flex';
-        node.style.flexDirection = 'row';
-        node.style.alignItems = 'baseline';
-        node.style.justifyContent = 'flex-start';
-        node.style.gap = '4px';
-        node.style.whiteSpace = 'nowrap';
+        setStyleIfDifferent(node, 'display', 'inline-flex');
+        setStyleIfDifferent(node, 'flexDirection', 'row');
+        setStyleIfDifferent(node, 'alignItems', 'baseline');
+        setStyleIfDifferent(node, 'justifyContent', 'flex-start');
+        setStyleIfDifferent(node, 'gap', '4px');
+        setStyleIfDifferent(node, 'whiteSpace', 'nowrap');
       });
 
       var paymentDueValueNodes = document.querySelectorAll(paymentDueValueSelectors.join(','));
@@ -171,17 +213,77 @@ const CHECKOUT_DIRECTION_FIX_SCRIPT = `
       });
     }
 
-    applyPriceDirectionFix();
+    var observer = null;
+    var scheduled = false;
+    var applying = false;
 
-    var observer = new MutationObserver(function() {
-      applyPriceDirectionFix();
+    function safeApply() {
+      if (applying) return;
+      applying = true;
+      try {
+        if (observer) {
+          observer.disconnect();
+        }
+        applyPriceDirectionFix();
+      } catch (e) {
+        // Never let our cosmetic fix break the checkout.
+      } finally {
+        applying = false;
+        if (observer && document.documentElement) {
+          try {
+            observer.observe(document.documentElement, {
+              childList: true,
+              subtree: true,
+              characterData: true
+            });
+          } catch (_) {}
+        }
+      }
+    }
+
+    function scheduleApply() {
+      if (scheduled || applying) return;
+      scheduled = true;
+      var raf = window.requestAnimationFrame || function(cb) { return setTimeout(cb, 16); };
+      raf(function() {
+        scheduled = false;
+        safeApply();
+      });
+    }
+
+    observer = new MutationObserver(function(mutations) {
+      if (applying) return;
+      // Skip ticks that are clearly caused by our own characterData writes:
+      // if every mutation is on a text node whose parent we already tagged, do nothing.
+      var ours = true;
+      for (var i = 0; i < mutations.length; i++) {
+        var m = mutations[i];
+        if (m.type !== 'characterData') { ours = false; break; }
+        var parent = m.target && m.target.parentElement;
+        if (!parent || !parent.hasAttribute(PROCESSED_ATTR)) { ours = false; break; }
+      }
+      if (ours) return;
+      scheduleApply();
     });
 
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
+    function start() {
+      safeApply();
+      if (document.documentElement) {
+        try {
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            characterData: true
+          });
+        } catch (_) {}
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+      start();
+    }
 
     true;
   })();
@@ -210,10 +312,35 @@ export type CheckoutScreenProps = {
 
 export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: CheckoutScreenProps) {
   const [pageTitle, setPageTitle] = useState('תשלום מאובטח');
-  const [loading, setLoading] = useState(true);
+  // We only block the UI with a full-screen spinner for the *first* load.
+  // Shopify's checkout fires onLoadStart/onLoadEnd many times as the customer
+  // moves through information → shipping → payment, and on slower connections
+  // we observed the loader occasionally getting stuck because a later
+  // load event never resolved. Keeping the spinner scoped to the initial load
+  // means the worst case is a brief blank WebView, never a permanent block.
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [webViewKey, setWebViewKey] = useState(0);
   const completeRef = useRef(false);
+  const initialLoadResolvedRef = useRef(false);
+
+  const resolveInitialLoad = useCallback(() => {
+    if (initialLoadResolvedRef.current) return;
+    initialLoadResolvedRef.current = true;
+    setInitialLoading(false);
+  }, []);
+
+  // Safety net: never let the loader sit on top of the WebView for more
+  // than 15 seconds. If Shopify is genuinely down we'll surface the
+  // underlying WebView (which will show its own error UI) instead of an
+  // infinite spinner with no way out except the close button.
+  useEffect(() => {
+    if (!initialLoading) return;
+    const timer = setTimeout(() => {
+      resolveInitialLoad();
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [initialLoading, resolveInitialLoad, webViewKey]);
 
   const tryComplete = useCallback(
     (url: string | undefined) => {
@@ -227,17 +354,22 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
 
   const onNavigationStateChange = useCallback(
     (state: WebViewNavigation) => {
-      if (state.title?.trim()) {
-        setPageTitle(state.title.trim());
+      const trimmedTitle = state?.title?.trim();
+      if (trimmedTitle) {
+        setPageTitle(trimmedTitle);
+        // The first time the WebView actually navigates somewhere with a real
+        // title, we know the page is alive — drop the spinner.
+        resolveInitialLoad();
       }
-      tryComplete(state.url);
+      tryComplete(state?.url);
     },
-    [tryComplete]
+    [resolveInitialLoad, tryComplete]
   );
 
   const handleRetry = useCallback(() => {
     setLoadError(null);
-    setLoading(true);
+    setInitialLoading(true);
+    initialLoadResolvedRef.current = false;
     completeRef.current = false;
     setWebViewKey((k) => k + 1);
   }, []);
@@ -332,7 +464,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
       )}
 
       <View style={{ flex: 1 }}>
-        {loading && !loadError && (
+        {initialLoading && !loadError && (
           <View
             style={{
               position: 'absolute',
@@ -346,6 +478,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
               zIndex: 1,
               gap: 12,
             }}
+            pointerEvents="none"
           >
             <ActivityIndicator size="large" color="#0F172A" />
             <Text style={{ color: '#475569', fontWeight: '800', ...RTL_TEXT }}>טוען את הקופה המאובטחת...</Text>
@@ -355,22 +488,25 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
         <WebView
           key={webViewKey}
           source={{ uri: checkoutUrl }}
-          startInLoadingState
           injectedJavaScriptBeforeContentLoaded={CHECKOUT_DIRECTION_FIX_SCRIPT}
           injectedJavaScript={CHECKOUT_DIRECTION_FIX_SCRIPT}
           onLoadStart={() => {
-            setLoading(true);
             setLoadError(null);
           }}
-          onLoadEnd={() => setLoading(false)}
+          onLoadEnd={resolveInitialLoad}
+          onLoadProgress={({ nativeEvent }) => {
+            if (nativeEvent.progress >= 0.6) {
+              resolveInitialLoad();
+            }
+          }}
           onError={() => {
-            setLoading(false);
+            resolveInitialLoad();
             setLoadError('לא הצלחנו לטעון את עמוד התשלום. בדוק את החיבור לאינטרנט ונסה שוב.');
           }}
           onHttpError={(e) => {
             const status = e.nativeEvent.statusCode;
             if (status >= 400) {
-              setLoading(false);
+              resolveInitialLoad();
               setLoadError(`שגיאת שרת (${status}) בטעינת הקופה.`);
             }
           }}
