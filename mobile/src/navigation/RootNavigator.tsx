@@ -8,12 +8,8 @@ import {
 import { colors } from '../theme/colors';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../state/AuthContext';
-import {
-  StoreCategoryScreen,
-  StoreHomeScreen,
-  StoreSearchScreen,
-  type StoreBottomTabId,
-} from '../screens/store/StoreHomeScreen';
+import { StoreCategoryScreen, StoreHomeScreen, type StoreBottomTabId } from '../screens/store/StoreHomeScreen';
+import { StoreSearchScreen } from '../screens/store/StoreSearchScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
 import { CheckoutScreen } from '../screens/store/CheckoutScreen';
 import { OrderSuccessScreen } from '../screens/store/OrderSuccessScreen';

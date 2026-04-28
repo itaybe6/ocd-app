@@ -513,7 +513,7 @@ function getProductBadge(index: number) {
   return undefined;
 }
 
-function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride?: string, categoryIdOverride?: string): StoreProduct {
+export function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride?: string, categoryIdOverride?: string): StoreProduct {
   const palette = getProductPalette(index);
   const normalizedProductType = product.productType.trim();
   const subtitle = subtitleOverride?.trim() || (normalizedProductType && normalizedProductType !== 'מוצרים' ? normalizedProductType : 'כל המוצרים');
@@ -540,7 +540,7 @@ function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride
   };
 }
 
-function ProductImage({
+export function ProductImage({
   product,
   height,
   topRadius = 18,
@@ -1950,8 +1950,8 @@ export function StoreHomeScreen({
   };
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#1F2937' }}>
-      <View style={{ flex: 1, backgroundColor: '#1F2937' }}>
+    <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
+      <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
         <Modal
           visible={menuOpen}
           transparent
@@ -2113,90 +2113,92 @@ export function StoreHomeScreen({
           </Pressable>
         </Modal>
 
+        {/* Hero fixed outside main vertical ScrollView — avoids iOS bounce gap between status bar and header */}
+        <View style={{ backgroundColor: '#F5F5F5' }}>
+          <View
+            style={{
+              backgroundColor: '#1F2937',
+              paddingTop: insets.top,
+              borderBottomLeftRadius: 28,
+              borderBottomRightRadius: 28,
+              overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                position: 'relative',
+                paddingTop: 20,
+                paddingBottom: 26,
+                minHeight: 96,
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  position: 'absolute',
+                  right: 24,
+                  width: '50%',
+                  top: 0,
+                  bottom: 0,
+                  justifyContent: 'center',
+                  alignItems: 'stretch',
+                }}
+              >
+                <Text
+                  style={{
+                    width: '100%',
+                    fontSize: 13,
+                    color: 'rgba(255,255,255,0.55)',
+                    textAlign: 'right',
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  {homeHeaderGreeting},
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    width: '100%',
+                    fontSize: 22,
+                    fontWeight: '700',
+                    color: '#FFFFFF',
+                    textAlign: 'right',
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  {user?.name ?? 'גלו את המבחר'}
+                </Text>
+              </View>
+              <View
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+                pointerEvents="none"
+              >
+                <StoreOcdLogoMark fill="#FFFFFF" height={72} />
+              </View>
+            </View>
+          </View>
+        </View>
+
         <ScrollView
-          style={{ flex: 1, backgroundColor: '#1F2937' }}
+          style={{ flex: 1, backgroundColor: '#F5F5F5' }}
           contentContainerStyle={{
             paddingBottom: contentPaddingBottom,
             flexGrow: 1,
+            backgroundColor: '#F5F5F5',
           }}
           showsVerticalScrollIndicator={false}
           {...(Platform.OS === 'ios'
             ? { contentInsetAdjustmentBehavior: 'never' as const }
             : {})}
         >
-          {/* Top hero — light wrapper so rounded bottom corners read against body (ScrollView is same slate as header) */}
-          <View style={{ backgroundColor: '#F5F5F5' }}>
-            <View
-              style={{
-                backgroundColor: '#1F2937',
-                borderBottomLeftRadius: 28,
-                borderBottomRightRadius: 28,
-                overflow: 'hidden',
-              }}
-            >
-              <View
-                style={{
-                  position: 'relative',
-                  paddingTop: 20,
-                  paddingBottom: 26,
-                  minHeight: 96,
-                  justifyContent: 'center',
-                }}
-              >
-                <View
-                  style={{
-                    position: 'absolute',
-                    right: 24,
-                    width: '50%',
-                    top: 0,
-                    bottom: 0,
-                    justifyContent: 'center',
-                    alignItems: 'stretch',
-                  }}
-                >
-                  <Text
-                    style={{
-                      width: '100%',
-                      fontSize: 13,
-                      color: 'rgba(255,255,255,0.55)',
-                      textAlign: 'right',
-                      letterSpacing: 0.2,
-                    }}
-                  >
-                    {homeHeaderGreeting},
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      width: '100%',
-                      fontSize: 22,
-                      fontWeight: '700',
-                      color: '#FFFFFF',
-                      textAlign: 'right',
-                      letterSpacing: -0.3,
-                    }}
-                  >
-                    {user?.name ?? 'גלו את המבחר'}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                  pointerEvents="none"
-                >
-                  <StoreOcdLogoMark fill="#FFFFFF" height={72} />
-                </View>
-              </View>
-            </View>
-          </View>
-
           <View
             style={{
               flexGrow: 1,
@@ -2699,7 +2701,7 @@ export function StoreHomeScreen({
         </ScrollView>
         <StoreFloatingTabBar activeTab={activeBottomTab} onTabPress={handleBottomTabPress} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -3239,179 +3241,6 @@ export function StoreCategoryScreen({
         <StoreFloatingTabBar activeTab={null} onTabPress={onTabPress} />
       </View>
     </View>
-  );
-}
-
-export function StoreSearchScreen({
-  onBack: _onBack,
-  onOpenCart: _onOpenCart,
-  onOpenProduct,
-  onTabPress,
-}: {
-  onBack: () => void;
-  onOpenCart?: () => void;
-  onOpenProduct?: (product: StoreProduct) => void;
-  onTabPress: (tabId: StoreBottomTabId) => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
-  const { width: windowWidth } = useWindowDimensions();
-  const tileSize = Math.floor(windowWidth / 3) - 1;
-
-  const [products, setProducts] = useState<StoreProduct[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-
-  const doLoad = useCallback(async (isRefresh = false) => {
-    console.log('[StoreSearch] doLoad start, isRefresh=', isRefresh);
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      const raw = await fetchProducts(30);
-      console.log('[StoreSearch] fetchProducts returned', raw.length, 'products');
-      const mapped = raw
-        .map((p, i) => toStoreProduct(p, i))
-        .sort(() => Math.random() - 0.5);
-      setProducts(mapped);
-    } catch (e) {
-      console.log('[StoreSearch] fetchProducts ERROR:', e);
-      setError(e instanceof Error ? e.message : 'שגיאה בטעינת מוצרים');
-    } finally {
-      if (isRefresh) setRefreshing(false);
-      else setLoading(false);
-      console.log('[StoreSearch] doLoad done');
-    }
-  }, []);
-
-  useEffect(() => {
-    void doLoad();
-  }, [doLoad]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.subtitle.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q)
-    );
-  }, [query, products]);
-
-  return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
-      {/* Search bar */}
-      <View style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FAFAFA' }}>
-        <View
-          style={{
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            backgroundColor: '#EFEFEF',
-            borderRadius: 12,
-            paddingHorizontal: 12,
-            height: 40,
-          }}
-        >
-          <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="חיפוש..."
-            placeholderTextColor="#AEAEB2"
-            returnKeyType="search"
-            style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
-          />
-        </View>
-      </View>
-
-      {/* Loading */}
-      {loading && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color="#555" />
-        </View>
-      )}
-
-      {/* Error */}
-      {!loading && !!error && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <Ionicons name="alert-circle-outline" size={40} color="#DC2626" />
-          <Text style={{ color: '#991B1B', fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 20 }}>
-            {error}
-          </Text>
-          <Pressable
-            onPress={() => void doLoad()}
-            style={({ pressed }) => ({
-              backgroundColor: '#111827',
-              paddingHorizontal: 24,
-              paddingVertical: 10,
-              borderRadius: 10,
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>נסה שנית</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Empty */}
-      {!loading && !error && filtered.length === 0 && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="search-outline" size={48} color="#C7C7CC" />
-          <Text style={{ color: '#8E8E93', fontWeight: '700', marginTop: 12, fontSize: 16 }}>
-            {query ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
-          </Text>
-        </View>
-      )}
-
-      {/* Grid */}
-      {!loading && !error && filtered.length > 0 && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: contentPaddingBottom, width: windowWidth }}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void doLoad(true)}
-              tintColor="#555"
-              colors={['#555']}
-            />
-          }
-        >
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: windowWidth }}>
-            {filtered.map((product) => (
-              <Pressable
-                key={product.id}
-                onPress={() => onOpenProduct?.(product)}
-                style={({ pressed }) => ({
-                  width: tileSize,
-                  height: tileSize,
-                  backgroundColor: '#E5E5EA',
-                  opacity: pressed ? 0.8 : 1,
-                })}
-              >
-                {product.imageUrl ? (
-                  <Image
-                    source={{ uri: product.imageUrl }}
-                    resizeMode="cover"
-                    style={{ width: '100%', height: '100%' }}
-                  />
-                ) : (
-                  <ProductImage product={product} height={tileSize} />
-                )}
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
-      )}
-
-      <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
-    </SafeAreaView>
   );
 }
 

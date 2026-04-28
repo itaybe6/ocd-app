@@ -11,7 +11,7 @@ import Svg, { Path } from 'react-native-svg';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
 import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
@@ -137,7 +137,8 @@ export function CustomerProfileScreen({
 }) {
   const { user, signOut } = useAuth();
   const { favoriteCount } = useFavorites();
-  const { contentPaddingBottom } = getStoreBottomBarMetrics(0);
+  const insets = useSafeAreaInsets();
+  const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [recentOrders, setRecentOrders] = useState<CustomerOrderRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -174,24 +175,9 @@ export function CustomerProfileScreen({
     return 'ערב טוב';
   }, []);
 
-  const header = (
-    <View style={styles.headerStack}>
-      {/* ── top bar: dark panel + centered logo, greeting on the right ── */}
-      <View style={styles.headerBg}>
-        <View style={styles.topBar}>
-          <View style={styles.greetingWrap}>
-            <Text style={styles.greetingLine}>{greeting},</Text>
-            <Text style={styles.greetingName} numberOfLines={1}>
-              {user?.name ?? 'שם משתמש'}
-            </Text>
-          </View>
-          <View style={styles.logoWrap} pointerEvents="none">
-            <OcdLogo height={72} />
-          </View>
-        </View>
-      </View>
-
-      {/* ── stats row ── */}
+  const listHeaderBelowHero = (
+    <View style={[styles.headerStack, { paddingTop: 16 }]}>
+      {/* ── stats row (gap below fixed hero matches previous headerStack layout) ── */}
       <View style={styles.statsCard}>
         <StatPill value={String(recentOrders.length)} label="הזמנות" />
         <View style={styles.statsSep} />
@@ -231,14 +217,32 @@ export function CustomerProfileScreen({
   );
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
+    <View style={styles.screenRoot}>
       <View style={styles.root}>
+        {/* Hero fixed outside FlatList — avoids bounce gap between status bar and dark header */}
+        <View style={styles.heroLightWrap}>
+          <View style={[styles.headerBg, { paddingTop: insets.top }]}>
+            <View style={styles.topBar}>
+              <View style={styles.greetingWrap}>
+                <Text style={styles.greetingLine}>{greeting},</Text>
+                <Text style={styles.greetingName} numberOfLines={1}>
+                  {user?.name ?? 'שם משתמש'}
+                </Text>
+              </View>
+              <View style={styles.logoWrap} pointerEvents="none">
+                <OcdLogo height={72} />
+              </View>
+            </View>
+          </View>
+        </View>
+
         <FlatList
           data={recentOrders}
           keyExtractor={(item) => item.id}
+          style={styles.listFill}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: contentPaddingBottom + 16 }}
-          ListHeaderComponent={header}
+          contentContainerStyle={{ paddingBottom: contentPaddingBottom + 16, flexGrow: 1 }}
+          ListHeaderComponent={listHeaderBelowHero}
           renderItem={({ item, index }) => (
             <Pressable
               onPress={onOpenOrders}
@@ -310,7 +314,7 @@ export function CustomerProfileScreen({
 
         <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -320,8 +324,11 @@ const ICON_SIZE = 32;
 const SIDE_PADDING = 16;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#1F2937' },
+  screenRoot: { flex: 1, backgroundColor: P.bg },
   root: { flex: 1, backgroundColor: P.bg },
+  /** Same role as store home: light strip so rounded header corners read cleanly */
+  heroLightWrap: { backgroundColor: P.bg },
+  listFill: { flex: 1, backgroundColor: P.bg },
 
   headerStack: { gap: 16, paddingTop: 0 },
 
