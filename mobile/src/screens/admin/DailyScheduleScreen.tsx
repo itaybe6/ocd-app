@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Dimensions,
   FlatList,
   Platform,
   Pressable,
@@ -149,6 +150,24 @@ export function DailyScheduleScreen() {
     const sunday = addDays(parsedDay, -dow);
     return Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
   }, [parsedDay]);
+
+  const weekScrollRef = useRef<ScrollView>(null);
+  const [weekScrollWidth, setWeekScrollWidth] = useState(
+    () => Dimensions.get('window').width - 26,
+  );
+
+  const threeWeeks = useMemo(
+    () => [
+      Array.from({ length: 7 }, (_, i) => addDays(weekDates[0], i - 7)),
+      weekDates,
+      Array.from({ length: 7 }, (_, i) => addDays(weekDates[0], i + 7)),
+    ],
+    [weekDates],
+  );
+
+  useEffect(() => {
+    weekScrollRef.current?.scrollTo({ x: weekScrollWidth, animated: false });
+  }, [weekDates, weekScrollWidth]);
 
   const calMonthLabel = useMemo(
     () => `${HE_MONTHS[parsedDay.getMonth()]} ${parsedDay.getFullYear()}`,
@@ -349,50 +368,55 @@ export function DailyScheduleScreen() {
             ))}
           </View>
 
-          {/* Week strip */}
-          <View style={st.calWeekRow}>
-            <Pressable
-              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, -7)))}
-              style={({ pressed }) => [st.calWeekNav, pressed && { opacity: 0.5 }]}
-            >
-              <ChevronLeft size={15} color='#C7C7CC' strokeWidth={2.5} />
-            </Pressable>
-
-            <View style={{ flex: 1, flexDirection: 'row' }}>
-              {weekDates.map((d) => {
-                const ds = yyyyMmDd(d);
-                const isSelected   = ds === day;
-                const isToday      = ds === todayStr;
-                const isOtherMonth = d.getMonth() !== parsedDay.getMonth();
-                return (
-                  <Pressable key={ds} onPress={() => setDay(ds)} style={st.calDayCell}>
-                    <View style={[
-                      st.calDayBubble,
-                      isSelected && st.calDayBubbleSel,
-                      isToday && !isSelected && st.calDayBubbleToday,
-                    ]}>
-                      <Text style={[
-                        st.calDayNum,
-                        isSelected && st.calDayNumSel,
-                        isToday && !isSelected && st.calDayNumToday,
-                        isOtherMonth && !isSelected && st.calDayNumFaded,
+          {/* Week strip – swipeable */}
+          <ScrollView
+            ref={weekScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              if (w > 0) setWeekScrollWidth(w);
+            }}
+            onMomentumScrollEnd={(e) => {
+              const x = e.nativeEvent.contentOffset.x;
+              if (!weekScrollWidth) return;
+              const page = Math.round(x / weekScrollWidth);
+              if (page === 0)      setDay(yyyyMmDd(addDays(parsedDay, -7)));
+              else if (page === 2) setDay(yyyyMmDd(addDays(parsedDay, 7)));
+            }}
+          >
+            {threeWeeks.map((week, pageIdx) => (
+              <View key={pageIdx} style={[st.calWeekPage, { width: weekScrollWidth }]}>
+                {week.map((d) => {
+                  const ds = yyyyMmDd(d);
+                  const isSelected   = ds === day;
+                  const isToday      = ds === todayStr;
+                  const isOtherMonth = d.getMonth() !== parsedDay.getMonth();
+                  return (
+                    <Pressable key={ds} onPress={() => setDay(ds)} style={st.calDayCell}>
+                      <View style={[
+                        st.calDayBubble,
+                        isSelected && st.calDayBubbleSel,
+                        isToday && !isSelected && st.calDayBubbleToday,
                       ]}>
-                        {d.getDate()}
-                      </Text>
-                    </View>
-                    <View style={[st.calDayDot, isSelected && st.calDayDotVisible]} />
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Pressable
-              onPress={() => setDay(yyyyMmDd(addDays(parsedDay, 7)))}
-              style={({ pressed }) => [st.calWeekNav, pressed && { opacity: 0.5 }]}
-            >
-              <ChevronRight size={15} color='#C7C7CC' strokeWidth={2.5} />
-            </Pressable>
-          </View>
+                        <Text style={[
+                          st.calDayNum,
+                          isSelected && st.calDayNumSel,
+                          isToday && !isSelected && st.calDayNumToday,
+                          isOtherMonth && !isSelected && st.calDayNumFaded,
+                        ]}>
+                          {d.getDate()}
+                        </Text>
+                      </View>
+                      <View style={[st.calDayDot, isSelected && st.calDayDotVisible]} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
 
           <View style={st.calPrettyRow}>
             <Text style={st.calPrettyText}>{prettyDay}</Text>
@@ -462,7 +486,7 @@ export function DailyScheduleScreen() {
         </ScrollView>
       </View>
     ),
-    [calMonthLabel, day, filter, filteredItems.length, items.length, parsedDay, prettyDay, stats, todayStr, weekDates, workerId, workerOptions],
+    [calMonthLabel, day, filter, filteredItems.length, items.length, parsedDay, prettyDay, stats, threeWeeks, todayStr, weekDates, weekScrollWidth, workerId, workerOptions],
   );
 
   return (
@@ -475,18 +499,17 @@ export function DailyScheduleScreen() {
         onRefresh={() => { fetchUsers(); fetchDay(); }}
         ListHeaderComponent={listHeader}
         renderItem={({ item }) => {
-          const stripeColor = item.status === 'completed' ? '#34C759' : '#FF9500';
+          const isCompleted = item.status === 'completed';
           const kindConf    = KIND_CONFIG[item.kind];
           const workerName  = userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6);
 
           return (
-            <View style={[st.taskWrap, item.status === 'completed' && { opacity: 0.68 }]}>
-              {/* ── White card (overflow:hidden for rounded corners) ── */}
+            <View style={[st.taskWrap, isCompleted && { opacity: 0.68 }]}>
               <View style={st.taskInner}>
 
                 {/* Body */}
                 <View style={st.taskBody}>
-                  {/* Row 1: avatar + worker name (right) | kind chip + time (left) */}
+                  {/* Row 1: avatar + worker name (right) | kind chip + time + status (left) */}
                   <View style={st.taskTopRow}>
                     <View style={st.taskWho}>
                       <Avatar
@@ -500,12 +523,13 @@ export function DailyScheduleScreen() {
                       <View style={st.taskTimePill}>
                         <Text style={st.taskTimeText}>{formatHm(item.date)}</Text>
                       </View>
-                      <View style={[
-                        st.kindChip,
-                        { backgroundColor: `${kindConf.color}15`, borderColor: `${kindConf.color}30` },
-                      ]}>
-                        <Text style={[st.kindChipText, { color: kindConf.color }]}>
-                          {kindConf.label}
+                      <View style={st.kindChip}>
+                        <Text style={st.kindChipText}>{kindConf.label}</Text>
+                      </View>
+                      <View style={st.statusChip}>
+                        <View style={[st.statusDot, { backgroundColor: isCompleted ? '#34C759' : '#FF9500' }]} />
+                        <Text style={st.statusChipText}>
+                          {isCompleted ? 'הושלם' : 'ממתין'}
                         </Text>
                       </View>
                     </View>
@@ -523,24 +547,24 @@ export function DailyScheduleScreen() {
 
                 {/* Action strip */}
                 <View style={st.taskActions}>
-                  {/* Complete button */}
+                  {/* Complete / done button */}
                   <Pressable
-                    style={[st.tcBtn, st.tcBtnGo, item.status === 'completed' && st.tcBtnDone]}
+                    style={[st.tcBtn, isCompleted && st.tcBtnDone]}
                     onPress={() => {
                       setEdit(item);
                       setNewTime(new Date(item.date).toISOString().slice(11, 16));
                     }}
                     accessibilityLabel="ביצוע"
                   >
-                    {item.status === 'completed'
+                    {isCompleted
                       ? <Check size={15} color='#34C759' strokeWidth={2.2} />
-                      : <ArrowUpRight size={15} color={colors.primary} strokeWidth={2.2} />
+                      : <ArrowUpRight size={15} color='#1E3A8A' strokeWidth={2.2} />
                     }
                   </Pressable>
 
-                  {/* Delete button (UI only) */}
-                  <Pressable style={[st.tcBtn, st.tcBtnDel]} accessibilityLabel="מחיקה">
-                    <Trash2 size={14} color='#FF3B30' strokeWidth={2} />
+                  {/* Delete button */}
+                  <Pressable style={st.tcBtn} accessibilityLabel="מחיקה">
+                    <Trash2 size={14} color='#1E3A8A' strokeWidth={2} />
                   </Pressable>
 
                   {/* Edit / pencil button */}
@@ -552,15 +576,12 @@ export function DailyScheduleScreen() {
                     }}
                     accessibilityLabel="עריכה"
                   >
-                    <Pencil size={14} color='#8E8E93' strokeWidth={2} />
+                    <Pencil size={14} color='#1E3A8A' strokeWidth={2} />
                   </Pressable>
 
                   <View style={{ flex: 1 }} />
                 </View>
               </View>
-
-              {/* ── Status stripe (absolute, outside overflow:hidden) ── */}
-              <View style={[st.taskStripe, { backgroundColor: stripeColor }]} />
             </View>
           );
         }}
@@ -789,7 +810,7 @@ const st = StyleSheet.create({
   },
   calDowRow: {
     flexDirection: 'row',
-    paddingHorizontal: 30,
+    paddingHorizontal: 4,
     paddingBottom: 6,
     paddingTop: 10,
     borderTopWidth: 1,
@@ -805,19 +826,11 @@ const st = StyleSheet.create({
     color: '#AEAEB2',
     letterSpacing: 0.3,
   },
-  calWeekRow: {
+  calWeekPage: {
     flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 4,
     paddingTop: 4,
     paddingBottom: 12,
-  },
-  calWeekNav: {
-    width: 26,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
   },
   calDayCell: {
     flex: 1,
@@ -1005,15 +1018,6 @@ const st = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.07)',
     overflow: 'hidden',
   },
-  taskStripe: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopRightRadius: 20,
-    borderBottomRightRadius: 20,
-  },
   taskBody: {
     paddingHorizontal: 16,
     paddingTop: 15,
@@ -1045,15 +1049,17 @@ const st = StyleSheet.create({
     textAlign: 'right',
   },
   taskTimePill: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: 'rgba(30,58,138,0.07)',
     borderRadius: 20,
     paddingHorizontal: 11,
     paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(30,58,138,0.15)',
   },
   taskTimeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#3A3A3C',
+    color: '#1E3A8A',
     letterSpacing: 0.4,
   },
   taskCustomer: {
@@ -1085,32 +1091,48 @@ const st = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderWidth: 1,
+    backgroundColor: 'rgba(30,58,138,0.07)',
+    borderColor: 'rgba(30,58,138,0.15)',
   },
   kindChipText: {
     fontSize: 11,
     fontWeight: '700',
+    color: '#1E3A8A',
+  },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    backgroundColor: 'rgba(30,58,138,0.07)',
+    borderColor: 'rgba(30,58,138,0.15)',
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  statusChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1E3A8A',
   },
   tcBtn: {
     width: 36,
     height: 36,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: '#E5E5EA',
-    backgroundColor: '#F9F9FB',
+    borderColor: 'rgba(30,58,138,0.16)',
+    backgroundColor: 'rgba(30,58,138,0.07)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tcBtnGo: {
-    borderColor: '#DDDCF5',
-    backgroundColor: '#F0F0FF',
-  },
   tcBtnDone: {
-    borderColor: '#C8F0D0',
-    backgroundColor: '#F0FFF4',
-  },
-  tcBtnDel: {
-    borderColor: '#FFE5E5',
-    backgroundColor: '#FFF5F5',
+    borderColor: 'rgba(52,199,89,0.30)',
+    backgroundColor: 'rgba(52,199,89,0.08)',
   },
 
   // ── Empty State ────────────────────────────────────

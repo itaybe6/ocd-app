@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, Text, View, Image, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarDays, Clock, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2, Wrench, Zap } from 'lucide-react-native';
+import { CalendarDays, Check, Clock, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2 } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Card } from '../../components/ui/Card';
@@ -11,7 +11,6 @@ import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { JobCard, JobCardAction, JobChip } from '../../components/jobs/JobCard';
 import { Avatar } from '../../components/ui/Avatar';
 import { getPublicUrl } from '../../lib/storage';
 import { pickImageFromLibrary } from '../../lib/media';
@@ -22,6 +21,32 @@ import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
 
 const { height: screenHeight } = Dimensions.get('window');
+
+const CHIP_ST = {
+  borderRadius: 20,
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderWidth: 1,
+  backgroundColor: 'rgba(30,58,138,0.07)',
+  borderColor: 'rgba(30,58,138,0.15)',
+} as const;
+
+const CHIP_TXT_ST = {
+  fontSize: 10,
+  fontWeight: '700' as const,
+  color: '#1E3A8A',
+};
+
+const BTN_ST = {
+  width: 36,
+  height: 36,
+  borderRadius: 11,
+  borderWidth: 1.5,
+  borderColor: 'rgba(30,58,138,0.16)',
+  backgroundColor: 'rgba(30,58,138,0.07)',
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+};
 
 type JobStatus = 'pending' | 'completed';
 type JobKind = 'regular' | 'installation' | 'special';
@@ -904,192 +929,116 @@ export function JobsScreen() {
           </View>
         )}
         renderItem={({ item }) => {
-          const kindMeta = item.kind === 'installation'
-            ? { label: 'התקנה', color: '#AF52DE', bg: 'rgba(175,82,222,0.10)', icon: <Wrench size={13} color="#AF52DE" /> }
-            : item.kind === 'special'
-              ? { label: 'מיוחדת', color: '#FF9500', bg: 'rgba(255,149,0,0.10)', icon: <Zap size={13} color="#FF9500" /> }
-              : { label: 'ריח', color: '#007AFF', bg: 'rgba(0,122,255,0.10)', icon: <Droplets size={13} color="#007AFF" /> };
+          const isCompleted = item.status === 'completed';
+          const kindLabel = item.kind === 'installation' ? 'התקנה' : item.kind === 'special' ? 'מיוחדת' : 'ריח';
+          const workerName = userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6);
+          const customerName = item.customer_id ? (userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)) : null;
 
           return (
-            <JobCard
-              kind={item.kind}
-              title=""
-              primaryNode={
-                <View style={{ gap: 14 }}>
-                  {/* Kind badge + Status */}
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{
-                      flexDirection: 'row-reverse',
-                      alignItems: 'center',
-                      gap: 5,
-                      backgroundColor: kindMeta.bg,
-                      borderRadius: 8,
-                      paddingHorizontal: 9,
-                      paddingVertical: 4,
-                    }}>
-                      {kindMeta.icon}
-                      <Text style={{ color: kindMeta.color, fontWeight: '700', fontSize: 12 }}>
-                        {kindMeta.label}
-                      </Text>
-                    </View>
-                    <View style={{
-                      flexDirection: 'row-reverse',
-                      alignItems: 'center',
-                      gap: 6,
-                      backgroundColor: item.status === 'completed' ? 'rgba(52,199,89,0.10)' : 'rgba(255,149,0,0.10)',
-                      borderRadius: 8,
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                    }}>
-                      <View style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: 3.5,
-                        backgroundColor: item.status === 'completed' ? '#34C759' : '#FF9500',
-                      }} />
-                      <Text style={{
-                        color: item.status === 'completed' ? '#248A3D' : '#C93400',
-                        fontWeight: '700',
-                        fontSize: 12,
-                      }}>
-                        {item.status === 'completed' ? 'הושלם' : 'ממתין'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Worker + Customer */}
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                    <Avatar
-                      size={44}
-                      uri={userAvatarMap.get(item.worker_id) ?? null}
-                      name={userMap.get(item.worker_id) ?? ''}
-                      style={{ borderWidth: 2, borderColor: 'rgba(0,0,0,0.04)' }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={{
-                          color: ui.text,
-                          fontWeight: '700',
-                          fontSize: 16,
-                          textAlign: 'right',
-                          letterSpacing: -0.3,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6)}
-                      </Text>
-                      {!!item.customer_id && (
-                        <Text
-                          style={{
-                            color: ui.secondary,
-                            fontWeight: '500',
-                            fontSize: 14,
-                            textAlign: 'right',
-                            marginTop: 2,
-                          }}
-                          numberOfLines={1}
-                        >
-                          {userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* Notes */}
-                  {!!item.notes && (
-                    <Text
-                      style={{
-                        color: ui.tertiary,
-                        fontSize: 13,
-                        lineHeight: 19,
-                        textAlign: 'right',
-                        fontWeight: '400',
-                      }}
-                      numberOfLines={2}
-                    >
-                      {item.notes}
-                    </Text>
-                  )}
-                </View>
-              }
-              description={null}
-              onOriginRect={(r) => { detailsOriginRectRef.current = r; }}
+            <Pressable
+              onPressIn={(e: any) => {
+                e.currentTarget?.measureInWindow?.((x: number, y: number, w: number, h: number) => {
+                  detailsOriginRectRef.current = { x, y, width: w, height: h };
+                });
+              }}
               onPress={() => openDetails(item)}
-              faded={item.status === 'completed'}
-              style={{ marginBottom: 10 }}
-              actions={
-                <>
-                  {item.kind === 'regular' && item.status === 'pending' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="בצע"
-                      onPress={(e) => { e.stopPropagation?.(); openJob(item, { mode: 'execute' }); }}
-                      style={({ pressed }) => [{ opacity: pressed ? 0.55 : 1 }]}
-                    >
-                      <View style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 13,
-                        backgroundColor: 'rgba(0,122,255,0.10)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <Rocket size={18} color="#007AFF" />
+              style={({ pressed }) => ({ marginBottom: 10, opacity: pressed ? 0.95 : 1 })}
+            >
+              <View style={[
+                { borderRadius: 20 },
+                Platform.select({
+                  ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 3 } },
+                  android: { elevation: 3 },
+                }),
+                isCompleted && { opacity: 0.68 },
+              ]}>
+                <View style={{ backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)', overflow: 'hidden' }}>
+
+                  {/* Body */}
+                  <View style={{ paddingHorizontal: 16, paddingTop: 15, paddingBottom: 13 }}>
+                    {/* Top row */}
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      {/* Right: avatar + worker */}
+                      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 7, flex: 1, marginLeft: 8 }}>
+                        <Avatar size={24} uri={userAvatarMap.get(item.worker_id) ?? null} name={workerName} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#8E8E93', flex: 1, textAlign: 'right' }} numberOfLines={1}>
+                          {workerName}
+                        </Text>
                       </View>
-                    </Pressable>
-                  ) : null}
-                  <JobCardAction
-                    label="ערוך"
-                    onPress={() => openEdit(item)}
-                    onOriginRect={(r) => { editOriginRectRef.current = r; }}
-                  >
-                    <Pencil size={18} color={ui.secondary} />
-                  </JobCardAction>
-                  <JobCardAction
-                    label="מחק"
-                    variant="danger"
-                    onPress={() => {
-                      Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
-                        { text: 'ביטול', style: 'cancel' },
-                        { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
-                      ]);
-                    }}
-                  >
-                    <Trash2 size={18} color="#FF3B30" />
-                  </JobCardAction>
-                </>
-              }
-              chips={
-                <>
-                  {item.order_number != null && (
-                    <View style={{
-                      backgroundColor: ui.fill,
-                      borderRadius: 8,
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                    }}>
-                      <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 11 }}>
-                        #{item.order_number}
-                      </Text>
+                      {/* Left: chips */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                        <View style={CHIP_ST}>
+                          <Text style={CHIP_TXT_ST}>{yyyyMmDd(item.date)}</Text>
+                        </View>
+                        <View style={CHIP_ST}>
+                          <Text style={CHIP_TXT_ST}>{kindLabel}</Text>
+                        </View>
+                        <View style={[CHIP_ST, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: isCompleted ? '#34C759' : '#FF9500' }} />
+                          <Text style={CHIP_TXT_ST}>{isCompleted ? 'הושלם' : 'ממתין'}</Text>
+                        </View>
+                      </View>
                     </View>
-                  )}
-                  <View style={{
-                    flexDirection: 'row-reverse',
-                    alignItems: 'center',
-                    gap: 4,
-                    backgroundColor: ui.fill,
-                    borderRadius: 8,
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                  }}>
-                    <Clock size={11} color={ui.tertiary} />
-                    <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 11 }}>
-                      {yyyyMmDd(item.date)}
-                    </Text>
+
+                    {/* Customer name */}
+                    {!!customerName && (
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#0F172A', textAlign: 'right', lineHeight: 22 }} numberOfLines={1}>
+                        {customerName}
+                      </Text>
+                    )}
+
+                    {/* Notes */}
+                    {!!item.notes && (
+                      <Text style={{ fontSize: 12, fontWeight: '500', color: '#64748B', textAlign: 'right', marginTop: 5, lineHeight: 17 }} numberOfLines={1}>
+                        {item.notes}
+                      </Text>
+                    )}
                   </View>
-                </>
-              }
-            />
+
+                  {/* Action strip */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 15, paddingVertical: 11, borderTopWidth: 1, borderTopColor: '#F2F2F7' }}>
+                    {item.kind === 'regular' && !isCompleted ? (
+                      <Pressable
+                        style={BTN_ST}
+                        onPress={(e) => { e.stopPropagation?.(); openJob(item, { mode: 'execute' }); }}
+                        accessibilityLabel="בצע"
+                      >
+                        <Rocket size={14} color='#1E3A8A' strokeWidth={2} />
+                      </Pressable>
+                    ) : isCompleted ? (
+                      <View style={[BTN_ST, { borderColor: 'rgba(52,199,89,0.30)', backgroundColor: 'rgba(52,199,89,0.08)' }]}>
+                        <Check size={15} color='#34C759' strokeWidth={2.2} />
+                      </View>
+                    ) : null}
+
+                    <Pressable
+                      style={BTN_ST}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
+                          { text: 'ביטול', style: 'cancel' },
+                          { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
+                        ]);
+                      }}
+                      accessibilityLabel="מחיקה"
+                    >
+                      <Trash2 size={14} color='#1E3A8A' strokeWidth={2} />
+                    </Pressable>
+
+                    <Pressable
+                      style={BTN_ST}
+                      onPress={(e) => { e.stopPropagation?.(); openEdit(item); }}
+                      accessibilityLabel="עריכה"
+                    >
+                      <Pencil size={14} color='#1E3A8A' strokeWidth={2} />
+                    </Pressable>
+
+                    <View style={{ flex: 1 }} />
+                  </View>
+
+                </View>
+              </View>
+            </Pressable>
           );
         }}
         ListEmptyComponent={
