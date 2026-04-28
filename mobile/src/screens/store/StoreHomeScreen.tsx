@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Image,
   type LayoutChangeEvent,
   Modal,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -45,6 +45,7 @@ import {
 import { FavoriteToggleButton } from '../../components/FavoriteToggleButton';
 import { favoriteInputFromStoreProduct } from '../../lib/favorites';
 import { OcdPlusProductPriceBlock } from '../../components/OcdPlusProductPriceBlock';
+import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 
@@ -1057,7 +1058,8 @@ function getCategoryAvatarLabel(name: string) {
   return words.slice(0, 2).map((word) => word[0]).join('') || name.slice(0, 1);
 }
 
-const SUBCATEGORY_STRIP_HEIGHT = 130;
+/** Tight fit: 70px ring + label (up to 2 lines) + small gaps */
+const SUBCATEGORY_STRIP_HEIGHT = 108;
 
 function StoreSubcategoryCircleStrip({
   items,
@@ -1115,9 +1117,10 @@ function StoreSubcategoryCircleStrip({
         contentContainerStyle={{
           flexDirection: 'row-reverse',
           justifyContent: 'flex-start',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 20,
           paddingHorizontal: 4,
+          paddingBottom: 2,
         }}
       >
         {items.map((sub) => {
@@ -1125,7 +1128,7 @@ function StoreSubcategoryCircleStrip({
           const previewUri = previewUrls[sub.id] ?? sub.imageUrl ?? undefined;
           return (
             <Pressable key={sub.id} onPress={() => onSelect(sub.id)}>
-              <View style={{ alignItems: 'center', gap: 8, width: 82 }}>
+              <View style={{ alignItems: 'center', gap: 4, width: 82 }}>
                 <View
                   style={{
                     width: 70,
@@ -1167,9 +1170,8 @@ function StoreSubcategoryCircleStrip({
                     color: isSelected ? '#111827' : '#9CA3AF',
                     fontWeight: isSelected ? '900' : '600',
                     fontSize: 12,
-                    lineHeight: 16,
+                    lineHeight: 15,
                     textAlign: 'center',
-                    minHeight: 32,
                   }}
                 >
                   {sub.title}
@@ -1208,8 +1210,8 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorO
   return <Ionicons name={iconName} size={size} color={color} />;
 }
 
-/** Focused bottom-tab bubble fill — keep in sync with headers that should match the bar */
-export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = '#000000';
+/** Focused bottom-tab bubble fill — same slate as profile header (`ProfileScreen` headerBg) */
+export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = '#1F2937';
 
 function AnimatedStoreTabButton({
   focused,
@@ -1527,6 +1529,7 @@ export function StoreHomeScreen({
   initialTabRequestId?: number;
 }) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
@@ -1893,6 +1896,13 @@ export function StoreHomeScreen({
     topLevelCategoryChildrenMap,
   ]);
 
+  const homeHeaderGreeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'בוקר טוב';
+    if (h < 17) return 'צהריים טובים';
+    return 'ערב טוב';
+  }, []);
+
   const handleBottomTabPress = (itemId: StoreBottomTabId) => {
     if (itemId === 'home') {
       setMenuOpen(false);
@@ -1940,8 +1950,8 @@ export function StoreHomeScreen({
   };
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#1F2937' }}>
+      <View style={{ flex: 1, backgroundColor: '#1F2937' }}>
         <Modal
           visible={menuOpen}
           transparent
@@ -2104,11 +2114,98 @@ export function StoreHomeScreen({
         </Modal>
 
         <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: contentPaddingBottom }}
+          style={{ flex: 1, backgroundColor: '#1F2937' }}
+          contentContainerStyle={{
+            paddingBottom: contentPaddingBottom,
+            flexGrow: 1,
+          }}
           showsVerticalScrollIndicator={false}
+          {...(Platform.OS === 'ios'
+            ? { contentInsetAdjustmentBehavior: 'never' as const }
+            : {})}
         >
-          <View style={{ gap: 18 }}>
+          {/* Top hero — light wrapper so rounded bottom corners read against body (ScrollView is same slate as header) */}
+          <View style={{ backgroundColor: '#F5F5F5' }}>
+            <View
+              style={{
+                backgroundColor: '#1F2937',
+                borderBottomLeftRadius: 28,
+                borderBottomRightRadius: 28,
+                overflow: 'hidden',
+              }}
+            >
+              <View
+                style={{
+                  position: 'relative',
+                  paddingTop: 20,
+                  paddingBottom: 26,
+                  minHeight: 96,
+                  justifyContent: 'center',
+                }}
+              >
+                <View
+                  style={{
+                    position: 'absolute',
+                    right: 24,
+                    width: '50%',
+                    top: 0,
+                    bottom: 0,
+                    justifyContent: 'center',
+                    alignItems: 'stretch',
+                  }}
+                >
+                  <Text
+                    style={{
+                      width: '100%',
+                      fontSize: 13,
+                      color: 'rgba(255,255,255,0.55)',
+                      textAlign: 'right',
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    {homeHeaderGreeting},
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      width: '100%',
+                      fontSize: 22,
+                      fontWeight: '700',
+                      color: '#FFFFFF',
+                      textAlign: 'right',
+                      letterSpacing: -0.3,
+                    }}
+                  >
+                    {user?.name ?? 'גלו את המבחר'}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  pointerEvents="none"
+                >
+                  <StoreOcdLogoMark fill="#FFFFFF" height={72} />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View
+            style={{
+              flexGrow: 1,
+              gap: 6,
+              paddingHorizontal: 12,
+              paddingTop: 12,
+              backgroundColor: '#F5F5F5',
+            }}
+          >
             <ScrollView
               ref={categoryTabsRef}
               horizontal
@@ -2121,9 +2218,10 @@ export function StoreHomeScreen({
               contentContainerStyle={{
                 flexDirection: 'row-reverse',
                 justifyContent: 'flex-start',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: 20,
                 paddingHorizontal: 4,
+                paddingBottom: 0,
               }}
             >
               {topLevelCategories.map((category) => {
@@ -2132,7 +2230,7 @@ export function StoreHomeScreen({
 
                 return (
                   <Pressable key={category.id} onPress={() => setSelectedCategory(category.id)}>
-                    <View style={{ alignItems: 'center', gap: 8, width: 82 }}>
+                    <View style={{ alignItems: 'center', gap: 4, width: 82 }}>
                       <View
                         style={{
                           width: 70,
@@ -2174,9 +2272,8 @@ export function StoreHomeScreen({
                           color: isSelected ? '#111827' : '#9CA3AF',
                           fontWeight: isSelected ? '900' : '600',
                           fontSize: 12,
-                          lineHeight: 16,
+                          lineHeight: 15,
                           textAlign: 'center',
-                          minHeight: 32,
                         }}
                       >
                         {category.name}
@@ -2187,16 +2284,26 @@ export function StoreHomeScreen({
               })}
             </ScrollView>
 
-            <StoreSubcategoryCircleStrip
-              items={homeSubcategoriesStripItems}
-              selectedId={selectedHomeSubcategoryId}
-              onSelect={setSelectedHomeSubcategoryId}
-              previewUrls={homeSubcategoryPreviewUrls}
-              scrollViewRef={homeSubcategoryTabsRef}
-              scrollToEndOnContentSize
-            />
+            {homeSubcategoriesStripItems.length > 0 ? (
+              <StoreSubcategoryCircleStrip
+                items={homeSubcategoriesStripItems}
+                selectedId={selectedHomeSubcategoryId}
+                onSelect={setSelectedHomeSubcategoryId}
+                previewUrls={homeSubcategoryPreviewUrls}
+                scrollViewRef={homeSubcategoryTabsRef}
+                scrollToEndOnContentSize
+              />
+            ) : null}
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                marginTop: -2,
+                marginBottom: 16,
+              }}
+            >
               <Pressable
                 onPress={() => setMenuOpen(true)}
                 accessibilityRole="button"
@@ -3149,215 +3256,161 @@ export function StoreSearchScreen({
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { width: windowWidth } = useWindowDimensions();
+  const tileSize = Math.floor(windowWidth / 3) - 1;
+
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const searchInputRef = useRef<TextInput | null>(null);
 
-  const loadProducts = useCallback(async (isPullToRefresh = false) => {
+  const doLoad = useCallback(async (isRefresh = false) => {
+    console.log('[StoreSearch] doLoad start, isRefresh=', isRefresh);
     try {
-      if (isPullToRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
       setError(null);
-      const liveProducts = await fetchProducts(30);
-      const shuffledProducts = liveProducts
-        .map((product, index) => toStoreProduct(product, index))
+      const raw = await fetchProducts(30);
+      console.log('[StoreSearch] fetchProducts returned', raw.length, 'products');
+      const mapped = raw
+        .map((p, i) => toStoreProduct(p, i))
         .sort(() => Math.random() - 0.5);
-
-      setProducts(shuffledProducts);
-    } catch (err) {
-      setProducts([]);
-      setError(err instanceof Error ? err.message : 'שגיאה בטעינת החיפוש');
+      setProducts(mapped);
+    } catch (e) {
+      console.log('[StoreSearch] fetchProducts ERROR:', e);
+      setError(e instanceof Error ? e.message : 'שגיאה בטעינת מוצרים');
     } finally {
-      if (isPullToRefresh) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
+      if (isRefresh) setRefreshing(false);
+      else setLoading(false);
+      console.log('[StoreSearch] doLoad done');
     }
   }, []);
 
   useEffect(() => {
-    void loadProducts();
-  }, [loadProducts]);
+    void doLoad();
+  }, [doLoad]);
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredProducts = useMemo(() => {
-    if (!normalizedQuery) return products;
-    return products.filter((product) => {
-      return (
-        product.name.toLowerCase().includes(normalizedQuery) ||
-        product.subtitle.toLowerCase().includes(normalizedQuery) ||
-        product.description.toLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [normalizedQuery, products]);
-
-  const gridGap = 2;
-  const gridItemWidth = Math.floor((windowWidth - gridGap * 2) / 3);
-  const gridImageSize = gridItemWidth;
-
-  // Build skeleton placeholder data when loading
-  const skeletonItems = useMemo(
-    () =>
-      Array.from({ length: 18 }, (_, i) => ({
-        id: `skeleton-${i}`,
-        isSkeleton: true as const,
-      })),
-    []
-  );
-
-  type SearchListItem =
-    | StoreProduct
-    | { id: string; isSkeleton: true };
-
-  const listData: SearchListItem[] = loading ? skeletonItems : filteredProducts;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.subtitle.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q)
+    );
+  }, [query, products]);
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
-      <View style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
+      {/* Search bar */}
+      <View style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FAFAFA' }}>
         <View
           style={{
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            backgroundColor: '#EFEFEF',
+            borderRadius: 12,
             paddingHorizontal: 12,
-            paddingTop: 8,
-            paddingBottom: 8,
-            backgroundColor: '#FAFAFA',
+            height: 40,
           }}
         >
-          <View
-            style={{
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              backgroundColor: '#EFEFEF',
-              borderRadius: 12,
-              paddingHorizontal: 12,
-              height: 40,
-            }}
-          >
-            <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
-            <TextInput
-              ref={searchInputRef}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="חיפוש..."
-              placeholderTextColor="#AEAEB2"
-              returnKeyType="search"
-              style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
-            />
-          </View>
-        </View>
-
-        {!!error && !loading ? (
-          <View
-            style={{
-              margin: 20,
-              borderRadius: 16,
-              padding: 20,
-              backgroundColor: '#FFF4F4',
-              alignItems: 'center',
-              gap: 12,
-            }}
-          >
-            <Ionicons name="alert-circle-outline" size={36} color="#DC2626" />
-            <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 15, textAlign: 'center' }}>
-              לא הצלחנו לטעון מוצרים
-            </Text>
-            <Text style={{ color: '#B91C1C', fontSize: 13, textAlign: 'center' }}>{error}</Text>
-            <Pressable
-              onPress={() => void loadProducts()}
-              style={({ pressed }) => ({
-                backgroundColor: '#111827',
-                paddingHorizontal: 24,
-                paddingVertical: 10,
-                borderRadius: 10,
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>נסה שנית</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <FlatList<SearchListItem>
-            data={listData}
-            keyExtractor={(item) => item.id}
-            numColumns={3}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: contentPaddingBottom }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={() => {
-                  void loadProducts(true);
-                }}
-                tintColor="#111827"
-                colors={['#111827']}
-                progressViewOffset={8}
-              />
-            }
-            ListEmptyComponent={
-              !loading ? (
-                <View style={{ minHeight: 300, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-                  <Ionicons name="search-outline" size={48} color="#C7C7CC" />
-                  <Text style={{ color: '#8E8E93', fontWeight: '700', fontSize: 16 }}>
-                    {query ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
-                  </Text>
-                </View>
-              ) : null
-            }
-            renderItem={({ item, index }) => {
-              const isLastInRow = (index + 1) % 3 === 0;
-              if ('isSkeleton' in item) {
-                return (
-                  <View
-                    style={{
-                      width: gridItemWidth,
-                      height: gridImageSize,
-                      marginRight: isLastInRow ? 0 : gridGap,
-                      marginBottom: gridGap,
-                      backgroundColor: '#E8E8E8',
-                    }}
-                  />
-                );
-              }
-
-              const product = item;
-              return (
-                <Pressable
-                  onPress={() => onOpenProduct?.(product)}
-                  style={({ pressed }) => ({
-                    width: gridItemWidth,
-                    height: gridImageSize,
-                    marginRight: isLastInRow ? 0 : gridGap,
-                    marginBottom: gridGap,
-                    backgroundColor: '#E5E5EA',
-                    opacity: pressed ? 0.85 : 1,
-                  })}
-                >
-                  {product.imageUrl ? (
-                    <Image
-                      source={{ uri: product.imageUrl }}
-                      resizeMode="cover"
-                      accessibilityLabel={product.imageAltText ?? product.name}
-                      style={{ width: '100%', height: '100%' }}
-                    />
-                  ) : (
-                    <ProductImage product={product} height={gridImageSize} />
-                  )}
-                </Pressable>
-              );
-            }}
+          <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="חיפוש..."
+            placeholderTextColor="#AEAEB2"
+            returnKeyType="search"
+            style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
           />
-        )}
-        <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
+        </View>
       </View>
+
+      {/* Loading */}
+      {loading && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#555" />
+        </View>
+      )}
+
+      {/* Error */}
+      {!loading && !!error && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Ionicons name="alert-circle-outline" size={40} color="#DC2626" />
+          <Text style={{ color: '#991B1B', fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 20 }}>
+            {error}
+          </Text>
+          <Pressable
+            onPress={() => void doLoad()}
+            style={({ pressed }) => ({
+              backgroundColor: '#111827',
+              paddingHorizontal: 24,
+              paddingVertical: 10,
+              borderRadius: 10,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>נסה שנית</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Empty */}
+      {!loading && !error && filtered.length === 0 && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="search-outline" size={48} color="#C7C7CC" />
+          <Text style={{ color: '#8E8E93', fontWeight: '700', marginTop: 12, fontSize: 16 }}>
+            {query ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
+          </Text>
+        </View>
+      )}
+
+      {/* Grid */}
+      {!loading && !error && filtered.length > 0 && (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: contentPaddingBottom, width: windowWidth }}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void doLoad(true)}
+              tintColor="#555"
+              colors={['#555']}
+            />
+          }
+        >
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: windowWidth }}>
+            {filtered.map((product) => (
+              <Pressable
+                key={product.id}
+                onPress={() => onOpenProduct?.(product)}
+                style={({ pressed }) => ({
+                  width: tileSize,
+                  height: tileSize,
+                  backgroundColor: '#E5E5EA',
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                {product.imageUrl ? (
+                  <Image
+                    source={{ uri: product.imageUrl }}
+                    resizeMode="cover"
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                ) : (
+                  <ProductImage product={product} height={tileSize} />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+      )}
+
+      <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
     </SafeAreaView>
   );
 }

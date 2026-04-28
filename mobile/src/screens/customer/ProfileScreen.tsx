@@ -17,12 +17,7 @@ import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../li
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
-import {
-  getStoreBottomBarMetrics,
-  STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG,
-  StoreFloatingTabBar,
-  type StoreBottomTabId,
-} from '../store/StoreHomeScreen';
+import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
 import type { CustomerOrderRow } from '../../types/database';
 
 /* ─── palette (minimal, monochrome) ───────────────────────────────────────── */
@@ -325,14 +320,14 @@ const ICON_SIZE = 32;
 const SIDE_PADDING = 16;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG },
+  safe: { flex: 1, backgroundColor: '#1F2937' },
   root: { flex: 1, backgroundColor: P.bg },
 
   headerStack: { gap: 16, paddingTop: 0 },
 
   /* top bar — dark slab with rounded bottom corners */
   headerBg: {
-    backgroundColor: STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG,
+    backgroundColor: '#1F2937',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: 'hidden',
