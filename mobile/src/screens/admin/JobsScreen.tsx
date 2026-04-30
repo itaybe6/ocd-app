@@ -4,7 +4,7 @@ import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays, Check, Clock, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2 } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -725,7 +725,6 @@ export function JobsScreen() {
     []
   );
 
-  const tagLabel = (k: JobKind) => (k === 'regular' ? 'משימת ריח' : 'משימה אחרת');
   const tagChipText = (k: JobKind) => (k === 'regular' ? 'ריח' : 'אחרת');
 
   const statusMeta = (s: JobStatus) =>
@@ -1219,24 +1218,8 @@ export function JobsScreen() {
                 gap: 12,
               }}
             >
-              {/* Title row + pills */}
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', flexWrap: 'wrap', gap: 8, flex: 1 }}>
-                  <Text style={{ color: ui.text, fontSize: 18, fontWeight: '800', textAlign: 'right', letterSpacing: -0.4 }}>
-                    {tagLabel(selected.kind)} - #{selected.order_number ?? '—'}
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: selected.kind === 'installation' ? 'rgba(175,82,222,0.10)' : selected.kind === 'special' ? 'rgba(255,149,0,0.10)' : 'rgba(0,122,255,0.10)',
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <Text style={{ color: selected.kind === 'installation' ? '#AF52DE' : selected.kind === 'special' ? '#FF9500' : '#007AFF', fontWeight: '700', fontSize: 12 }}>{tagChipText(selected.kind)}</Text>
-                  </View>
-                </View>
-
+              {/* Status + task kind — grouped on the physical left (flex-end in row-reverse) */}
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
                 <View
                   style={{
                     flexDirection: 'row-reverse',
@@ -1263,6 +1246,16 @@ export function JobsScreen() {
                   >
                     {statusMeta(selected.status).label}
                   </Text>
+                </View>
+                <View
+                  style={{
+                    backgroundColor: selected.kind === 'installation' ? 'rgba(175,82,222,0.10)' : selected.kind === 'special' ? 'rgba(255,149,0,0.10)' : 'rgba(0,122,255,0.10)',
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 8,
+                  }}
+                >
+                  <Text style={{ color: selected.kind === 'installation' ? '#AF52DE' : selected.kind === 'special' ? '#FF9500' : '#007AFF', fontWeight: '700', fontSize: 12 }}>{tagChipText(selected.kind)}</Text>
                 </View>
               </View>
 
@@ -1519,53 +1512,29 @@ export function JobsScreen() {
 
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
-                  {Platform.OS === 'web' ? (
-                    <SelectSheet
-                      label="תאריך"
-                      value={createDateYmd}
-                      placeholder="בחר תאריך…"
-                      options={dateOptions}
-                      onChange={setCreateDateYmd}
-                    />
-                  ) : (
-                    <View style={{ gap: 6 }}>
-                      <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך</Text>
-                      <Pressable
-                        onPress={() => {
-                          if (Platform.OS === 'android') {
-                            DateTimePickerAndroid.open({
-                              value: createDateValue,
-                              mode: 'date',
-                              is24Hour: true,
-                              onChange: (_event, selectedDate) => {
-                                if (!selectedDate) return;
-                                setCreateDateYmd(yyyyMmDd(selectedDate));
-                              },
-                            });
-                            return;
-                          }
-                          setCreateDatePickerOpen(true);
-                        }}
-                        style={{
-                          backgroundColor: colors.elevated,
-                          borderColor: colors.border,
-                          borderWidth: 1,
-                          borderRadius: 14,
-                          paddingHorizontal: 14,
-                          paddingVertical: 12,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                        }}
-                      >
-                        <CalendarDays size={18} color={colors.muted} />
-                        <Text style={{ color: createDateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
-                          {createDateYmd ? createDateYmd : 'בחר תאריך…'}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  )}
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך</Text>
+                    <Pressable
+                      onPress={() => setCreateDatePickerOpen(true)}
+                      style={{
+                        backgroundColor: colors.elevated,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                        borderRadius: 14,
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                      }}
+                    >
+                      <CalendarDays size={18} color={colors.muted} />
+                      <Text style={{ color: createDateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
+                        {createDateYmd ? createDateYmd : 'בחר תאריך…'}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <SelectSheet
@@ -1740,26 +1709,66 @@ export function JobsScreen() {
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
           </View>
 
-          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
-            <DateTimePicker
-              value={createDateValue}
-              mode="date"
-              display="inline"
-              themeVariant="light"
-              onChange={(_event, selectedDate) => {
-                if (!selectedDate) return;
-                setCreateDateYmd(yyyyMmDd(selectedDate));
-              }}
-            />
-          </View>
-
-          {!!createDateYmd && (
-            <Button
-              title="אישור"
-              onPress={() => {
-                setCreateDatePickerOpen(false);
-              }}
-            />
+          {Platform.OS === 'ios' ? (
+            <>
+              <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
+                <DateTimePicker
+                  value={createDateValue}
+                  mode="date"
+                  display="inline"
+                  themeVariant="light"
+                  onChange={(_event, selectedDate) => {
+                    if (!selectedDate) return;
+                    setCreateDateYmd(yyyyMmDd(selectedDate));
+                  }}
+                />
+              </View>
+              <Button
+                title="אישור"
+                onPress={() => {
+                  setCreateDateYmd((prev) => prev || yyyyMmDd(createDateValue));
+                  setCreateDatePickerOpen(false);
+                }}
+              />
+            </>
+          ) : (
+            <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+              <View style={{ gap: 8 }}>
+                {dateOptions.map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => {
+                      setCreateDateYmd(opt.value);
+                      setCreateDatePickerOpen(false);
+                    }}
+                  >
+                    {({ pressed }) => (
+                      <View
+                        style={{
+                          backgroundColor: opt.value === createDateYmd ? colors.primary : colors.elevated,
+                          borderRadius: 14,
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderWidth: 1,
+                          borderColor: opt.value === createDateYmd ? colors.primary : colors.border,
+                          opacity: pressed ? 0.94 : 1,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: opt.value === createDateYmd ? '#fff' : colors.text,
+                            fontWeight: '800',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {opt.label}
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
           )}
         </View>
       </ModalSheet>

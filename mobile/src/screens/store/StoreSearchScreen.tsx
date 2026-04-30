@@ -56,7 +56,7 @@ export function StoreSearchScreen({
     try {
       if (isRefresh) setRefreshing(true);
       setError(null);
-      const raw = await fetchProducts(30);
+      const raw = await fetchProducts();
       const mapped = raw
         .map((p, i) => toStoreProduct(p, i))
         .sort(() => Math.random() - 0.5);
@@ -85,7 +85,7 @@ export function StoreSearchScreen({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const raw = await searchProducts(q, 40);
+        const raw = await searchProducts(q);
         setResults(raw.map((p, i) => toStoreProduct(p, i)));
       } catch {
         setResults([]);

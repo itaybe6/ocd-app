@@ -1602,8 +1602,8 @@ export function StoreHomeScreen({
         setLoading(true);
         setError(null);
         const [liveProducts, liveCollections] = await Promise.all([
-          fetchProducts(24),
-          fetchCollections(50),
+          fetchProducts(),
+          fetchCollections(),
         ]);
         let liveMenuItems: ShopifyMenuItem[] = [];
 
@@ -1865,7 +1865,7 @@ export function StoreHomeScreen({
         if (subs.length) {
           if (selectedHomeSubcategoryId === STORE_CATEGORY_ALL_SUBS_ID) {
             const handles = [selectedCategory, ...subs.map((s) => s.id)];
-            const buckets = await Promise.all(handles.map((h) => fetchCollectionProducts(h, 28)));
+            const buckets = await Promise.all(handles.map((h) => fetchCollectionProducts(h)));
             if (!isMounted) return;
             const byId = new Map<string, ShopifyProduct>();
             for (const bucket of buckets) {
@@ -1878,7 +1878,7 @@ export function StoreHomeScreen({
               toStoreProduct(product, index, selectedCategoryName, selectedCategory),
             );
           } else {
-            const collectionProducts = await fetchCollectionProducts(selectedHomeSubcategoryId, 40);
+            const collectionProducts = await fetchCollectionProducts(selectedHomeSubcategoryId);
             if (!isMounted) return;
             const subTitle = subs.find((s) => s.id === selectedHomeSubcategoryId)?.title ?? selectedCategoryName;
             mappedProducts = collectionProducts.map((product, index) =>
@@ -1886,7 +1886,7 @@ export function StoreHomeScreen({
             );
           }
         } else {
-          const collectionProducts = await fetchCollectionProducts(selectedCategory, 40);
+          const collectionProducts = await fetchCollectionProducts(selectedCategory);
           if (!isMounted) return;
           mappedProducts = collectionProducts.map((product, index) =>
             toStoreProduct(product, index, selectedCategoryName, selectedCategory),
@@ -2850,7 +2850,7 @@ export function StoreCategoryScreen({
         setError(null);
 
         if (!subcategories?.length) {
-          const collectionProducts = await fetchCollectionProducts(categoryId, 80);
+          const collectionProducts = await fetchCollectionProducts(categoryId);
           if (!isMounted) return;
           setProducts(collectionProducts.map((product, index) => toStoreProduct(product, index, categoryTitle, categoryId)));
           return;
@@ -2858,7 +2858,7 @@ export function StoreCategoryScreen({
 
         if (selectedSubcategoryId === STORE_CATEGORY_ALL_SUBS_ID) {
           const handles = [categoryId, ...subcategories.map((s) => s.id)];
-          const buckets = await Promise.all(handles.map((h) => fetchCollectionProducts(h, 80)));
+          const buckets = await Promise.all(handles.map((h) => fetchCollectionProducts(h)));
           if (!isMounted) return;
           const byId = new Map<string, ShopifyProduct>();
           for (const bucket of buckets) {
@@ -2869,7 +2869,7 @@ export function StoreCategoryScreen({
           const merged = Array.from(byId.values());
           setProducts(merged.map((product, index) => toStoreProduct(product, index, categoryTitle, categoryId)));
         } else {
-          const collectionProducts = await fetchCollectionProducts(selectedSubcategoryId, 80);
+          const collectionProducts = await fetchCollectionProducts(selectedSubcategoryId);
           if (!isMounted) return;
           setProducts(
             collectionProducts.map((product, index) =>

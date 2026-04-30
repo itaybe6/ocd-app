@@ -38,6 +38,8 @@ const CARD_BG = '#FFFFFF';
 const LABEL_COLOR = '#8E8E93';
 const SEPARATOR = '#E5E5EA';
 
+const formatTime = (time: string) => time.slice(0, 5);
+
 export function WorkTemplateStationsScreen({
   navigation,
   route,
@@ -278,15 +280,14 @@ export function WorkTemplateStationsScreen({
                   <View style={[s.cardBody, isEditMode && s.cardBodyEditing]}>
                     {/* ── Card top row: order + title + time ── */}
                     <View style={s.cardTopRow}>
+                      <View style={s.cardTitleGroup}>
+                        <View style={s.orderPill}>
+                          <Text style={s.orderPillText}>תחנה {item.order}</Text>
+                        </View>
+                      </View>
                       <View style={s.timePill}>
                         <Clock size={12} color={colors.primary} strokeWidth={2.5} />
-                        <Text style={s.timePillText}>{item.scheduled_time}</Text>
-                      </View>
-                      <View style={s.cardTitleGroup}>
-                        <Text style={s.cardTitle}>תחנה #{item.order}</Text>
-                        <View style={s.orderCircle}>
-                          <Text style={s.orderCircleText}>{item.order}</Text>
-                        </View>
+                        <Text style={s.timePillText}>{formatTime(item.scheduled_time)}</Text>
                       </View>
                     </View>
 
@@ -607,24 +608,18 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 9,
   },
-  orderCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  orderPill: {
+    borderRadius: 20,
     backgroundColor: 'rgba(37,99,235,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  orderCircleText: {
+  orderPillText: {
     color: colors.primary,
     fontWeight: '900',
     fontSize: 13,
-  },
-  cardTitle: {
-    color: colors.text,
-    fontWeight: '800',
-    fontSize: 16,
-    letterSpacing: -0.2,
   },
   timePill: {
     flexDirection: 'row',

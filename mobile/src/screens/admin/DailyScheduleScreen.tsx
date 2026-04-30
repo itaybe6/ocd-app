@@ -22,7 +22,6 @@ import {
   Clock,
   Droplets,
   Layers,
-  ListFilter,
   Pencil,
   Trash2,
   X,
@@ -39,16 +38,9 @@ import { useLoading } from '../../state/LoadingContext';
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
-type FilterType = 'all' | 'pending' | 'completed';
 
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const HE_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
-
-const FILTERS: { value: FilterType; label: string }[] = [
-  { value: 'all',       label: 'הכל'    },
-  { value: 'pending',   label: 'ממתין'  },
-  { value: 'completed', label: 'הושלם'  },
-];
 
 type Unified = {
   kind: Kind;
@@ -114,7 +106,6 @@ export function DailyScheduleScreen() {
   const [workerId, setWorkerId] = useState('');
   const [items, setItems] = useState<Unified[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<FilterType>('all');
 
   const [edit, setEdit] = useState<Unified | null>(null);
   const [newTime, setNewTime] = useState('09:00');
@@ -185,12 +176,6 @@ export function DailyScheduleScreen() {
     const pending = total - completed;
     return { total, completed, pending };
   }, [items]);
-
-  const filteredItems = useMemo(() => {
-    if (filter === 'pending')   return items.filter((i) => i.status === 'pending');
-    if (filter === 'completed') return items.filter((i) => i.status === 'completed');
-    return items;
-  }, [items, filter]);
 
   const fetchUsers = useCallback(async () => {
     const { data, error } = await supabase.from('users').select('id, name, role, avatar_url').order('name');
@@ -448,51 +433,15 @@ export function DailyScheduleScreen() {
             </View>
           </View>
         )}
-
-        {/* ── Section Header ────────────────────────────── */}
-        <View style={st.secHeader}>
-          <View style={st.secTitleGroup}>
-            <Text style={st.secTitle}>משימות</Text>
-            <View style={st.secBadge}>
-              <Text style={st.secBadgeText}>{filteredItems.length}</Text>
-            </View>
-          </View>
-          <View style={st.secFilterBtn}>
-            <ListFilter size={14} color={colors.muted} strokeWidth={2} />
-          </View>
-        </View>
-
-        {/* ── Filter Chips ──────────────────────────────── */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={st.filterBar}
-        >
-          {FILTERS.map((f) => (
-            <Pressable
-              key={f.value}
-              style={({ pressed }) => [
-                st.filterChip,
-                filter === f.value && st.filterChipActive,
-                pressed && { opacity: 0.75 },
-              ]}
-              onPress={() => setFilter(f.value)}
-            >
-              <Text style={[st.filterChipText, filter === f.value && st.filterChipTextActive]}>
-                {f.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       </View>
     ),
-    [calMonthLabel, day, filter, filteredItems.length, items.length, parsedDay, prettyDay, stats, threeWeeks, todayStr, weekDates, weekScrollWidth, workerId, workerOptions],
+    [calMonthLabel, day, items.length, parsedDay, prettyDay, stats, threeWeeks, todayStr, weekDates, weekScrollWidth, workerId, workerOptions],
   );
 
   return (
     <View style={st.screen}>
       <FlatList
-        data={filteredItems}
+        data={items}
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={st.listContent}
         refreshing={loading}
@@ -935,72 +884,6 @@ const st = StyleSheet.create({
     height: '70%' as any,
     backgroundColor: '#F0F0F5',
     alignSelf: 'center',
-  },
-
-  // ── Section Header ─────────────────────────────────
-  secHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  secTitleGroup: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-  },
-  secTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  secBadge: {
-    backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 11,
-    paddingVertical: 3,
-  },
-  secBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  secFilterBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // ── Filter Chips ───────────────────────────────────
-  filterBar: {
-    flexDirection: 'row-reverse',
-    gap: 7,
-    paddingBottom: 2,
-  },
-  filterChip: {
-    paddingHorizontal: 15,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: '#fff',
-  },
-  filterChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(37,99,235,0.06)',
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
-  },
-  filterChipTextActive: {
-    color: colors.primary,
   },
 
   // ── Task Card ──────────────────────────────────────

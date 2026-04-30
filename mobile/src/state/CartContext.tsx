@@ -11,6 +11,7 @@ import {
   type ShopifyCartProduct,
   updateCartLines,
 } from '../lib/shopify';
+import { buildMobileAppCartOptions } from '../services/shopify';
 
 const STORAGE_KEY = 'shopify-storefront-cart-id';
 
@@ -159,7 +160,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             return addCartLines(cart.id, [{ merchandiseId: product.variantId, quantity: qty }]);
           }
 
-          return createCart([{ merchandiseId: product.variantId, quantity: qty }]);
+          return createCart(
+            [{ merchandiseId: product.variantId, quantity: qty }],
+            buildMobileAppCartOptions(),
+          );
         });
 
         await syncCart(nextCart);

@@ -1,32 +1,35 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  CalendarDays,
-  CalendarCheck2,
-  ChevronLeft,
-  ClipboardList,
-  Layers,
-  Plus,
-  X,
-} from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { ModalDialog } from '../../components/ModalDialog';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { colors } from '../../theme/colors';
 import { supabase } from '../../lib/supabase';
 import { useLoading } from '../../state/LoadingContext';
 import { yyyyMmDd } from '../../lib/time';
 import { fetchWorkTemplatesSorted, templateDay, type WorkTemplateLite } from '../../lib/workTemplates';
 
 type Template = { id: string; day: number };
-type WorkSchedule = { id: string; date: string; template_id: string; created_at?: string };
+type WorkSchedule = { id: string; date: string; template_id: string };
 type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
 type ServicePoint = { id: string; customer_id: string; refill_amount: number };
 
-const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'] as const;
+const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+// Chronological Sun→Sat; the row uses flexDirection: 'row-reverse' so
+// Sunday lands on the right and Saturday on the left.
+const DAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+const SCREEN_W = Dimensions.get('window').width;
+const H_PAD = 4;
+const CELL_W = Math.floor((SCREEN_W - H_PAD * 2) / 7);
+const CELL_H = 80;
+
+function toDateStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 function formatDateHebrew(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -34,8 +37,7 @@ function formatDateHebrew(dateStr: string): string {
   const dayName = HEBREW_DAYS[d.getDay()];
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return `יום ${dayName}, ${dd}/${mm}/${yyyy}`;
+  return `יום ${dayName}, ${dd}/${mm}/${d.getFullYear()}`;
 }
 
 function combine(dateYmd: string, timeHm: string): string {
@@ -44,20 +46,197 @@ function combine(dateYmd: string, timeHm: string): string {
   return d.toISOString();
 }
 
+// ─── MonthView ────────────────────────────────────────────────────────────────
+
+type MonthViewProps = {
+  year: number;
+  month: number;
+  today: string;
+  scheduleByDate: Map<string, WorkSchedule>;
+  templateMap: Map<string, Template>;
+  onDayPress: (dateStr: string) => void;
+};
+
+function MonthView({ year, month, today, scheduleByDate, templateMap, onDayPress }: MonthViewProps) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
+  // Grid uses flexDirection: 'row-reverse', so Sunday is on the right.
+  // Leading empty cells before day 1 = firstDow (0 if Sunday, 6 if Saturday).
+  const leading = firstDow;
+
+  const cells = useMemo(() => {
+    const arr: Array<{ type: 'empty'; key: string } | { type: 'day'; day: number; dateStr: string }> = [];
+    for (let i = 0; i < leading; i++) arr.push({ type: 'empty', key: `e${i}` });
+    for (let d = 1; d <= daysInMonth; d++) arr.push({ type: 'day', day: d, dateStr: toDateStr(year, month, d) });
+    while (arr.length % 7 !== 0) arr.push({ type: 'empty', key: `t${arr.length}` });
+    return arr;
+  }, [year, month, daysInMonth, leading]);
+
+  return (
+    <View style={mv.block}>
+      <Text style={mv.title}>{`${MONTH_NAMES[month]} ${year}`}</Text>
+
+      {/* Day-of-week header */}
+      <View style={mv.headerRow}>
+        {DAY_LABELS.map((label, i) => (
+          <View key={i} style={mv.headerCell}>
+            <Text style={[mv.headerText, i === 6 && mv.satText]}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={mv.divider} />
+
+      {/* Day grid */}
+      <View style={mv.grid}>
+        {cells.map((cell, idx) => {
+          if (cell.type === 'empty') {
+            return <View key={(cell as any).key ?? idx} style={mv.cell} />;
+          }
+          const { day, dateStr } = cell;
+          const schedule = scheduleByDate.get(dateStr);
+          const template = schedule ? templateMap.get(schedule.template_id) : undefined;
+          const isToday = dateStr === today;
+          const dow = new Date(dateStr + 'T00:00:00').getDay();
+          const isSat = dow === 6;
+
+          return (
+            <Pressable
+              key={dateStr}
+              style={({ pressed }) => [mv.cell, pressed && mv.cellPressed]}
+              onPress={() => onDayPress(dateStr)}
+            >
+              <View style={[mv.numWrap, isToday && mv.numWrapToday]}>
+                <Text style={[mv.dayNum, isToday && mv.dayNumToday, isSat && !isToday && mv.satNum]}>
+                  {day}
+                </Text>
+              </View>
+              {template ? (
+                <View style={mv.badge}>
+                  <Text style={mv.badgeText} numberOfLines={1}>{`יום ${template.day}`}</Text>
+                </View>
+              ) : (
+                <View style={mv.badgePlaceholder} />
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const mv = StyleSheet.create({
+  block: {
+    marginHorizontal: H_PAD,
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'right',
+    marginBottom: 8,
+    paddingRight: 8,
+  },
+  headerRow: {
+    flexDirection: 'row-reverse',
+    marginBottom: 4,
+  },
+  headerCell: {
+    width: CELL_W,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  headerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  satText: {
+    color: '#FF3B30',
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#D1D5DB',
+    marginBottom: 0,
+  },
+  grid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+  },
+  cell: {
+    width: CELL_W,
+    height: CELL_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  cellPressed: {
+    backgroundColor: '#EFF6FF',
+  },
+  numWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numWrapToday: {
+    backgroundColor: '#007AFF',
+  },
+  dayNum: {
+    fontSize: 18,
+    fontWeight: '400',
+    color: '#0F172A',
+  },
+  dayNumToday: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  satNum: {
+    color: '#FF3B30',
+  },
+  badge: {
+    marginTop: 3,
+    backgroundColor: '#2563EB',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    maxWidth: CELL_W - 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  badgePlaceholder: {
+    height: 18,
+    marginTop: 3,
+  },
+});
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export function WorkScheduleScreen() {
   const { setIsLoading } = useLoading();
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [editTemplateId, setEditTemplateId] = useState('');
 
-  const [date, setDate] = useState(yyyyMmDd(new Date()));
-  const [templateId, setTemplateId] = useState('');
-  const [selectedSchedule, setSelectedSchedule] = useState<WorkSchedule | null>(null);
+  const today = yyyyMmDd(new Date());
+  const nowDate = new Date();
 
-  const templateOptions = useMemo(
-    () => templates.map((t) => ({ value: t.id, label: `יום ${t.day}` })),
-    [templates],
-  );
+  const scheduleByDate = useMemo(() => {
+    const m = new Map<string, WorkSchedule>();
+    for (const s of schedules) m.set(s.date, s);
+    return m;
+  }, [schedules]);
 
   const templateMap = useMemo(() => {
     const m = new Map<string, Template>();
@@ -65,12 +244,31 @@ export function WorkScheduleScreen() {
     return m;
   }, [templates]);
 
+  const templateOptions = useMemo(
+    () => templates.map((t) => ({ value: t.id, label: `יום ${t.day}` })),
+    [templates],
+  );
+
+  const months = useMemo(() => {
+    const result: { year: number; month: number }[] = [];
+    let y = nowDate.getFullYear();
+    let mo = nowDate.getMonth() - 1;
+    if (mo < 0) { mo += 12; y--; }
+    for (let i = 0; i < 9; i++) {
+      result.push({ year: y, month: mo });
+      mo++;
+      if (mo > 11) { mo = 0; y++; }
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
       const [tRes, sRes] = await Promise.all([
         fetchWorkTemplatesSorted(),
-        supabase.from('work_schedules').select('id, date, template_id, created_at').order('date', { ascending: false }),
+        supabase.from('work_schedules').select('id, date, template_id').order('date', { ascending: false }),
       ]);
       if (sRes.error) throw sRes.error;
       const normalized = (tRes.templates ?? [])
@@ -93,27 +291,29 @@ export function WorkScheduleScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchAll();
-    }, [fetchAll]),
-  );
+  useFocusEffect(useCallback(() => { fetchAll(); }, [fetchAll]));
+
+  const handleDayPress = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    setEditTemplateId(scheduleByDate.get(dateStr)?.template_id ?? '');
+  };
 
   const assignTemplate = async () => {
-    if (!date.trim()) return Toast.show({ type: 'error', text1: 'חסר תאריך' });
-    if (!templateId) return Toast.show({ type: 'error', text1: 'בחר תבנית' });
-
+    if (!selectedDate) return;
+    if (!editTemplateId) return Toast.show({ type: 'error', text1: 'בחר תבנית' });
     try {
       setIsLoading(true);
-
-      const upsertRes = await supabase.from('work_schedules').upsert({ date: date.trim(), template_id: templateId }).select('id, date, template_id').single();
+      const upsertRes = await supabase
+        .from('work_schedules')
+        .upsert({ date: selectedDate, template_id: editTemplateId })
+        .select('id, date, template_id')
+        .single();
       if (upsertRes.error) throw upsertRes.error;
-      const schedule = upsertRes.data as any as WorkSchedule;
 
       const { data: stations, error: stErr } = await supabase
         .from('template_stations')
         .select('id, template_id, "order", customer_id, worker_id, scheduled_time')
-        .eq('template_id', templateId)
+        .eq('template_id', editTemplateId)
         .order('order', { ascending: true });
       if (stErr) throw stErr;
 
@@ -122,12 +322,12 @@ export function WorkScheduleScreen() {
       if (!validStations.length) {
         Toast.show({ type: 'info', text1: 'אין תחנות משובצות', text2: 'שייך לקוח+עובד לתחנות בתבניות עבודה' });
         await fetchAll();
+        setSelectedDate(null);
         return;
       }
 
-      const start = new Date(`${date.trim()}T00:00:00`).toISOString();
-      const end = new Date(`${date.trim()}T23:59:59`).toISOString();
-
+      const start = new Date(`${selectedDate}T00:00:00`).toISOString();
+      const end = new Date(`${selectedDate}T23:59:59`).toISOString();
       const customerIds = Array.from(new Set(validStations.map((s) => s.customer_id!)));
       const { data: spData, error: spErr } = await supabase
         .from('service_points')
@@ -141,10 +341,10 @@ export function WorkScheduleScreen() {
       }
 
       for (const st of validStations) {
-        const jobDate = combine(date.trim(), st.scheduled_time || '09:00');
+        const jobDate = combine(selectedDate, st.scheduled_time || '09:00');
         const { data: existing, error: existingErr } = await supabase
           .from('jobs')
-          .select('id, customer_id, worker_id, date, status')
+          .select('id')
           .eq('status', 'pending')
           .eq('customer_id', st.customer_id!)
           .eq('worker_id', st.worker_id!)
@@ -161,12 +361,7 @@ export function WorkScheduleScreen() {
         } else {
           const { data: job, error: jobErr } = await supabase
             .from('jobs')
-            .insert({
-              customer_id: st.customer_id,
-              worker_id: st.worker_id,
-              date: jobDate,
-              status: 'pending',
-            })
+            .insert({ customer_id: st.customer_id, worker_id: st.worker_id, date: jobDate, status: 'pending' })
             .select('id')
             .single();
           if (jobErr) throw jobErr;
@@ -183,15 +378,16 @@ export function WorkScheduleScreen() {
           const existingSpIds = new Set((existingJsp ?? []).map((r: any) => r.service_point_id as string));
           const missing = sps.filter((sp) => !existingSpIds.has(sp.id));
           if (missing.length) {
-            const rows = missing.map((sp) => ({ job_id: jobId, service_point_id: sp.id, custom_refill_amount: null }));
-            const { error: jspErr } = await supabase.from('job_service_points').insert(rows);
+            const { error: jspErr } = await supabase
+              .from('job_service_points')
+              .insert(missing.map((sp) => ({ job_id: jobId, service_point_id: sp.id, custom_refill_amount: null })));
             if (jspErr) throw jspErr;
           }
         }
       }
 
       Toast.show({ type: 'success', text1: 'שויך תבנית ונוצרו משימות' });
-      setSelectedSchedule(schedule);
+      setSelectedDate(null);
       await fetchAll();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שיוך נכשל', text2: e?.message ?? 'Unknown error' });
@@ -200,12 +396,14 @@ export function WorkScheduleScreen() {
     }
   };
 
-  const removeTemplate = async (schedule: WorkSchedule) => {
+  const removeTemplate = async () => {
+    if (!selectedDate) return;
+    const schedule = scheduleByDate.get(selectedDate);
+    if (!schedule) return;
     try {
       setIsLoading(true);
-      const day = schedule.date;
-      const start = new Date(`${day}T00:00:00`).toISOString();
-      const end = new Date(`${day}T23:59:59`).toISOString();
+      const start = new Date(`${selectedDate}T00:00:00`).toISOString();
+      const end = new Date(`${selectedDate}T23:59:59`).toISOString();
 
       const { data: stations, error: stErr } = await supabase
         .from('template_stations')
@@ -242,7 +440,7 @@ export function WorkScheduleScreen() {
       const { error } = await supabase.from('work_schedules').delete().eq('id', schedule.id);
       if (error) throw error;
       Toast.show({ type: 'success', text1: 'הוסר שיוך תבנית' });
-      setSelectedSchedule(null);
+      setSelectedDate(null);
       await fetchAll();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'הסרה נכשלה', text2: e?.message ?? 'Unknown error' });
@@ -251,179 +449,74 @@ export function WorkScheduleScreen() {
     }
   };
 
-  const listHeader = useMemo(
-    () => (
-      <View style={{ gap: 20, marginTop: 4 }}>
-        {/* ── Assignment Form ─────────────────────────────────── */}
-        <View style={st.formCard}>
-          <View style={st.formHeaderRow}>
-            <View style={st.formIconBubble}>
-              <Plus size={16} color="#fff" strokeWidth={2.5} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.formTitle}>שיוך תבנית לתאריך</Text>
-              <Text style={st.formSubtitle}>בחר תאריך ותבנית ליצירת משימות</Text>
-            </View>
-          </View>
-
-          <View style={st.formDivider} />
-
-          <View style={{ gap: 12 }}>
-            <Input label="תאריך (yyyy-MM-dd)" value={date} onChangeText={setDate} />
-            <SelectSheet
-              label="תבנית"
-              value={templateId}
-              placeholder="בחר תבנית…"
-              options={templateOptions}
-              onChange={setTemplateId}
-            />
-            <Button
-              title="שייך תבנית + צור משימות"
-              onPress={assignTemplate}
-              disabled={!date.trim() || !templateId}
-              style={{ borderRadius: 14 }}
-            />
-          </View>
-        </View>
-
-        {/* ── Section Header ──────────────────────────────────── */}
-        <View style={st.sectionHeader}>
-          <View style={st.sectionIconWrap}>
-            <ClipboardList size={14} color={colors.primary} strokeWidth={2.2} />
-          </View>
-          <Text style={st.sectionLabel}>שיוכים קיימים</Text>
-          <View style={st.countBadge}>
-            <Text style={st.countText}>{schedules.length}</Text>
-          </View>
-        </View>
-      </View>
-    ),
-    [schedules.length, date, templateId, templateOptions],
-  );
-
-  const renderScheduleCard = ({ item }: { item: WorkSchedule }) => {
-    const tpl = templateMap.get(item.template_id);
-    const dayLabel = tpl ? `יום ${tpl.day}` : null;
-
-    return (
-      <Pressable
-        onPress={() => setSelectedSchedule(item)}
-        style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}
-      >
-        <View style={st.card}>
-          <View style={st.cardInner}>
-            <View style={st.cardIconWrap}>
-              <CalendarCheck2 size={18} color={colors.primary} strokeWidth={2} />
-            </View>
-            <View style={st.cardContent}>
-              <Text style={st.cardTitle}>{formatDateHebrew(item.date)}</Text>
-              <View style={st.cardMetaRow}>
-                <Layers size={12} color={colors.muted} strokeWidth={2} />
-                <Text style={st.cardMeta}>
-                  {dayLabel ? `תבנית ${dayLabel}` : 'תבנית משויכת'}
-                </Text>
-              </View>
-            </View>
-            <ChevronLeft size={18} color={colors.muted} strokeWidth={2} />
-          </View>
-        </View>
-      </Pressable>
-    );
-  };
+  const selectedSchedule = selectedDate ? scheduleByDate.get(selectedDate) : undefined;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <FlatList
-        data={schedules}
-        keyExtractor={(i) => i.id}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={st.listContent}
-        refreshing={loading}
-        onRefresh={fetchAll}
-        ListHeaderComponent={listHeader}
-        renderItem={renderScheduleCard}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-        ListEmptyComponent={
-          <View style={st.emptyWrap}>
-            <View style={st.emptyIcon}>
-              <CalendarDays size={28} color={colors.muted} strokeWidth={1.5} />
-            </View>
-            <Text style={st.emptyTitle}>אין שיוכים</Text>
-            <Text style={st.emptySubtitle}>שייך תבנית לתאריך כדי ליצור קו עבודה</Text>
-          </View>
-        }
-        ListFooterComponent={<View style={{ height: 40 }} />}
-      />
+    <View style={st.root}>
+      <ScrollView
+        contentContainerStyle={st.scroll}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchAll} tintColor="#007AFF" />}
+      >
+        {months.map(({ year, month }) => (
+          <MonthView
+            key={`${year}-${month}`}
+            year={year}
+            month={month}
+            today={today}
+            scheduleByDate={scheduleByDate}
+            templateMap={templateMap}
+            onDayPress={handleDayPress}
+          />
+        ))}
+      </ScrollView>
 
-      {/* ── Detail Dialog ─────────────────────────────────────── */}
       <ModalDialog
-        visible={!!selectedSchedule}
-        onClose={() => setSelectedSchedule(null)}
+        visible={!!selectedDate}
+        onClose={() => setSelectedDate(null)}
         containerStyle={st.dialogContainer}
       >
-        {!!selectedSchedule && (
+        {!!selectedDate && (
           <>
-            {/* Header */}
             <View style={st.dialogHeader}>
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, flex: 1 }}>
-                <View style={st.dialogIconBubble}>
-                  <CalendarCheck2 size={18} color="#fff" strokeWidth={2} />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={st.dialogTitle}>פרטי שיוך</Text>
-                  <Text style={st.dialogSubtitle}>{formatDateHebrew(selectedSchedule.date)}</Text>
-                </View>
-              </View>
               <Pressable
-                onPress={() => setSelectedSchedule(null)}
+                onPress={() => setSelectedDate(null)}
                 hitSlop={8}
-                style={({ pressed }) => [st.dialogCloseBtn, pressed && { opacity: 0.6 }]}
+                style={({ pressed }) => [st.closeBtn, pressed && { opacity: 0.6 }]}
               >
-                <X size={16} color={colors.muted} strokeWidth={2.5} />
+                <X size={16} color="#64748B" strokeWidth={2.5} />
               </Pressable>
+              <View style={st.dialogTitleWrap}>
+                <Text style={st.dialogTitle}>{formatDateHebrew(selectedDate)}</Text>
+                {selectedSchedule && (
+                  <Text style={st.dialogSub}>
+                    {`תבנית נוכחית: יום ${templateMap.get(selectedSchedule.template_id)?.day ?? '—'}`}
+                  </Text>
+                )}
+              </View>
             </View>
 
-            {/* Body */}
             <View style={st.dialogBody}>
-              {/* Details Card */}
-              <View style={st.dialogDetailsCard}>
-                <View style={st.detailRow}>
-                  <Text style={st.detailLabel}>תאריך</Text>
-                  <Text style={st.detailValue}>{selectedSchedule.date}</Text>
-                </View>
-                <View style={st.detailDivider} />
-                <View style={st.detailRow}>
-                  <Text style={st.detailLabel}>תבנית</Text>
-                  <View style={st.templateBadge}>
-                    <Layers size={12} color={colors.primary} strokeWidth={2} />
-                    <Text style={st.templateBadgeText}>
-                      {templateMap.get(selectedSchedule.template_id)
-                        ? `יום ${templateMap.get(selectedSchedule.template_id)!.day}`
-                        : selectedSchedule.template_id.slice(0, 8)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Actions */}
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    title="סגור"
-                    variant="secondary"
-                    onPress={() => setSelectedSchedule(null)}
-                    style={{ borderRadius: 14 }}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    title="הסר שיוך"
-                    variant="danger"
-                    onPress={() => removeTemplate(selectedSchedule)}
-                    style={{ borderRadius: 14 }}
-                  />
-                </View>
-              </View>
+              <SelectSheet
+                label="תבנית עבודה"
+                value={editTemplateId}
+                placeholder="בחר תבנית…"
+                options={templateOptions}
+                onChange={setEditTemplateId}
+              />
+              <Button
+                title={selectedSchedule ? 'עדכן תבנית + משימות' : 'שייך תבנית + צור משימות'}
+                onPress={assignTemplate}
+                disabled={!editTemplateId}
+                style={{ borderRadius: 14 }}
+              />
+              {selectedSchedule && (
+                <Button
+                  title="הסר שיוך"
+                  variant="danger"
+                  onPress={removeTemplate}
+                  style={{ borderRadius: 14 }}
+                />
+              )}
             </View>
           </>
         )}
@@ -433,253 +526,57 @@ export function WorkScheduleScreen() {
 }
 
 const st = StyleSheet.create({
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-  },
-
-  formCard: {
-    backgroundColor: colors.elevated,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    gap: 0,
-  },
-  formHeaderRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-  },
-  formIconBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  formTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: colors.text,
-    textAlign: 'right',
-  },
-  formSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
-    textAlign: 'right',
-    marginTop: 1,
-  },
-  formDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 14,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 2,
-  },
-  sectionIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(37,99,235,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.muted,
-    letterSpacing: 0.4,
-    textAlign: 'right',
-  },
-  countBadge: {
-    backgroundColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 24,
-    alignItems: 'center',
-  },
-  countText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.muted,
-  },
-
-  card: {
-    backgroundColor: colors.elevated,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    elevation: 2,
-  },
-  cardInner: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  cardIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: 'rgba(37,99,235,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardContent: {
+  root: {
     flex: 1,
-    gap: 4,
+    backgroundColor: '#FFFFFF',
   },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'right',
-  },
-  cardMetaRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardMeta: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
-    textAlign: 'right',
-  },
-
-  emptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 8,
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
-    backgroundColor: 'rgba(37,99,235,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  emptySubtitle: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
+  scroll: {
+    paddingTop: 8,
+    paddingBottom: 48,
   },
 
   dialogContainer: {
     padding: 0,
-    borderRadius: 24,
+    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: colors.bg,
+    backgroundColor: '#FFFFFF',
   },
   dialogHeader: {
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.elevated,
+    gap: 12,
     paddingHorizontal: 18,
     paddingTop: 18,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
   },
-  dialogIconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: '#F1F5F9',
+  },
+  dialogTitleWrap: {
+    flex: 1,
+    gap: 2,
   },
   dialogTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
     textAlign: 'right',
   },
-  dialogSubtitle: {
+  dialogSub: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
+    fontWeight: '500',
+    color: '#64748B',
     textAlign: 'right',
-  },
-  dialogCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   dialogBody: {
     padding: 18,
-    gap: 16,
-  },
-  dialogDetailsCard: {
-    backgroundColor: colors.elevated,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 10,
-  },
-
-  detailRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  detailLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.muted,
-    textAlign: 'right',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'left',
-  },
-  detailDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-  },
-
-  templateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(37,99,235,0.08)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  templateBadgeText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.primary,
+    gap: 12,
   },
 });

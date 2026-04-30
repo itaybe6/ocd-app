@@ -164,7 +164,7 @@ export function StoreManagementScreen() {
   const loadProductCount = useCallback(async () => {
     try {
       setLoadingProducts(true);
-      const list = await fetchProducts(60);
+      const list = await fetchProducts();
       setProductCount(list.length);
     } catch (e: any) {
       setProductCount(null);

@@ -113,6 +113,21 @@ export type ShopifyCartLineUpdateInput = {
   quantity: number;
 };
 
+export type ShopifyCartAttributeInput = {
+  key: string;
+  value: string;
+};
+
+export type ShopifyCreateCartOptions = {
+  /**
+   * Custom cart attributes that surface on the order in Shopify Admin under
+   * "Additional details". Useful for tagging the channel/source of the order.
+   */
+  attributes?: ShopifyCartAttributeInput[];
+  /** Free-form note that appears on the order in Shopify Admin. */
+  note?: string;
+};
+
 type ShopifyMoneyV2 = {
   amount: string;
   currencyCode: string;
@@ -148,12 +163,18 @@ type ShopifyProductNode = {
   };
 };
 
+type ShopifyPageInfo = {
+  hasNextPage: boolean;
+  endCursor: string | null;
+};
+
 type ShopifyProductsQueryResponse = {
   data?: {
     products: {
       edges: Array<{
         node: ShopifyProductNode;
       }>;
+      pageInfo: ShopifyPageInfo;
     };
   };
   errors?: Array<{
@@ -190,6 +211,7 @@ type ShopifyCollectionsQueryResponse = {
       edges: Array<{
         node: ShopifyCollectionNode;
       }>;
+      pageInfo: ShopifyPageInfo;
     };
   };
   errors?: Array<{
@@ -204,6 +226,7 @@ type ShopifyCollectionProductsQueryResponse = {
         edges: Array<{
           node: ShopifyProductNode;
         }>;
+        pageInfo: ShopifyPageInfo;
       };
     } | null;
   };
@@ -670,59 +693,137 @@ function assertCartMutation(payload: ShopifyCartMutationPayload | undefined | nu
   return normalizedCart;
 }
 
-export async function fetchProducts(first = 12): Promise<ShopifyProduct[]> {
+/**
+ * Shopify Storefront API caps each connection request at 250 nodes.
+ * To retrieve more, we follow the `pageInfo.hasNextPage` cursor in a loop.
+ */
+const SHOPIFY_PAGE_SIZE_MAX = 250;
+
+/**
+ * Compute how many items to request on the next page when an optional
+ * `limit` is provided. When `limit` is undefined, we always request the
+ * maximum page size and rely on `hasNextPage` to terminate the loop.
+ */
+function getNextPageSize(collected: number, limit: number | undefined): number {
+  if (limit === undefined) return SHOPIFY_PAGE_SIZE_MAX;
+  return Math.max(0, Math.min(SHOPIFY_PAGE_SIZE_MAX, limit - collected));
+}
+
+/**
+ * Fetch products from Shopify. When `limit` is omitted, ALL products are
+ * fetched via cursor pagination. Pass a number to cap the result.
+ */
+export async function fetchProducts(limit?: number): Promise<ShopifyProduct[]> {
   const query = `
-    query GetProducts($first: Int!) {
-      products(first: $first, sortKey: BEST_SELLING) {
+    query GetProducts($first: Int!, $after: String) {
+      products(first: $first, after: $after, sortKey: BEST_SELLING) {
         edges {
           node {
             ${PRODUCT_FIELDS}
           }
         }
-      }
-    }
-  `;
-
-  const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, { first });
-  const messages = getGraphQlErrors(payload.errors);
-
-  if (messages.length) {
-    throw new Error(messages.join(', '));
-  }
-
-  return payload.data?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
-}
-
-export async function searchProducts(searchQuery: string, first = 30): Promise<ShopifyProduct[]> {
-  const query = `
-    query SearchProducts($first: Int!, $query: String!) {
-      products(first: $first, query: $query) {
-        edges {
-          node {
-            ${PRODUCT_FIELDS}
-          }
+        pageInfo {
+          hasNextPage
+          endCursor
         }
       }
     }
   `;
 
-  const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, {
-    first,
-    query: searchQuery,
-  });
-  const messages = getGraphQlErrors(payload.errors);
+  const out: ShopifyProduct[] = [];
+  let cursor: string | null = null;
 
-  if (messages.length) {
-    throw new Error(messages.join(', '));
+  while (true) {
+    const first = getNextPageSize(out.length, limit);
+    if (first <= 0) break;
+
+    const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, {
+      first,
+      after: cursor,
+    });
+    const messages = getGraphQlErrors(payload.errors);
+    if (messages.length) {
+      throw new Error(messages.join(', '));
+    }
+
+    const conn = payload.data?.products;
+    if (!conn) break;
+
+    for (const edge of conn.edges) {
+      out.push(normalizeProduct(edge.node));
+      if (limit !== undefined && out.length >= limit) break;
+    }
+
+    if (limit !== undefined && out.length >= limit) break;
+    if (!conn.pageInfo.hasNextPage || !conn.pageInfo.endCursor) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
-  return payload.data?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
+  return out;
 }
 
-export async function fetchCollections(first = 50): Promise<ShopifyCollection[]> {
+/**
+ * Search products via Shopify's `query` argument. When `limit` is omitted,
+ * ALL matching products are fetched via cursor pagination.
+ */
+export async function searchProducts(searchQuery: string, limit?: number): Promise<ShopifyProduct[]> {
   const query = `
-    query GetCollections($first: Int!) {
-      collections(first: $first, sortKey: UPDATED_AT) {
+    query SearchProducts($first: Int!, $after: String, $query: String!) {
+      products(first: $first, after: $after, query: $query) {
+        edges {
+          node {
+            ${PRODUCT_FIELDS}
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `;
+
+  const out: ShopifyProduct[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const first = getNextPageSize(out.length, limit);
+    if (first <= 0) break;
+
+    const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, {
+      first,
+      after: cursor,
+      query: searchQuery,
+    });
+    const messages = getGraphQlErrors(payload.errors);
+    if (messages.length) {
+      throw new Error(messages.join(', '));
+    }
+
+    const conn = payload.data?.products;
+    if (!conn) break;
+
+    for (const edge of conn.edges) {
+      out.push(normalizeProduct(edge.node));
+      if (limit !== undefined && out.length >= limit) break;
+    }
+
+    if (limit !== undefined && out.length >= limit) break;
+    if (!conn.pageInfo.hasNextPage || !conn.pageInfo.endCursor) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+
+  return out;
+}
+
+/**
+ * Fetch collections from Shopify. When `limit` is omitted, ALL collections
+ * are fetched via cursor pagination.
+ */
+export async function fetchCollections(limit?: number): Promise<ShopifyCollection[]> {
+  const query = `
+    query GetCollections($first: Int!, $after: String) {
+      collections(first: $first, after: $after, sortKey: UPDATED_AT) {
         edges {
           node {
             id
@@ -735,18 +836,44 @@ export async function fetchCollections(first = 50): Promise<ShopifyCollection[]>
             }
           }
         }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
       }
     }
   `;
 
-  const payload = await storefrontRequest<ShopifyCollectionsQueryResponse>(query, { first });
-  const messages = getGraphQlErrors(payload.errors);
+  const out: ShopifyCollection[] = [];
+  let cursor: string | null = null;
 
-  if (messages.length) {
-    throw new Error(messages.join(', '));
+  while (true) {
+    const first = getNextPageSize(out.length, limit);
+    if (first <= 0) break;
+
+    const payload = await storefrontRequest<ShopifyCollectionsQueryResponse>(query, {
+      first,
+      after: cursor,
+    });
+    const messages = getGraphQlErrors(payload.errors);
+    if (messages.length) {
+      throw new Error(messages.join(', '));
+    }
+
+    const conn = payload.data?.collections;
+    if (!conn) break;
+
+    for (const edge of conn.edges) {
+      out.push(normalizeCollection(edge.node));
+      if (limit !== undefined && out.length >= limit) break;
+    }
+
+    if (limit !== undefined && out.length >= limit) break;
+    if (!conn.pageInfo.hasNextPage || !conn.pageInfo.endCursor) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
-  return payload.data?.collections.edges.map((edge) => normalizeCollection(edge.node)) ?? [];
+  return out;
 }
 
 export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<ShopifyMenuItem[]> {
@@ -823,32 +950,60 @@ export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<Shop
   return payload.data?.menu?.items.map((item) => normalizeMenuItem(item)).filter((item): item is ShopifyMenuItem => !!item) ?? [];
 }
 
-export async function fetchCollectionProducts(handle: string, first = 40): Promise<ShopifyProduct[]> {
+/**
+ * Fetch products inside a single collection. When `limit` is omitted, ALL
+ * products in the collection are fetched via cursor pagination.
+ */
+export async function fetchCollectionProducts(handle: string, limit?: number): Promise<ShopifyProduct[]> {
   const query = `
-    query GetCollectionProducts($handle: String!, $first: Int!) {
+    query GetCollectionProducts($handle: String!, $first: Int!, $after: String) {
       collection(handle: $handle) {
-        products(first: $first, sortKey: BEST_SELLING) {
+        products(first: $first, after: $after, sortKey: BEST_SELLING) {
           edges {
             node {
               ${PRODUCT_FIELDS}
             }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
           }
         }
       }
     }
   `;
 
-  const payload = await storefrontRequest<ShopifyCollectionProductsQueryResponse>(query, {
-    handle,
-    first,
-  });
-  const messages = getGraphQlErrors(payload.errors);
+  const out: ShopifyProduct[] = [];
+  let cursor: string | null = null;
 
-  if (messages.length) {
-    throw new Error(messages.join(', '));
+  while (true) {
+    const first = getNextPageSize(out.length, limit);
+    if (first <= 0) break;
+
+    const payload = await storefrontRequest<ShopifyCollectionProductsQueryResponse>(query, {
+      handle,
+      first,
+      after: cursor,
+    });
+    const messages = getGraphQlErrors(payload.errors);
+    if (messages.length) {
+      throw new Error(messages.join(', '));
+    }
+
+    const conn = payload.data?.collection?.products;
+    if (!conn) break;
+
+    for (const edge of conn.edges) {
+      out.push(normalizeProduct(edge.node));
+      if (limit !== undefined && out.length >= limit) break;
+    }
+
+    if (limit !== undefined && out.length >= limit) break;
+    if (!conn.pageInfo.hasNextPage || !conn.pageInfo.endCursor) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
-  return payload.data?.collection?.products.edges.map((edge) => normalizeProduct(edge.node)) ?? [];
+  return out;
 }
 
 export async function fetchCollectionImage(handle: string): Promise<string | null> {
@@ -923,7 +1078,10 @@ export async function fetchCart(cartId: string): Promise<ShopifyCart | null> {
   return normalizeCart(payload.data?.cart ?? null);
 }
 
-export async function createCart(lines: ShopifyCartLineInput[] = []): Promise<ShopifyCart> {
+export async function createCart(
+  lines: ShopifyCartLineInput[] = [],
+  options: ShopifyCreateCartOptions = {},
+): Promise<ShopifyCart> {
   const query = `
     mutation CreateCart($input: CartInput) {
       cartCreate(input: $input) {
@@ -938,9 +1096,12 @@ export async function createCart(lines: ShopifyCartLineInput[] = []): Promise<Sh
     }
   `;
 
-  const payload = await storefrontRequest<ShopifyCartCreateResponse>(query, {
-    input: lines.length ? { lines } : {},
-  });
+  const input: Record<string, unknown> = {};
+  if (lines.length) input.lines = lines;
+  if (options.attributes?.length) input.attributes = options.attributes;
+  if (options.note) input.note = options.note;
+
+  const payload = await storefrontRequest<ShopifyCartCreateResponse>(query, { input });
 
   return assertCartMutation(payload.data?.cartCreate, payload.errors);
 }
