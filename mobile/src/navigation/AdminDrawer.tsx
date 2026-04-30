@@ -63,7 +63,6 @@ const Drawer = createDrawerNavigator<AdminDrawerParamList>();
 
 type LucideIcon = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 type Item = { key: keyof AdminDrawerParamList; label: string; icon: LucideIcon };
-type Section = { title: string; items: Item[] };
 
 /* ─── Single navigation row ─── */
 function DrawerNavItem({
@@ -105,58 +104,21 @@ function DrawerNavItem({
   );
 }
 
-/* ─── Section group ─── */
-function SectionGroup({ section, activeKey, navigate }: {
-  section: Section;
-  activeKey: string;
-  navigate: (key: string) => void;
-}) {
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionLabelRow}>
-        <View style={styles.sectionDash} />
-        <Text style={styles.sectionTitle}>{section.title}</Text>
-      </View>
-      <View style={styles.sectionCard}>
-        {section.items.map((it) => (
-          <DrawerNavItem
-            key={String(it.key)}
-            label={it.label}
-            Icon={it.icon}
-            active={activeKey === it.key}
-            onPress={() => navigate(it.key as string)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
 /* ─── Drawer content ─── */
 function AdminDrawerContent(props: DrawerContentComponentProps) {
   const { signOut, user } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const sections: Section[] = useMemo(
+  const navItems: Item[] = useMemo(
     () => [
-      {
-        title: 'משימות',
-        items: [
-          { key: 'Jobs', label: 'משימות', icon: ClipboardList },
-        ],
-      },
-      {
-        title: 'ניהול',
-        items: [
-          { key: 'Dashboard', label: 'לוח בקרה', icon: LayoutDashboard },
-          { key: 'DailySchedule', label: 'לוז יומי', icon: CalendarDays },
-          { key: 'WorkSchedule', label: 'קווי עבודה', icon: CalendarDays },
-          { key: 'Users', label: 'משתמשים', icon: UsersIcon },
-          { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
-          { key: 'WorkTemplates', label: 'תבניות עבודה', icon: Settings },
-          { key: 'StoreManagement', label: 'ניהול חנות', icon: Store },
-        ],
-      },
+      { key: 'Jobs', label: 'משימות', icon: ClipboardList },
+      { key: 'Dashboard', label: 'לוח בקרה', icon: LayoutDashboard },
+      { key: 'DailySchedule', label: 'לוז יומי', icon: CalendarDays },
+      { key: 'WorkSchedule', label: 'קווי עבודה', icon: CalendarDays },
+      { key: 'Users', label: 'משתמשים', icon: UsersIcon },
+      { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
+      { key: 'WorkTemplates', label: 'תבניות עבודה', icon: Settings },
+      { key: 'StoreManagement', label: 'ניהול חנות', icon: Store },
     ],
     []
   );
@@ -208,16 +170,21 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
         </View>
       </View>
 
-      {/* ── Navigation sections ── */}
+      {/* ── Navigation ── */}
       <View style={styles.nav}>
-        {sections.map((section) => (
-          <SectionGroup
-            key={section.title}
-            section={section}
-            activeKey={String(activeKey)}
-            navigate={(key) => props.navigation.navigate(key as any)}
-          />
-        ))}
+        <View style={styles.section}>
+          <View style={styles.sectionCard}>
+            {navItems.map((it) => (
+              <DrawerNavItem
+                key={String(it.key)}
+                label={it.label}
+                Icon={it.icon}
+                active={activeKey === it.key}
+                onPress={() => props.navigation.navigate(it.key as any)}
+              />
+            ))}
+          </View>
+        </View>
       </View>
 
       {/* ── Footer / Logout ── */}
@@ -393,26 +360,6 @@ const styles = StyleSheet.create({
   /* Navigation */
   nav: { paddingHorizontal: 14, gap: 6 },
   section: { marginTop: 14 },
-  sectionLabelRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  sectionDash: {
-    width: 16,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: D.border,
-  },
-  sectionTitle: {
-    color: D.muted,
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'right',
-    letterSpacing: 0.6,
-  },
   sectionCard: {
     backgroundColor: D.surface,
     borderRadius: 20,

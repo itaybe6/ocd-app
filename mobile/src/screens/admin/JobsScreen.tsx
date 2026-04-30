@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, Text, View, Image, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarDays, Check, Clock, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2 } from 'lucide-react-native';
+import { CalendarDays, Check, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2, X } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { format, isValid } from 'date-fns';
+import { he } from 'date-fns/locale';
 import { Card } from '../../components/ui/Card';
+import { HebrewMonthCalendar } from '../../components/HebrewMonthCalendar';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
@@ -16,9 +18,10 @@ import { getPublicUrl } from '../../lib/storage';
 import { pickImageFromLibrary } from '../../lib/media';
 import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
 import { supabase } from '../../lib/supabase';
-import { timeSlots, toDate, yyyyMmDd } from '../../lib/time';
+import { yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -36,6 +39,13 @@ const CHIP_TXT_ST = {
   fontWeight: '700' as const,
   color: '#1E3A8A',
 };
+
+function formatHebrewJobDateLabel(ymd: string): string {
+  const [yy, mm, dd] = ymd.slice(0, 10).split('-').map((x) => Number(x));
+  if (!yy || !mm || !dd) return ymd;
+  const d = new Date(yy, mm - 1, dd);
+  return isValid(d) ? format(d, 'EEEE, d MMMM yyyy', { locale: he }) : ymd;
+}
 
 const BTN_ST = {
   width: 36,
@@ -116,6 +126,7 @@ type Filters = {
 };
 
 export function JobsScreen() {
+  const insets = useSafeAreaInsets();
   const { setIsLoading } = useLoading();
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserLite[]>([]);
@@ -156,9 +167,7 @@ export function JobsScreen() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createKind, setCreateKind] = useState<JobKind>('regular');
-  const [createStatus, setCreateStatus] = useState<JobStatus>('pending');
   const [createDateYmd, setCreateDateYmd] = useState('');
-  const [createTimeHm, setCreateTimeHm] = useState('09:00');
   const [createDatePickerOpen, setCreateDatePickerOpen] = useState(false);
 
   const [createWorkerId, setCreateWorkerId] = useState('');
@@ -451,27 +460,6 @@ export function JobsScreen() {
     }
   };
 
-  const timeOptions = useMemo(
-    () => timeSlots({ startHm: '08:00', endHm: '20:00', stepMinutes: 30 }).map((t) => ({ value: t, label: t })),
-    []
-  );
-  const dateOptions = useMemo(() => {
-    const base = new Date();
-    const list: { value: string; label: string }[] = [];
-    for (let i = 0; i <= 180; i++) {
-      const d = new Date(base);
-      d.setDate(d.getDate() + i);
-      const ymd = yyyyMmDd(d);
-      list.push({ value: ymd, label: ymd });
-    }
-    return list;
-  }, []);
-  const createDateValue = useMemo(() => {
-    if (!createDateYmd) return new Date();
-    const d = toDate(createDateYmd);
-    return Number.isNaN(d.getTime()) ? new Date() : d;
-  }, [createDateYmd]);
-
   const createWorkerOptions = useMemo(
     () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
     [users]
@@ -522,7 +510,6 @@ export function JobsScreen() {
 
   const validateCreateCommon = () => {
     if (!createDateYmd.trim()) throw new Error('חסר תאריך (yyyy-MM-dd)');
-    if (!createTimeHm.trim()) throw new Error('חסרה שעה (HH:mm)');
     if (!createWorkerId) throw new Error('חסר עובד');
     if (createKind !== 'special') {
       if (createUseOneTimeCustomer) {
@@ -551,13 +538,13 @@ export function JobsScreen() {
       validateCreateCommon();
       setIsLoading(true);
 
-      const dateIso = combineDateTimeToIso(createDateYmd.trim(), createTimeHm.trim());
+      const dateIso = combineDateTimeToIso(createDateYmd.trim(), '09:00');
       const oneTimeId = await createOneTimeCustomerIfNeeded();
 
       const common: any = {
         worker_id: createWorkerId,
         date: dateIso,
-        status: createStatus,
+        status: 'pending' as const,
         notes: createNotes.trim() || null,
         order_number: createOrderNumber ? Number(createOrderNumber) : null,
       };
@@ -1480,13 +1467,59 @@ export function JobsScreen() {
           setCreateOpen(false);
           setCreateDatePickerOpen(false);
         }}
+        containerStyle={{
+          paddingTop: 4,
+          paddingBottom: 0,
+          paddingHorizontal: 14,
+          maxHeight: screenHeight * 0.92,
+        }}
       >
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Button title="צור" fullWidth={false} onPress={submitCreate} />
-            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>הוספת משימה</Text>
+        <View style={{ height: Math.min(screenHeight * 0.86, screenHeight - insets.top - 8) }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              paddingTop: 6,
+              paddingBottom: 10,
+            }}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="סגור"
+              hitSlop={14}
+              onPress={() => {
+                setCreateOpen(false);
+                setCreateDatePickerOpen(false);
+              }}
+            >
+              {({ pressed }) => (
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    backgroundColor: pressed ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.05)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <X size={22} color={colors.text} strokeWidth={2.5} />
+                </View>
+              )}
+            </Pressable>
+            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right', flex: 1 }} numberOfLines={1}>
+              הוספת משימה
+            </Text>
           </View>
 
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
+          >
           <Card>
             <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>בסיס</Text>
             <View style={{ gap: 10 }}>
@@ -1500,51 +1533,48 @@ export function JobsScreen() {
                 ]}
                 onChange={(v) => setCreateKind(v as JobKind)}
               />
-              <SelectSheet
-                label="סטטוס"
-                value={createStatus}
-                options={[
-                  { value: 'pending', label: 'ממתין' },
-                  { value: 'completed', label: 'הושלם' },
-                ]}
-                onChange={(v) => setCreateStatus(v as JobStatus)}
-              />
 
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <View style={{ gap: 6 }}>
-                    <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך</Text>
-                    <Pressable
-                      onPress={() => setCreateDatePickerOpen(true)}
-                      style={{
-                        backgroundColor: colors.elevated,
-                        borderColor: colors.border,
-                        borderWidth: 1,
-                        borderRadius: 14,
-                        paddingHorizontal: 14,
-                        paddingVertical: 12,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 10,
-                      }}
+              <View style={{ gap: 10 }}>
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>תאריך (שעה: 09:00)</Text>
+                  <Pressable
+                    onPress={() => setCreateDatePickerOpen((o) => !o)}
+                    style={{
+                      backgroundColor: colors.elevated,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                      borderRadius: 14,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                    }}
+                  >
+                    <CalendarDays size={18} color={colors.muted} />
+                    <Text
+                      style={{ color: createDateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}
+                      numberOfLines={2}
                     >
-                      <CalendarDays size={18} color={colors.muted} />
-                      <Text style={{ color: createDateYmd ? colors.text : colors.muted, fontWeight: '800', flex: 1, textAlign: 'right' }}>
-                        {createDateYmd ? createDateYmd : 'בחר תאריך…'}
-                      </Text>
-                    </Pressable>
+                      {createDateYmd ? formatHebrewJobDateLabel(createDateYmd) : 'בחר תאריך…'}
+                    </Text>
+                  </Pressable>
+                </View>
+                {createDatePickerOpen ? (
+                  <View style={{ width: '100%', alignSelf: 'stretch', gap: 8 }}>
+                    <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '600', textAlign: 'right', lineHeight: 18 }}>
+                      לוח מלא · לחיצה על יום לבחירה · החלקה לצדדים לחודש אחר
+                    </Text>
+                    <HebrewMonthCalendar
+                      selected={createDateYmd}
+                      onSelect={(ymd) => {
+                        setCreateDateYmd(ymd);
+                        setCreateDatePickerOpen(false);
+                      }}
+                    />
                   </View>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <SelectSheet
-                    label="שעה"
-                    value={createTimeHm}
-                    placeholder="בחר שעה…"
-                    options={timeOptions}
-                    onChange={setCreateTimeHm}
-                  />
-                </View>
+                ) : null}
               </View>
 
               <SelectSheet
@@ -1555,26 +1585,88 @@ export function JobsScreen() {
                 onChange={setCreateWorkerId}
               />
 
-              <Pressable
-                onPress={() => setCreateUseOneTimeCustomer((p) => !p)}
-                disabled={createKind === 'special'}
-                style={{
-                  backgroundColor: createKind === 'special' ? colors.border : createUseOneTimeCustomer ? colors.primary : colors.elevated,
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                  paddingHorizontal: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '900', textAlign: 'right' }}>
-                  {createKind === 'special'
-                    ? 'לקוח חד-פעמי: לא רלוונטי'
-                    : createUseOneTimeCustomer
-                      ? 'לקוח חד-פעמי: פעיל'
-                      : 'לקוח חד-פעמי: כבוי'}
-                </Text>
-              </Pressable>
+              {createKind === 'special' ? null : (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+                  <View
+                    style={{
+                      flexDirection: 'row-reverse',
+                      backgroundColor: colors.elevated,
+                      borderRadius: 14,
+                      padding: 4,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      gap: 4,
+                    }}
+                  >
+                    <Pressable
+                      onPress={() => setCreateUseOneTimeCustomer(false)}
+                      style={{ flex: 1 }}
+                    >
+                      {({ pressed }) => (
+                        <View
+                          style={{
+                            borderRadius: 11,
+                            paddingVertical: 11,
+                            paddingHorizontal: 8,
+                            backgroundColor: !createUseOneTimeCustomer ? colors.card : 'transparent',
+                            borderWidth: !createUseOneTimeCustomer ? 1.5 : 0,
+                            borderColor: !createUseOneTimeCustomer ? colors.primary : 'transparent',
+                            opacity: pressed ? 0.88 : 1,
+                            ...(Platform.OS === 'ios' && !createUseOneTimeCustomer
+                              ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }
+                              : {}),
+                            ...(!createUseOneTimeCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
+                          }}
+                        >
+                          <Text
+                            style={{
+                              textAlign: 'center',
+                              fontWeight: '900',
+                              fontSize: 14,
+                              color: !createUseOneTimeCustomer ? colors.primary : colors.muted,
+                            }}
+                            numberOfLines={1}
+                          >
+                            לקוח קיים
+                          </Text>
+                        </View>
+                      )}
+                    </Pressable>
+                    <Pressable onPress={() => setCreateUseOneTimeCustomer(true)} style={{ flex: 1 }}>
+                      {({ pressed }) => (
+                        <View
+                          style={{
+                            borderRadius: 11,
+                            paddingVertical: 11,
+                            paddingHorizontal: 8,
+                            backgroundColor: createUseOneTimeCustomer ? colors.card : 'transparent',
+                            borderWidth: createUseOneTimeCustomer ? 1.5 : 0,
+                            borderColor: createUseOneTimeCustomer ? colors.primary : 'transparent',
+                            opacity: pressed ? 0.88 : 1,
+                            ...(Platform.OS === 'ios' && createUseOneTimeCustomer
+                              ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }
+                              : {}),
+                            ...(createUseOneTimeCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
+                          }}
+                        >
+                          <Text
+                            style={{
+                              textAlign: 'center',
+                              fontWeight: '900',
+                              fontSize: 14,
+                              color: createUseOneTimeCustomer ? colors.primary : colors.muted,
+                            }}
+                            numberOfLines={1}
+                          >
+                            לקוח חד־פעמי
+                          </Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              )}
 
               {createKind === 'special' ? null : createUseOneTimeCustomer ? (
                 <View style={{ gap: 10 }}>
@@ -1589,9 +1681,8 @@ export function JobsScreen() {
                 </View>
               ) : (
                 <SelectSheet
-                  label="לקוח"
                   value={createCustomerId}
-                  placeholder="בחר לקוח…"
+                  placeholder="בחר לקוח מהמערכת…"
                   options={createCustomerOptions}
                   onChange={setCreateCustomerId}
                 />
@@ -1699,77 +1790,19 @@ export function JobsScreen() {
               </View>
             </Card>
           ) : null}
-        </ScrollView>
-      </ModalSheet>
+          </ScrollView>
 
-      <ModalSheet visible={createDatePickerOpen} onClose={() => setCreateDatePickerOpen(false)}>
-        <View style={{ gap: 12 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Button title="סגור" variant="secondary" fullWidth={false} onPress={() => setCreateDatePickerOpen(false)} />
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right' }}>בחירת תאריך</Text>
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 14) + 6,
+              backgroundColor: colors.card,
+            }}
+          >
+            <Button title="צור" onPress={submitCreate} />
           </View>
-
-          {Platform.OS === 'ios' ? (
-            <>
-              <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 10 }}>
-                <DateTimePicker
-                  value={createDateValue}
-                  mode="date"
-                  display="inline"
-                  themeVariant="light"
-                  onChange={(_event, selectedDate) => {
-                    if (!selectedDate) return;
-                    setCreateDateYmd(yyyyMmDd(selectedDate));
-                  }}
-                />
-              </View>
-              <Button
-                title="אישור"
-                onPress={() => {
-                  setCreateDateYmd((prev) => prev || yyyyMmDd(createDateValue));
-                  setCreateDatePickerOpen(false);
-                }}
-              />
-            </>
-          ) : (
-            <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
-              <View style={{ gap: 8 }}>
-                {dateOptions.map((opt) => (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => {
-                      setCreateDateYmd(opt.value);
-                      setCreateDatePickerOpen(false);
-                    }}
-                  >
-                    {({ pressed }) => (
-                      <View
-                        style={{
-                          backgroundColor: opt.value === createDateYmd ? colors.primary : colors.elevated,
-                          borderRadius: 14,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          borderWidth: 1,
-                          borderColor: opt.value === createDateYmd ? colors.primary : colors.border,
-                          opacity: pressed ? 0.94 : 1,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: opt.value === createDateYmd ? '#fff' : colors.text,
-                            fontWeight: '800',
-                            textAlign: 'right',
-                          }}
-                        >
-                          {opt.label}
-                        </Text>
-                      </View>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-          )}
         </View>
       </ModalSheet>
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   SafeAreaView,
@@ -17,7 +18,6 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
 import { fetchProducts } from '../../lib/shopify';
-import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
 
 LocaleConfig.locales['he'] = {
@@ -150,6 +150,11 @@ export function StoreManagementScreen() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [customersCount, setCustomersCount] = useState<number | null>(null);
   const [ordersThisWeek, setOrdersThisWeek] = useState<number | null>(null);
+  const [ocdPlusModalOpen, setOcdPlusModalOpen] = useState(false);
+  const [ocdPlusSubscribers, setOcdPlusSubscribers] = useState<
+    { id: string; name: string; phone: string; created_at?: string | null }[]
+  >([]);
+  const [ocdPlusListLoading, setOcdPlusListLoading] = useState(false);
 
   const [pushModalOpen, setPushModalOpen] = useState(false);
   const [pushTitle, setPushTitle] = useState('');
@@ -211,6 +216,32 @@ export function StoreManagementScreen() {
   useEffect(() => {
     refreshStoreStats();
   }, [refreshStoreStats]);
+
+  const openOcdPlusModal = useCallback(async () => {
+    setOcdPlusModalOpen(true);
+    setOcdPlusListLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, phone, created_at')
+        .eq('ocd_plus_subscriber', true)
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setOcdPlusSubscribers(
+        (data ?? []).map((row: any) => ({
+          id: row.id,
+          name: row.name ?? '',
+          phone: row.phone ?? '',
+          created_at: row.created_at ?? null,
+        })),
+      );
+    } catch (e: any) {
+      setOcdPlusSubscribers([]);
+      Toast.show({ type: 'error', text1: 'טעינת מנויי OCD+ נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setOcdPlusListLoading(false);
+    }
+  }, []);
 
   const openPushModal = () => {
     setPushTitle('');
@@ -327,11 +358,34 @@ export function StoreManagementScreen() {
               <View style={{ flex: 1, alignItems: 'flex-end' }}>
                 <Text style={s.pushLauncherTitle}>שיגור פושים</Text>
                 <Text style={s.pushLauncherSub}>כותרת, תוכן • שליחה מיידית או מתוזמנת</Text>
-                <View style={s.pushLauncherMetaRow}>
-                  <View style={s.metaPill}>
-                    <Text style={s.metaPillText}>טופס אחד</Text>
-                  </View>
-                </View>
+              </View>
+
+              <View style={s.pushLauncherChevronWrap}>
+                <Text style={s.pushLauncherChevron}>‹</Text>
+              </View>
+            </View>
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={openOcdPlusModal}
+          accessibilityRole="button"
+          android_ripple={{ color: 'rgba(37,99,235,0.10)' }}
+          style={({ pressed }) => [s.pushLauncher, pressed && s.pushLauncherPressed]}
+        >
+          <View style={s.pushLauncherInner}>
+            <View style={s.pushLauncherFrame} />
+            <View style={s.pushLauncherGlowA} />
+            <View style={s.pushLauncherGlowB} />
+
+            <View style={s.pushLauncherRow}>
+              <View style={s.pushLauncherIconWrap}>
+                <Text style={s.pushLauncherIcon}>✦</Text>
+              </View>
+
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={s.pushLauncherTitle}>מנויי OCD+</Text>
+                <Text style={s.pushLauncherSub}>לחץ לצפייה ברשימת המנויים הפעילים</Text>
               </View>
 
               <View style={s.pushLauncherChevronWrap}>
@@ -341,6 +395,57 @@ export function StoreManagementScreen() {
           </View>
         </Pressable>
       </ScrollView>
+
+      <Modal
+        visible={ocdPlusModalOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setOcdPlusModalOpen(false)}
+        statusBarTranslucent
+      >
+        <SafeAreaView style={m.root}>
+          <StatusBar barStyle="dark-content" />
+          <View style={m.header}>
+            <Pressable
+              onPress={() => setOcdPlusModalOpen(false)}
+              hitSlop={10}
+              style={({ pressed }) => [m.navBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={m.navBtnText}>✕</Text>
+            </Pressable>
+            <Text style={m.headerTitle}>מנויי OCD+</Text>
+            <View style={{ minWidth: 44 }} />
+          </View>
+
+          {ocdPlusListLoading ? (
+            <View style={plusM.loadingWrap}>
+              <ActivityIndicator size="large" color="#2563EB" />
+              <Text style={plusM.loadingHint}>טוען רשימה…</Text>
+            </View>
+          ) : (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
+              contentContainerStyle={plusM.listContent}
+            >
+              {ocdPlusSubscribers.length === 0 ? (
+                <Text style={plusM.emptyText}>אין משתמשים עם מנוי OCD+ פעיל</Text>
+              ) : (
+                ocdPlusSubscribers.map((u) => (
+                  <View key={u.id} style={plusM.row}>
+                    <Text style={plusM.rowName} numberOfLines={1}>
+                      {u.name?.trim() || 'ללא שם'}
+                    </Text>
+                    <Text style={plusM.rowPhone} numberOfLines={1}>
+                      {u.phone || '—'}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={pushModalOpen}
@@ -607,16 +712,6 @@ const s = StyleSheet.create({
   pushLauncherIcon: { fontSize: 22 },
   pushLauncherTitle: { color: '#0F172A', fontSize: 16, fontWeight: '900', textAlign: 'right' },
   pushLauncherSub: { color: '#475569', fontSize: 13, fontWeight: '700', textAlign: 'right', marginTop: 4 },
-  pushLauncherMetaRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 10 },
-  metaPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(37,99,235,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.18)',
-  },
-  metaPillText: { color: '#1D4ED8', fontWeight: '900', fontSize: 12 },
   pushLauncherChevronWrap: {
     width: 34,
     height: 34,
@@ -628,6 +723,31 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   pushLauncherChevron: { color: '#64748B', fontSize: 22, fontWeight: '600' },
+});
+
+const plusM = StyleSheet.create({
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  loadingHint: { color: '#64748B', fontWeight: '700', fontSize: 14 },
+  listContent: { padding: 16, paddingBottom: 40, gap: 10 },
+  emptyText: {
+    color: '#64748B',
+    fontWeight: '700',
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 32,
+    paddingHorizontal: 24,
+  },
+  row: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+    alignItems: 'flex-end',
+  },
+  rowName: { color: '#0F172A', fontWeight: '900', fontSize: 15, textAlign: 'right', alignSelf: 'stretch' },
+  rowPhone: { color: '#64748B', fontWeight: '700', fontSize: 13, textAlign: 'right', marginTop: 4, alignSelf: 'stretch' },
 });
 
 const m = StyleSheet.create({

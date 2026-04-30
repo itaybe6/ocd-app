@@ -1,12 +1,24 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Dimensions, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  I18nManager,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { X } from 'lucide-react-native';
+import { Clock, User, Users, X } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
 import { ModalDialog } from '../../components/ModalDialog';
 import { SelectSheet } from '../../components/ui/SelectSheet';
+import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
+import { colors } from '../../theme/colors';
 import { useLoading } from '../../state/LoadingContext';
 import { yyyyMmDd } from '../../lib/time';
 import { fetchWorkTemplatesSorted, templateDay, type WorkTemplateLite } from '../../lib/workTemplates';
@@ -16,16 +28,37 @@ type WorkSchedule = { id: string; date: string; template_id: string };
 type Station = { id: string; template_id: string; order: number; customer_id?: string | null; worker_id?: string | null; scheduled_time: string };
 type ServicePoint = { id: string; customer_id: string; refill_amount: number };
 
+type PreviewUser = { id: string; name: string; avatar_url?: string | null };
+type TemplatePreviewRow = {
+  id: string;
+  order: number;
+  timeLabel: string;
+  customer: PreviewUser | null;
+  worker: PreviewUser | null;
+};
+
 const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
-// Chronological Sun→Sat; the row uses flexDirection: 'row-reverse' so
-// Sunday lands on the right and Saturday on the left.
-const DAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+// Visual left→right order: Sat is leftmost, Sunday is rightmost (Hebrew RTL calendar).
+// We always want index 0 on the left, regardless of the device's RTL setting,
+// so we pick `row-reverse` on RTL devices (the OS then flips it back to LTR).
+const DAY_LABELS_VISUAL = ['ש', 'ו', 'ה', 'ד', 'ג', 'ב', 'א'];
 const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
-const SCREEN_W = Dimensions.get('window').width;
 const H_PAD = 4;
-const CELL_W = Math.floor((SCREEN_W - H_PAD * 2) / 7);
 const CELL_H = 80;
+const ROW_FLEX_DIR: 'row' | 'row-reverse' = I18nManager.isRTL ? 'row-reverse' : 'row';
+// Use the window width directly so each column gets an exact pixel size,
+// regardless of any flex/percentage layout quirks in parent containers.
+const WINDOW_W = Dimensions.get('window').width;
+const WINDOW_H = Dimensions.get('window').height;
+const ROW_WIDTH = WINDOW_W - H_PAD * 2;
+const COL_WIDTH = ROW_WIDTH / 7;
+
+function formatStationTime(raw: string | null | undefined): string {
+  if (!raw) return '—';
+  const s = String(raw).trim();
+  return s.length >= 5 ? s.slice(0, 5) : s;
+}
 
 function toDateStr(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -57,77 +90,88 @@ type MonthViewProps = {
   onDayPress: (dateStr: string) => void;
 };
 
+type DayCell = { day: number; dateStr: string } | null;
+
+// Visual columns left→right: 0=Sat … 6=Sun (Hebrew RTL calendar).
+// For a date with JS getDay() value (0=Sun … 6=Sat), visualCol = 6 - getDay().
 function MonthView({ year, month, today, scheduleByDate, templateMap, onDayPress }: MonthViewProps) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
-  // Grid uses flexDirection: 'row-reverse', so Sunday is on the right.
-  // Leading empty cells before day 1 = firstDow (0 if Sunday, 6 if Saturday).
-  const leading = firstDow;
 
-  const cells = useMemo(() => {
-    const arr: Array<{ type: 'empty'; key: string } | { type: 'day'; day: number; dateStr: string }> = [];
-    for (let i = 0; i < leading; i++) arr.push({ type: 'empty', key: `e${i}` });
-    for (let d = 1; d <= daysInMonth; d++) arr.push({ type: 'day', day: d, dateStr: toDateStr(year, month, d) });
-    while (arr.length % 7 !== 0) arr.push({ type: 'empty', key: `t${arr.length}` });
-    return arr;
-  }, [year, month, daysInMonth, leading]);
+  const weeks = useMemo(() => {
+    const result: DayCell[][] = [];
+    let current: DayCell[] = Array(7).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month, d).getDay();
+      const visualCol = 6 - dow;
+      current[visualCol] = { day: d, dateStr: toDateStr(year, month, d) };
+      if (dow === 6) {
+        result.push(current);
+        current = Array(7).fill(null);
+      }
+    }
+    if (current.some((c) => c !== null)) result.push(current);
+    return result;
+  }, [year, month, daysInMonth]);
 
   return (
     <View style={mv.block}>
       <Text style={mv.title}>{`${MONTH_NAMES[month]} ${year}`}</Text>
 
-      {/* Day-of-week header */}
+      {/* Day-of-week header (visual L→R: Sat … Sun) */}
       <View style={mv.headerRow}>
-        {DAY_LABELS.map((label, i) => (
+        {DAY_LABELS_VISUAL.map((label, i) => (
           <View key={i} style={mv.headerCell}>
-            <Text style={[mv.headerText, i === 6 && mv.satText]}>{label}</Text>
+            <Text style={[mv.headerText, i === 0 && mv.satText]}>{label}</Text>
           </View>
         ))}
       </View>
 
       <View style={mv.divider} />
 
-      {/* Day grid */}
-      <View style={mv.grid}>
-        {cells.map((cell, idx) => {
-          if (cell.type === 'empty') {
-            return <View key={(cell as any).key ?? idx} style={mv.cell} />;
-          }
-          const { day, dateStr } = cell;
-          const schedule = scheduleByDate.get(dateStr);
-          const template = schedule ? templateMap.get(schedule.template_id) : undefined;
-          const isToday = dateStr === today;
-          const dow = new Date(dateStr + 'T00:00:00').getDay();
-          const isSat = dow === 6;
+      {/* Day grid: each row has exactly 7 cells (Sat=0 … Sun=6 visually L→R). */}
+      {weeks.map((week, wIdx) => (
+        <View key={wIdx} style={mv.weekRow}>
+          {week.map((cell, colIdx) => {
+            if (!cell) {
+              return <View key={`e-${wIdx}-${colIdx}`} style={mv.cellSlot} />;
+            }
+            const { day, dateStr } = cell;
+            const schedule = scheduleByDate.get(dateStr);
+            const template = schedule ? templateMap.get(schedule.template_id) : undefined;
+            const isToday = dateStr === today;
+            const isSat = colIdx === 0; // Saturday is the leftmost visual column
 
-          return (
-            <Pressable
-              key={dateStr}
-              style={({ pressed }) => [mv.cell, pressed && mv.cellPressed]}
-              onPress={() => onDayPress(dateStr)}
-            >
-              <View style={[mv.numWrap, isToday && mv.numWrapToday]}>
-                <Text style={[mv.dayNum, isToday && mv.dayNumToday, isSat && !isToday && mv.satNum]}>
-                  {day}
-                </Text>
+            return (
+              <View key={dateStr} style={mv.cellSlot}>
+                <Pressable
+                  style={({ pressed }) => [mv.cellInner, pressed && mv.cellPressed]}
+                  onPress={() => onDayPress(dateStr)}
+                >
+                  <View style={[mv.numWrap, isToday && mv.numWrapToday]}>
+                    <Text style={[mv.dayNum, isToday && mv.dayNumToday, isSat && !isToday && mv.satNum]}>
+                      {day}
+                    </Text>
+                  </View>
+                  {template ? (
+                    <View style={mv.badge}>
+                      <Text style={mv.badgeText} numberOfLines={1}>{`תבנית ${template.day}`}</Text>
+                    </View>
+                  ) : (
+                    <View style={mv.badgePlaceholder} />
+                  )}
+                </Pressable>
               </View>
-              {template ? (
-                <View style={mv.badge}>
-                  <Text style={mv.badgeText} numberOfLines={1}>{`יום ${template.day}`}</Text>
-                </View>
-              ) : (
-                <View style={mv.badgePlaceholder} />
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
 
 const mv = StyleSheet.create({
   block: {
+    width: ROW_WIDTH,
     marginHorizontal: H_PAD,
     marginBottom: 12,
   },
@@ -140,12 +184,21 @@ const mv = StyleSheet.create({
     paddingRight: 8,
   },
   headerRow: {
-    flexDirection: 'row-reverse',
-    marginBottom: 4,
+    flexDirection: ROW_FLEX_DIR,
+    width: ROW_WIDTH,
+    height: 30,
+  },
+  weekRow: {
+    flexDirection: ROW_FLEX_DIR,
+    width: ROW_WIDTH,
+    height: CELL_H,
   },
   headerCell: {
-    width: CELL_W,
+    width: COL_WIDTH,
+    flexShrink: 0,
+    flexGrow: 0,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 6,
   },
   headerText: {
@@ -161,18 +214,21 @@ const mv = StyleSheet.create({
     backgroundColor: '#D1D5DB',
     marginBottom: 0,
   },
-  grid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-  },
-  cell: {
-    width: CELL_W,
+  cellSlot: {
+    width: COL_WIDTH,
     height: CELL_H,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
+    flexShrink: 0,
+    flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
+  },
+  cellInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 6,
+    paddingLeft: 20,
+    marginRight: 20,
   },
   cellPressed: {
     backgroundColor: '#EFF6FF',
@@ -205,7 +261,7 @@ const mv = StyleSheet.create({
     borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    maxWidth: CELL_W - 6,
+    maxWidth: '92%',
   },
   badgeText: {
     fontSize: 11,
@@ -228,6 +284,8 @@ export function WorkScheduleScreen() {
   const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editTemplateId, setEditTemplateId] = useState('');
+  const [templatePreviewRows, setTemplatePreviewRows] = useState<TemplatePreviewRow[]>([]);
+  const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false);
 
   const today = yyyyMmDd(new Date());
   const nowDate = new Date();
@@ -245,7 +303,7 @@ export function WorkScheduleScreen() {
   }, [templates]);
 
   const templateOptions = useMemo(
-    () => templates.map((t) => ({ value: t.id, label: `יום ${t.day}` })),
+    () => templates.map((t) => ({ value: t.id, label: `תבנית ${t.day}` })),
     [templates],
   );
 
@@ -292,6 +350,62 @@ export function WorkScheduleScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { fetchAll(); }, [fetchAll]));
+
+  useEffect(() => {
+    if (!selectedDate || !editTemplateId) {
+      setTemplatePreviewRows([]);
+      setTemplatePreviewLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setTemplatePreviewLoading(true);
+      try {
+        const { data: stData, error: stErr } = await supabase
+          .from('template_stations')
+          .select('id, "order", customer_id, worker_id, scheduled_time')
+          .eq('template_id', editTemplateId)
+          .order('order', { ascending: true });
+        if (stErr) throw stErr;
+        const rows = (stData ?? []) as Pick<Station, 'id' | 'order' | 'customer_id' | 'worker_id' | 'scheduled_time'>[];
+        const idSet = new Set<string>();
+        for (const r of rows) {
+          if (r.customer_id) idSet.add(r.customer_id);
+          if (r.worker_id) idSet.add(r.worker_id);
+        }
+        const ids = [...idSet];
+        const userMap = new Map<string, PreviewUser>();
+        if (ids.length) {
+          const { data: uData, error: uErr } = await supabase
+            .from('users')
+            .select('id, name, avatar_url')
+            .in('id', ids);
+          if (uErr) throw uErr;
+          for (const u of (uData ?? []) as PreviewUser[]) userMap.set(u.id, u);
+        }
+        if (cancelled) return;
+        setTemplatePreviewRows(
+          rows.map((r) => ({
+            id: r.id,
+            order: r.order,
+            timeLabel: formatStationTime(r.scheduled_time),
+            customer: r.customer_id ? userMap.get(r.customer_id) ?? null : null,
+            worker: r.worker_id ? userMap.get(r.worker_id) ?? null : null,
+          })),
+        );
+      } catch (e: any) {
+        if (!cancelled) {
+          setTemplatePreviewRows([]);
+          Toast.show({ type: 'error', text1: 'טעינת משימות', text2: e?.message ?? 'Unknown error' });
+        }
+      } finally {
+        if (!cancelled) setTemplatePreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, editTemplateId]);
 
   const handleDayPress = (dateStr: string) => {
     setSelectedDate(dateStr);
@@ -450,6 +564,7 @@ export function WorkScheduleScreen() {
   };
 
   const selectedSchedule = selectedDate ? scheduleByDate.get(selectedDate) : undefined;
+  const previewTemplateDay = editTemplateId ? templateMap.get(editTemplateId)?.day : undefined;
 
   return (
     <View style={st.root}>
@@ -489,35 +604,114 @@ export function WorkScheduleScreen() {
                 <Text style={st.dialogTitle}>{formatDateHebrew(selectedDate)}</Text>
                 {selectedSchedule && (
                   <Text style={st.dialogSub}>
-                    {`תבנית נוכחית: יום ${templateMap.get(selectedSchedule.template_id)?.day ?? '—'}`}
+                    {`משובץ כעת · תבנית ${templateMap.get(selectedSchedule.template_id)?.day ?? '—'}`}
                   </Text>
                 )}
               </View>
             </View>
 
-            <View style={st.dialogBody}>
-              <SelectSheet
-                label="תבנית עבודה"
-                value={editTemplateId}
-                placeholder="בחר תבנית…"
-                options={templateOptions}
-                onChange={setEditTemplateId}
-              />
-              <Button
-                title={selectedSchedule ? 'עדכן תבנית + משימות' : 'שייך תבנית + צור משימות'}
-                onPress={assignTemplate}
-                disabled={!editTemplateId}
-                style={{ borderRadius: 14 }}
-              />
-              {selectedSchedule && (
+            <ScrollView
+              style={st.dialogScroll}
+              contentContainerStyle={st.dialogScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {!!editTemplateId && (
+                <View style={st.previewSection}>
+                  <View style={st.previewSectionHead}>
+                    <Text style={st.previewSectionTitle}>משימות בתבנית</Text>
+                    {previewTemplateDay != null && (
+                      <View style={st.previewPill}>
+                        <Text style={st.previewPillText}>{`תבנית ${previewTemplateDay}`}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {templatePreviewLoading ? (
+                    <ActivityIndicator size="small" color={colors.primary} style={st.previewSpinner} />
+                  ) : templatePreviewRows.length === 0 ? (
+                    <Text style={st.previewEmpty}>אין תחנות מוגדרות בתבנית זו</Text>
+                  ) : (
+                    templatePreviewRows.map((row, idx) => (
+                      <View key={row.id} style={[st.previewCard, idx > 0 && st.previewCardSpacing]}>
+                        <View style={st.previewCardInner}>
+                          <View style={st.previewTop}>
+                            <View style={st.previewOrder}>
+                              <Text style={st.previewOrderText}>{row.order}</Text>
+                            </View>
+                            <View style={st.previewTimeChip}>
+                              <Clock size={13} color={colors.primary} strokeWidth={2.5} />
+                              <Text style={st.previewTimeText}>{row.timeLabel}</Text>
+                            </View>
+                          </View>
+                          <View style={st.previewSep} />
+                          <View style={st.previewPersonRow}>
+                            <View style={st.previewRoleTag}>
+                              <User size={11} color={colors.primary} strokeWidth={2.5} />
+                              <Text style={st.previewRoleText}>לקוח</Text>
+                            </View>
+                            <View style={st.previewPersonMain}>
+                              {row.customer ? (
+                                <>
+                                  <Avatar size={32} uri={row.customer.avatar_url ?? null} name={row.customer.name} />
+                                  <Text style={st.previewName} numberOfLines={1}>
+                                    {row.customer.name}
+                                  </Text>
+                                </>
+                              ) : (
+                                <Text style={st.previewMissing}>לא משובץ</Text>
+                              )}
+                            </View>
+                          </View>
+                          <View style={st.previewInnerSep} />
+                          <View style={st.previewPersonRow}>
+                            <View style={[st.previewRoleTag, st.previewRoleTagWorker]}>
+                              <Users size={11} color="#7C3AED" strokeWidth={2.5} />
+                              <Text style={[st.previewRoleText, st.previewRoleTextWorker]}>עובד</Text>
+                            </View>
+                            <View style={st.previewPersonMain}>
+                              {row.worker ? (
+                                <>
+                                  <Avatar size={32} uri={row.worker.avatar_url ?? null} name={row.worker.name} />
+                                  <Text style={st.previewName} numberOfLines={1}>
+                                    {row.worker.name}
+                                  </Text>
+                                </>
+                              ) : (
+                                <Text style={st.previewMissing}>לא משובץ</Text>
+                              )}
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+
+              <View style={st.dialogForm}>
+                <SelectSheet
+                  label="תבנית עבודה"
+                  value={editTemplateId}
+                  placeholder="בחר תבנית…"
+                  options={templateOptions}
+                  onChange={setEditTemplateId}
+                />
                 <Button
-                  title="הסר שיוך"
-                  variant="danger"
-                  onPress={removeTemplate}
+                  title={selectedSchedule ? 'עדכן תבנית + משימות' : 'שייך תבנית + צור משימות'}
+                  onPress={assignTemplate}
+                  disabled={!editTemplateId}
                   style={{ borderRadius: 14 }}
                 />
-              )}
-            </View>
+                {selectedSchedule && (
+                  <Button
+                    title="הסר שיוך"
+                    variant="danger"
+                    onPress={removeTemplate}
+                    style={{ borderRadius: 14 }}
+                  />
+                )}
+              </View>
+            </ScrollView>
           </>
         )}
       </ModalDialog>
@@ -575,8 +769,162 @@ const st = StyleSheet.create({
     color: '#64748B',
     textAlign: 'right',
   },
-  dialogBody: {
-    padding: 18,
+  dialogScroll: {
+    maxHeight: WINDOW_H * 0.52,
+  },
+  dialogScrollContent: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 20,
+  },
+  dialogForm: {
     gap: 12,
+    marginTop: 4,
+  },
+  previewSection: {
+    marginBottom: 18,
+  },
+  previewSectionHead: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 10,
+  },
+  previewSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'right',
+    flex: 1,
+  },
+  previewPill: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  previewPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  previewSpinner: {
+    marginVertical: 20,
+  },
+  previewEmpty: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#94A3B8',
+    textAlign: 'right',
+    marginVertical: 8,
+  },
+  previewCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  previewCardSpacing: {
+    marginTop: 10,
+  },
+  previewCardInner: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderStartWidth: 3,
+    borderStartColor: colors.primary,
+  },
+  previewTop: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewOrder: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewOrderText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#3730A3',
+  },
+  previewTimeChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  previewTimeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  previewSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#CBD5E1',
+    marginVertical: 12,
+  },
+  previewPersonRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  previewRoleTag: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+  },
+  previewRoleTagWorker: {
+    backgroundColor: '#F5F3FF',
+  },
+  previewRoleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  previewRoleTextWorker: {
+    color: '#7C3AED',
+  },
+  previewPersonMain: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  previewName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+    textAlign: 'right',
+  },
+  previewMissing: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#94A3B8',
+    textAlign: 'right',
+  },
+  previewInnerSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 10,
   },
 });
