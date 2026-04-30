@@ -12,10 +12,10 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { Clock, User, Users, X } from 'lucide-react-native';
+import { Check, ChevronDown, ChevronLeft, ChevronUp, ClipboardList, Clock, Eye, User, Users, X } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
 import { ModalDialog } from '../../components/ModalDialog';
-import { SelectSheet } from '../../components/ui/SelectSheet';
 import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -37,6 +37,12 @@ type TemplatePreviewRow = {
   worker: PreviewUser | null;
 };
 
+type TemplateSummary = {
+  stationCount: number;
+  validJobsCount: number;
+  customerNames: string[];
+};
+
 const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 // Visual left→right order: Sat is leftmost, Sunday is rightmost (Hebrew RTL calendar).
 // We always want index 0 on the left, regardless of the device's RTL setting,
@@ -50,7 +56,6 @@ const ROW_FLEX_DIR: 'row' | 'row-reverse' = I18nManager.isRTL ? 'row-reverse' : 
 // Use the window width directly so each column gets an exact pixel size,
 // regardless of any flex/percentage layout quirks in parent containers.
 const WINDOW_W = Dimensions.get('window').width;
-const WINDOW_H = Dimensions.get('window').height;
 const ROW_WIDTH = WINDOW_W - H_PAD * 2;
 const COL_WIDTH = ROW_WIDTH / 7;
 
@@ -73,8 +78,13 @@ function formatDateHebrew(dateStr: string): string {
   return `יום ${dayName}, ${dd}/${mm}/${d.getFullYear()}`;
 }
 
-function combine(dateYmd: string, timeHm: string): string {
-  const d = new Date(`${dateYmd}T${timeHm}:00`);
+function combine(dateYmd: string, timeValue: string): string {
+  const raw = (timeValue || '09:00').trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) throw new Error(`Invalid time: ${raw}`);
+  const hh = match[1].padStart(2, '0');
+  const mm = match[2];
+  const d = new Date(`${dateYmd}T${hh}:${mm}:00`);
   if (Number.isNaN(d.getTime())) throw new Error('Invalid date/time');
   return d.toISOString();
 }
@@ -239,6 +249,7 @@ const mv = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+    transform: [{ translateX: 10 }, { translateY: 20 }],
   },
   numWrapToday: {
     backgroundColor: '#007AFF',
@@ -259,12 +270,14 @@ const mv = StyleSheet.create({
     marginTop: 3,
     backgroundColor: '#2563EB',
     borderRadius: 5,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     paddingVertical: 2,
-    maxWidth: '92%',
+    minWidth: 60,
+    alignItems: 'center',
+    transform: [{ translateY: 15 }],
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -286,6 +299,9 @@ export function WorkScheduleScreen() {
   const [editTemplateId, setEditTemplateId] = useState('');
   const [templatePreviewRows, setTemplatePreviewRows] = useState<TemplatePreviewRow[]>([]);
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false);
+  const [templateSummaries, setTemplateSummaries] = useState<Map<string, TemplateSummary>>(new Map());
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [viewStationsTemplateId, setViewStationsTemplateId] = useState<string | null>(null);
 
   const today = yyyyMmDd(new Date());
   const nowDate = new Date();
@@ -301,11 +317,6 @@ export function WorkScheduleScreen() {
     for (const t of templates) m.set(t.id, t);
     return m;
   }, [templates]);
-
-  const templateOptions = useMemo(
-    () => templates.map((t) => ({ value: t.id, label: `תבנית ${t.day}` })),
-    [templates],
-  );
 
   const months = useMemo(() => {
     const result: { year: number; month: number }[] = [];
@@ -342,6 +353,52 @@ export function WorkScheduleScreen() {
       }
       setTemplates(deduped);
       setSchedules((sRes.data ?? []) as WorkSchedule[]);
+
+      const templateIds = deduped.map((t) => t.id);
+      const summaries = new Map<string, TemplateSummary>();
+      if (templateIds.length) {
+        const { data: stData, error: stErr } = await supabase
+          .from('template_stations')
+          .select('template_id, customer_id, worker_id, "order"')
+          .in('template_id', templateIds)
+          .order('order', { ascending: true });
+        if (stErr) throw stErr;
+
+        const stationsByTemplate = new Map<string, { customer_id: string | null; worker_id: string | null }[]>();
+        const customerIdSet = new Set<string>();
+        for (const r of (stData ?? []) as { template_id: string; customer_id: string | null; worker_id: string | null }[]) {
+          if (!stationsByTemplate.has(r.template_id)) stationsByTemplate.set(r.template_id, []);
+          stationsByTemplate.get(r.template_id)!.push({ customer_id: r.customer_id, worker_id: r.worker_id });
+          if (r.customer_id) customerIdSet.add(r.customer_id);
+        }
+
+        const customerNameMap = new Map<string, string>();
+        if (customerIdSet.size) {
+          const { data: uData, error: uErr } = await supabase
+            .from('users')
+            .select('id, name')
+            .in('id', [...customerIdSet]);
+          if (uErr) throw uErr;
+          for (const u of (uData ?? []) as { id: string; name: string }[]) customerNameMap.set(u.id, u.name);
+        }
+
+        for (const tid of templateIds) {
+          const stations = stationsByTemplate.get(tid) ?? [];
+          const validJobs = stations.filter((s) => s.customer_id && s.worker_id).length;
+          const names: string[] = [];
+          for (const s of stations) {
+            if (!s.customer_id) continue;
+            const n = customerNameMap.get(s.customer_id);
+            if (n && !names.includes(n)) names.push(n);
+          }
+          summaries.set(tid, {
+            stationCount: stations.length,
+            validJobsCount: validJobs,
+            customerNames: names,
+          });
+        }
+      }
+      setTemplateSummaries(summaries);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -352,7 +409,7 @@ export function WorkScheduleScreen() {
   useFocusEffect(useCallback(() => { fetchAll(); }, [fetchAll]));
 
   useEffect(() => {
-    if (!selectedDate || !editTemplateId) {
+    if (!viewStationsTemplateId) {
       setTemplatePreviewRows([]);
       setTemplatePreviewLoading(false);
       return;
@@ -364,7 +421,7 @@ export function WorkScheduleScreen() {
         const { data: stData, error: stErr } = await supabase
           .from('template_stations')
           .select('id, "order", customer_id, worker_id, scheduled_time')
-          .eq('template_id', editTemplateId)
+          .eq('template_id', viewStationsTemplateId)
           .order('order', { ascending: true });
         if (stErr) throw stErr;
         const rows = (stData ?? []) as Pick<Station, 'id' | 'order' | 'customer_id' | 'worker_id' | 'scheduled_time'>[];
@@ -405,24 +462,39 @@ export function WorkScheduleScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDate, editTemplateId]);
+  }, [viewStationsTemplateId]);
 
   const handleDayPress = (dateStr: string) => {
     setSelectedDate(dateStr);
     setEditTemplateId(scheduleByDate.get(dateStr)?.template_id ?? '');
+    setTemplatePickerOpen(false);
   };
+
+  const closeDateDialog = useCallback(() => {
+    setSelectedDate(null);
+    setTemplatePickerOpen(false);
+    setViewStationsTemplateId(null);
+  }, []);
 
   const assignTemplate = async () => {
     if (!selectedDate) return;
     if (!editTemplateId) return Toast.show({ type: 'error', text1: 'בחר תבנית' });
     try {
       setIsLoading(true);
-      const upsertRes = await supabase
-        .from('work_schedules')
-        .upsert({ date: selectedDate, template_id: editTemplateId })
-        .select('id, date, template_id')
-        .single();
-      if (upsertRes.error) throw upsertRes.error;
+      const existingSchedule = scheduleByDate.get(selectedDate);
+      const scheduleRes = existingSchedule
+        ? await supabase
+            .from('work_schedules')
+            .update({ template_id: editTemplateId })
+            .eq('id', existingSchedule.id)
+            .select('id, date, template_id')
+            .single()
+        : await supabase
+            .from('work_schedules')
+            .upsert({ date: selectedDate, template_id: editTemplateId }, { onConflict: 'date' })
+            .select('id, date, template_id')
+            .single();
+      if (scheduleRes.error) throw scheduleRes.error;
 
       const { data: stations, error: stErr } = await supabase
         .from('template_stations')
@@ -504,6 +576,7 @@ export function WorkScheduleScreen() {
       setSelectedDate(null);
       await fetchAll();
     } catch (e: any) {
+      console.error('assignTemplate failed', e);
       Toast.show({ type: 'error', text1: 'שיוך נכשל', text2: e?.message ?? 'Unknown error' });
     } finally {
       setIsLoading(false);
@@ -565,6 +638,7 @@ export function WorkScheduleScreen() {
 
   const selectedSchedule = selectedDate ? scheduleByDate.get(selectedDate) : undefined;
   const previewTemplateDay = editTemplateId ? templateMap.get(editTemplateId)?.day : undefined;
+  const currentSummary = editTemplateId ? templateSummaries.get(editTemplateId) : undefined;
 
   return (
     <View style={st.root}>
@@ -585,117 +659,188 @@ export function WorkScheduleScreen() {
         ))}
       </ScrollView>
 
-      <ModalDialog
-        visible={!!selectedDate}
-        onClose={() => setSelectedDate(null)}
-        containerStyle={st.dialogContainer}
-      >
-        {!!selectedDate && (
-          <>
-            <View style={st.dialogHeader}>
-              <Pressable
-                onPress={() => setSelectedDate(null)}
-                hitSlop={8}
-                style={({ pressed }) => [st.closeBtn, pressed && { opacity: 0.6 }]}
-              >
-                <X size={16} color="#64748B" strokeWidth={2.5} />
-              </Pressable>
+      {!!selectedDate && (
+        <SafeAreaView style={st.dayDetailShell} edges={['bottom']}>
+          <View style={st.dayDetailInner}>
+            <View style={st.dayDetailHeader}>
               <View style={st.dialogTitleWrap}>
-                <Text style={st.dialogTitle}>{formatDateHebrew(selectedDate)}</Text>
-                {selectedSchedule && (
+                <Text style={st.dayDetailTitle}>{formatDateHebrew(selectedDate)}</Text>
+                {selectedSchedule ? (
                   <Text style={st.dialogSub}>
                     {`משובץ כעת · תבנית ${templateMap.get(selectedSchedule.template_id)?.day ?? '—'}`}
                   </Text>
+                ) : (
+                  <Text style={st.dialogSub}>בחר תבנית עבודה כדי ליצור משימות ליום זה</Text>
                 )}
               </View>
+              <Pressable
+                onPress={closeDateDialog}
+                hitSlop={12}
+                style={({ pressed }) => ({
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  backgroundColor: pressed ? '#1D4ED8' : '#2563EB',
+                  minWidth: 88,
+                  justifyContent: 'center',
+                })}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#FFFFFF' }}>חזור</Text>
+                <ChevronLeft size={18} color="#FFFFFF" strokeWidth={3} />
+              </Pressable>
             </View>
 
             <ScrollView
-              style={st.dialogScroll}
-              contentContainerStyle={st.dialogScrollContent}
+              style={st.dayDetailScroll}
+              contentContainerStyle={st.dayDetailScrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {!!editTemplateId && (
-                <View style={st.previewSection}>
-                  <View style={st.previewSectionHead}>
-                    <Text style={st.previewSectionTitle}>משימות בתבנית</Text>
-                    {previewTemplateDay != null && (
-                      <View style={st.previewPill}>
-                        <Text style={st.previewPillText}>{`תבנית ${previewTemplateDay}`}</Text>
-                      </View>
-                    )}
-                  </View>
-                  {templatePreviewLoading ? (
-                    <ActivityIndicator size="small" color={colors.primary} style={st.previewSpinner} />
-                  ) : templatePreviewRows.length === 0 ? (
-                    <Text style={st.previewEmpty}>אין תחנות מוגדרות בתבנית זו</Text>
-                  ) : (
-                    templatePreviewRows.map((row, idx) => (
-                      <View key={row.id} style={[st.previewCard, idx > 0 && st.previewCardSpacing]}>
-                        <View style={st.previewCardInner}>
-                          <View style={st.previewTop}>
-                            <View style={st.previewOrder}>
-                              <Text style={st.previewOrderText}>{row.order}</Text>
-                            </View>
-                            <View style={st.previewTimeChip}>
-                              <Clock size={13} color={colors.primary} strokeWidth={2.5} />
-                              <Text style={st.previewTimeText}>{row.timeLabel}</Text>
-                            </View>
-                          </View>
-                          <View style={st.previewSep} />
-                          <View style={st.previewPersonRow}>
-                            <View style={st.previewRoleTag}>
-                              <User size={11} color={colors.primary} strokeWidth={2.5} />
-                              <Text style={st.previewRoleText}>לקוח</Text>
-                            </View>
-                            <View style={st.previewPersonMain}>
-                              {row.customer ? (
-                                <>
-                                  <Avatar size={32} uri={row.customer.avatar_url ?? null} name={row.customer.name} />
-                                  <Text style={st.previewName} numberOfLines={1}>
-                                    {row.customer.name}
-                                  </Text>
-                                </>
-                              ) : (
-                                <Text style={st.previewMissing}>לא משובץ</Text>
-                              )}
-                            </View>
-                          </View>
-                          <View style={st.previewInnerSep} />
-                          <View style={st.previewPersonRow}>
-                            <View style={[st.previewRoleTag, st.previewRoleTagWorker]}>
-                              <Users size={11} color="#7C3AED" strokeWidth={2.5} />
-                              <Text style={[st.previewRoleText, st.previewRoleTextWorker]}>עובד</Text>
-                            </View>
-                            <View style={st.previewPersonMain}>
-                              {row.worker ? (
-                                <>
-                                  <Avatar size={32} uri={row.worker.avatar_url ?? null} name={row.worker.name} />
-                                  <Text style={st.previewName} numberOfLines={1}>
-                                    {row.worker.name}
-                                  </Text>
-                                </>
-                              ) : (
-                                <Text style={st.previewMissing}>לא משובץ</Text>
-                              )}
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                    ))
-                  )}
-                </View>
-              )}
-
               <View style={st.dialogForm}>
-                <SelectSheet
-                  label="תבנית עבודה"
-                  value={editTemplateId}
-                  placeholder="בחר תבנית…"
-                  options={templateOptions}
-                  onChange={setEditTemplateId}
-                />
+                {(() => {
+                  const renderTemplateList = (showSelectedHighlight: boolean) => (
+                    <View style={st.pickerInline}>
+                      <View style={st.pickerInlineHead}>
+                        <Text style={st.pickerInlineTitle}>
+                          {selectedSchedule ? 'בחר תבנית אחרת' : 'תבניות זמינות'}
+                        </Text>
+                        <Text style={st.pickerInlineSub}>{`${templates.length} תבניות`}</Text>
+                      </View>
+                      {templates.length === 0 ? (
+                        <Text style={st.pickerEmpty}>אין תבניות זמינות. צור תבנית בעמוד "תבניות עבודה".</Text>
+                      ) : (
+                        templates.map((t) => {
+                          const summary = templateSummaries.get(t.id);
+                          const isSelected = showSelectedHighlight && t.id === editTemplateId;
+                          const stationCount = summary?.stationCount ?? 0;
+                          const validJobsCount = summary?.validJobsCount ?? 0;
+                          const incomplete = stationCount - validJobsCount;
+                          const namesAll = summary?.customerNames ?? [];
+                          const previewNames = namesAll.slice(0, 3);
+                          const remaining = namesAll.length - previewNames.length;
+
+                          return (
+                            <Pressable
+                              key={t.id}
+                              onPress={() => {
+                                setEditTemplateId(t.id);
+                                setTemplatePickerOpen(false);
+                              }}
+                              style={({ pressed }) => [pressed && { opacity: 0.92 }]}
+                            >
+                              <View style={[st.pickerCard, isSelected && st.pickerCardActive]}>
+                                <View style={st.pickerCardHead}>
+                                  <View style={[st.pickerCardNumber, isSelected && st.pickerCardNumberActive]}>
+                                    <Text style={[st.pickerCardNumberText, isSelected && st.pickerCardNumberTextActive]}>
+                                      {t.day}
+                                    </Text>
+                                  </View>
+                                  <View style={st.pickerCardHeadMain}>
+                                    <Text style={st.pickerCardTitle}>{`תבנית ${t.day}`}</Text>
+                                    <View style={st.pickerCardMetaRow}>
+                                      <View style={st.pickerCardMetaPill}>
+                                        <ClipboardList size={11} color={colors.primary} strokeWidth={2.5} />
+                                        <Text style={st.pickerCardMetaText}>{`${validJobsCount} משימות`}</Text>
+                                      </View>
+                                      {incomplete > 0 && (
+                                        <View style={[st.pickerCardMetaPill, st.pickerCardMetaPillWarn]}>
+                                          <Text style={[st.pickerCardMetaText, st.pickerCardMetaTextWarn]}>
+                                            {`${incomplete} ללא שיוך מלא`}
+                                          </Text>
+                                        </View>
+                                      )}
+                                    </View>
+                                  </View>
+                                  <Pressable
+                                    onPress={() => setViewStationsTemplateId(t.id)}
+                                    hitSlop={8}
+                                    style={({ pressed }) => ({
+                                      width: 38,
+                                      height: 38,
+                                      borderRadius: 12,
+                                      backgroundColor: pressed ? '#1D4ED8' : '#2563EB',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    })}
+                                  >
+                                    <Eye size={20} color="#FFFFFF" strokeWidth={2.5} />
+                                  </Pressable>
+                                  {isSelected && (
+                                    <View style={st.pickerCheck}>
+                                      <Check size={16} color="#FFFFFF" strokeWidth={3} />
+                                    </View>
+                                  )}
+                                </View>
+
+                                {namesAll.length > 0 ? (
+                                  <View style={st.pickerCardChipsWrap}>
+                                    {previewNames.map((n) => (
+                                      <View key={n} style={st.pickerChip}>
+                                        <Text style={st.pickerChipText} numberOfLines={1}>{n}</Text>
+                                      </View>
+                                    ))}
+                                    {remaining > 0 && (
+                                      <View style={[st.pickerChip, st.pickerChipMore]}>
+                                        <Text style={[st.pickerChipText, st.pickerChipMoreText]}>{`+${remaining}`}</Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                ) : (
+                                  <Text style={st.pickerCardNoCustomers}>אין לקוחות משויכים בתבנית זו</Text>
+                                )}
+                              </View>
+                            </Pressable>
+                          );
+                        })
+                      )}
+                    </View>
+                  );
+
+                  if (!selectedSchedule) {
+                    return renderTemplateList(true);
+                  }
+                  return (
+                    <View style={st.pickerGroup}>
+                      <Text style={st.pickerLabel}>תבנית נוכחית</Text>
+                      <Pressable
+                        onPress={() => setTemplatePickerOpen((v) => !v)}
+                        style={({ pressed }) => [st.pickerBtn, pressed && st.pickerBtnPressed]}
+                      >
+                        {templatePickerOpen ? (
+                          <ChevronUp size={18} color={colors.muted} />
+                        ) : (
+                          <ChevronDown size={18} color={colors.muted} />
+                        )}
+                        {editTemplateId && previewTemplateDay != null ? (
+                          <View style={st.pickerBtnContent}>
+                            <View style={st.pickerBtnTopRow}>
+                              <Text style={st.pickerBtnTitle} numberOfLines={1}>{`תבנית ${previewTemplateDay}`}</Text>
+                              {currentSummary && (
+                                <View style={st.pickerBtnBadge}>
+                                  <ClipboardList size={11} color={colors.primary} strokeWidth={2.5} />
+                                  <Text style={st.pickerBtnBadgeText}>{`${currentSummary.validJobsCount} משימות`}</Text>
+                                </View>
+                              )}
+                            </View>
+                            {currentSummary && currentSummary.customerNames.length > 0 && (
+                              <Text style={st.pickerBtnHint} numberOfLines={1}>
+                                {currentSummary.customerNames.slice(0, 3).join(' · ')}
+                                {currentSummary.customerNames.length > 3 ? ` · +${currentSummary.customerNames.length - 3}` : ''}
+                              </Text>
+                            )}
+                          </View>
+                        ) : (
+                          <Text style={st.pickerBtnPlaceholder}>בחר תבנית…</Text>
+                        )}
+                      </Pressable>
+                      {templatePickerOpen && renderTemplateList(true)}
+                    </View>
+                  );
+                })()}
+
                 <Button
                   title={selectedSchedule ? 'עדכן תבנית + משימות' : 'שייך תבנית + צור משימות'}
                   onPress={assignTemplate}
@@ -712,8 +857,97 @@ export function WorkScheduleScreen() {
                 )}
               </View>
             </ScrollView>
-          </>
-        )}
+          </View>
+        </SafeAreaView>
+      )}
+
+      <ModalDialog
+        visible={!!viewStationsTemplateId}
+        onClose={() => setViewStationsTemplateId(null)}
+        containerStyle={st.stationsDialogContainer}
+      >
+        {(() => {
+          const tplDay = viewStationsTemplateId ? templateMap.get(viewStationsTemplateId)?.day : undefined;
+          return (
+            <>
+              <View style={st.stationsDialogHeader}>
+                <Pressable
+                  onPress={() => setViewStationsTemplateId(null)}
+                  hitSlop={10}
+                  style={({ pressed }) => [st.stationsCloseBtn, pressed && { opacity: 0.6 }]}
+                >
+                  <X size={16} color="#64748B" strokeWidth={2.5} />
+                </Pressable>
+                <View style={st.dialogTitleWrap}>
+                  <Text style={st.stationsDialogTitle}>{tplDay != null ? `תחנות בתבנית ${tplDay}` : 'תחנות בתבנית'}</Text>
+                  <Text style={st.dialogSub}>{`${templatePreviewRows.length} תחנות`}</Text>
+                </View>
+              </View>
+
+              <ScrollView
+                style={st.stationsScroll}
+                contentContainerStyle={st.stationsScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {templatePreviewLoading ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={st.previewSpinner} />
+                ) : templatePreviewRows.length === 0 ? (
+                  <Text style={st.previewEmpty}>אין תחנות מוגדרות בתבנית זו</Text>
+                ) : (
+                  templatePreviewRows.map((row, idx) => (
+                    <View key={row.id} style={[st.previewCard, idx > 0 && st.previewCardSpacing]}>
+                      <View style={st.previewCardInner}>
+                        <View style={st.previewTop}>
+                          <View style={st.previewOrder}>
+                            <Text style={st.previewOrderText}>{row.order}</Text>
+                          </View>
+                          <View style={st.previewTimeChip}>
+                            <Clock size={13} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={st.previewTimeText}>{row.timeLabel}</Text>
+                          </View>
+                        </View>
+                        <View style={st.previewSep} />
+                        <View style={st.previewPersonRow}>
+                          <View style={st.previewRoleTag}>
+                            <User size={11} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={st.previewRoleText}>לקוח</Text>
+                          </View>
+                          <View style={st.previewPersonMain}>
+                            {row.customer ? (
+                              <>
+                                <Avatar size={32} uri={row.customer.avatar_url ?? null} name={row.customer.name} />
+                                <Text style={st.previewName} numberOfLines={1}>{row.customer.name}</Text>
+                              </>
+                            ) : (
+                              <Text style={st.previewMissing}>לא משובץ</Text>
+                            )}
+                          </View>
+                        </View>
+                        <View style={st.previewInnerSep} />
+                        <View style={st.previewPersonRow}>
+                          <View style={[st.previewRoleTag, st.previewRoleTagWorker]}>
+                            <Users size={11} color="#7C3AED" strokeWidth={2.5} />
+                            <Text style={[st.previewRoleText, st.previewRoleTextWorker]}>עובד</Text>
+                          </View>
+                          <View style={st.previewPersonMain}>
+                            {row.worker ? (
+                              <>
+                                <Avatar size={32} uri={row.worker.avatar_url ?? null} name={row.worker.name} />
+                                <Text style={st.previewName} numberOfLines={1}>{row.worker.name}</Text>
+                              </>
+                            ) : (
+                              <Text style={st.previewMissing}>לא משובץ</Text>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </>
+          );
+        })()}
       </ModalDialog>
     </View>
   );
@@ -729,53 +963,48 @@ const st = StyleSheet.create({
     paddingBottom: 48,
   },
 
-  dialogContainer: {
-    padding: 0,
-    borderRadius: 20,
-    overflow: 'hidden',
+  dayDetailShell: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#FFFFFF',
+    zIndex: 100,
+    elevation: 16,
   },
-  dialogHeader: {
+  dayDetailInner: {
+    flex: 1,
+  },
+  dayDetailHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
   },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-  },
   dialogTitleWrap: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
-  dialogTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  dayDetailTitle: {
+    fontSize: 20,
+    fontWeight: '800',
     color: '#0F172A',
     textAlign: 'right',
   },
   dialogSub: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
     color: '#64748B',
     textAlign: 'right',
   },
-  dialogScroll: {
-    maxHeight: WINDOW_H * 0.52,
+  dayDetailScroll: {
+    flex: 1,
   },
-  dialogScrollContent: {
+  dayDetailScrollContent: {
     paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 20,
+    paddingTop: 10,
+    paddingBottom: 40,
   },
   dialogForm: {
     gap: 12,
@@ -926,5 +1155,268 @@ const st = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#E2E8F0',
     marginVertical: 10,
+  },
+
+  pickerGroup: {
+    gap: 6,
+  },
+  pickerLabel: {
+    color: colors.muted,
+    textAlign: 'right',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pickerBtn: {
+    backgroundColor: colors.elevated,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pickerBtnPressed: {
+    opacity: 0.94,
+  },
+  pickerBtnContent: {
+    flex: 1,
+    gap: 4,
+  },
+  pickerBtnTopRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  pickerBtnTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  pickerBtnPlaceholder: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+  pickerBtnBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  pickerBtnBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  pickerBtnHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+    textAlign: 'right',
+  },
+
+  pickerInline: {
+    marginTop: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    gap: 10,
+  },
+  pickerInlineHead: {
+    paddingHorizontal: 2,
+    paddingBottom: 4,
+    gap: 2,
+  },
+  pickerInlineTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  pickerInlineSub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+  pickerEmpty: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.muted,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  pickerCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    gap: 10,
+  },
+  pickerCardActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: colors.primary,
+  },
+  pickerCardHead: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pickerCardHeadMain: {
+    flex: 1,
+    gap: 6,
+  },
+  pickerCardNumber: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerCardNumberActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  pickerCardNumberText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#3730A3',
+  },
+  pickerCardNumberTextActive: {
+    color: '#FFFFFF',
+  },
+  pickerCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'right',
+  },
+  pickerCardMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  pickerCardMetaPill: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  pickerCardMetaPillWarn: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+  },
+  pickerCardMetaText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  pickerCardMetaTextWarn: {
+    color: '#B45309',
+  },
+  pickerCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerCardChipsWrap: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  pickerChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    maxWidth: '100%',
+  },
+  pickerChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  pickerChipMore: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+  },
+  pickerChipMoreText: {
+    color: '#3730A3',
+    fontWeight: '800',
+  },
+  pickerCardNoCustomers: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#94A3B8',
+    textAlign: 'right',
+  },
+
+
+  stationsDialogContainer: {
+    padding: 0,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  stationsDialogHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  stationsCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  stationsDialogTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'right',
+  },
+  stationsScroll: {
+    maxHeight: WINDOW_W * 1.2,
+  },
+  stationsScrollContent: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 20,
   },
 });

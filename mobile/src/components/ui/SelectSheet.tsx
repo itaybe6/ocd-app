@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ChevronDown } from 'lucide-react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ChevronDown, Search } from 'lucide-react-native';
 import { ModalSheet } from '../ModalSheet';
 import { Avatar } from './Avatar';
 import { colors } from '../../theme/colors';
@@ -13,13 +13,32 @@ type SelectSheetProps = {
   placeholder?: string;
   options: SelectOption[];
   onChange: (value: string) => void;
+  searchable?: boolean;
+  searchPlaceholder?: string;
 };
 
-export function SelectSheet({ label, value, placeholder = 'בחר…', options, onChange }: SelectSheetProps) {
+export function SelectSheet({
+  label,
+  value,
+  placeholder = 'בחר…',
+  options,
+  onChange,
+  searchable = false,
+  searchPlaceholder = 'חיפוש…',
+}: SelectSheetProps) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const selected = useMemo(() => options.find((o) => o.value === value), [options, value]);
   const selectedLabel = useMemo(() => selected?.label ?? selected?.value ?? '', [selected]);
   const selectedAvatarUrl = useMemo(() => (selected?.avatarUrl === undefined ? undefined : selected?.avatarUrl ?? null), [selected]);
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!searchable || !q) return options;
+    return options.filter((o) => {
+      const labelText = o.label ?? '';
+      return labelText.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
+    });
+  }, [options, query, searchable]);
 
   return (
     <View style={{ gap: 6 }}>
@@ -59,13 +78,48 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
         <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>
           {label ?? 'בחר'}
         </Text>
+        {searchable ? (
+          <View
+            style={{
+              height: 44,
+              borderRadius: 14,
+              backgroundColor: colors.bg,
+              borderWidth: 1,
+              borderColor: colors.border,
+              paddingHorizontal: 12,
+              marginBottom: 10,
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <Search size={16} color={colors.muted} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                flex: 1,
+                color: colors.text,
+                fontWeight: '800',
+                fontSize: 15,
+                textAlign: 'right',
+                paddingVertical: 0,
+              }}
+            />
+          </View>
+        ) : null}
         <ScrollView style={{ maxHeight: 420 }}>
           <View style={{ gap: 8 }}>
-            {options.map((o) => (
+            {filteredOptions.map((o) => (
               <Pressable
                 key={o.value}
                 onPress={() => {
                   setOpen(false);
+                  setQuery('');
                   onChange(o.value);
                 }}
                 style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
@@ -103,6 +157,11 @@ export function SelectSheet({ label, value, placeholder = 'בחר…', options, 
                 </View>
               </Pressable>
             ))}
+            {filteredOptions.length === 0 ? (
+              <Text style={{ color: colors.muted, textAlign: 'center', fontWeight: '700', paddingVertical: 18 }}>
+                לא נמצאו תוצאות
+              </Text>
+            ) : null}
           </View>
         </ScrollView>
       </ModalSheet>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Dimensions, FlatList, Pressable, ScrollView, SectionList, Text, View, Image, Platform } from 'react-native';
+import { Alert, Dimensions, FlatList, Image, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays, Check, Droplets, Eye, Pencil, Play, Plus, Rocket, Search, Trash2, X } from 'lucide-react-native';
@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
+import { AdminStyleJobRow, JOB_ROW_ACTION_BTN } from '../../components/jobs/AdminStyleJobRow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { Avatar } from '../../components/ui/Avatar';
 import { getPublicUrl } from '../../lib/storage';
@@ -24,21 +25,44 @@ import { useLoading } from '../../state/LoadingContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: screenHeight } = Dimensions.get('window');
+/** Same slab as `AdminHeader` (`headerBg`) */
+const ADMIN_HEADER_COLOR = '#1F2937';
 
-const CHIP_ST = {
-  borderRadius: 20,
-  paddingHorizontal: 8,
-  paddingVertical: 3,
-  borderWidth: 1,
-  backgroundColor: 'rgba(30,58,138,0.07)',
-  borderColor: 'rgba(30,58,138,0.15)',
-} as const;
+const jsStat = StyleSheet.create({
+  card: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  textBlock: { alignItems: 'flex-end' },
+  label: {
+    color: ADMIN_HEADER_COLOR,
+    fontWeight: '800',
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  value: {
+    color: ADMIN_HEADER_COLOR,
+    fontWeight: '900',
+    fontSize: 24,
+    textAlign: 'right',
+    marginTop: 4,
+    letterSpacing: -0.5,
+  },
+});
 
-const CHIP_TXT_ST = {
-  fontSize: 10,
-  fontWeight: '700' as const,
-  color: '#1E3A8A',
-};
+function JobsStatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={jsStat.card}>
+      <View style={jsStat.textBlock}>
+        <Text style={jsStat.label}>{label}</Text>
+        <Text style={jsStat.value}>{value}</Text>
+      </View>
+    </View>
+  );
+}
 
 function formatHebrewJobDateLabel(ymd: string): string {
   const [yy, mm, dd] = ymd.slice(0, 10).split('-').map((x) => Number(x));
@@ -46,17 +70,6 @@ function formatHebrewJobDateLabel(ymd: string): string {
   const d = new Date(yy, mm - 1, dd);
   return isValid(d) ? format(d, 'EEEE, d MMMM yyyy', { locale: he }) : ymd;
 }
-
-const BTN_ST = {
-  width: 36,
-  height: 36,
-  borderRadius: 11,
-  borderWidth: 1.5,
-  borderColor: 'rgba(30,58,138,0.16)',
-  backgroundColor: 'rgba(30,58,138,0.07)',
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-};
 
 type JobStatus = 'pending' | 'completed';
 type JobKind = 'regular' | 'installation' | 'special';
@@ -704,7 +717,7 @@ export function JobsScreen() {
       outline: 'rgba(60,60,67,0.10)',
       text: '#1C1C1E',
       muted: '#8E8E93',
-      primary: '#007AFF',
+      primary: ADMIN_HEADER_COLOR,
       secondary: '#3C3C43',
       tertiary: '#8E8E93',
       fill: 'rgba(120,120,128,0.12)',
@@ -748,41 +761,15 @@ export function JobsScreen() {
         keyExtractor={(item) => `${item.kind}:${item.id}`}
         stickySectionHeadersEnabled={false}
         style={{ marginTop: 0 }}
+        ItemSeparatorComponent={() => <View style={{ height: 36 }} />}
         contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16, paddingTop: 16 }}
         ListHeaderComponent={
           <View style={{ gap: 20, marginBottom: 12 }}>
             {/* Stats */}
             <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-              {[
-                { label: 'סה״כ', value: stats.total },
-                { label: 'ממתינות', value: stats.pending },
-                { label: 'הושלמו', value: stats.completed },
-              ].map((x) => (
-                <View
-                  key={x.label}
-                  style={{
-                    flex: 1,
-                    backgroundColor: 'rgba(0,122,255,0.08)',
-                    borderRadius: 16,
-                    paddingVertical: 16,
-                    paddingHorizontal: 14,
-                  }}
-                >
-                  <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 12, textAlign: 'right', opacity: 0.8 }}>
-                    {x.label}
-                  </Text>
-                  <Text style={{
-                    color: '#007AFF',
-                    fontWeight: '800',
-                    fontSize: 28,
-                    textAlign: 'right',
-                    marginTop: 6,
-                    letterSpacing: -1,
-                  }}>
-                    {x.value}
-                  </Text>
-                </View>
-              ))}
+              <JobsStatCard label="סה״כ" value={stats.total} />
+              <JobsStatCard label="ממתינות" value={stats.pending} />
+              <JobsStatCard label="הושלמו" value={stats.completed} />
             </View>
 
             {/* Search + Actions */}
@@ -793,13 +780,13 @@ export function JobsScreen() {
                   flexDirection: 'row-reverse',
                   alignItems: 'center',
                   gap: 8,
-                  backgroundColor: ui.fill,
+                  backgroundColor: '#FFFFFF',
                   borderRadius: 12,
                   paddingHorizontal: 12,
                   height: 44,
                 }}
               >
-                <Search size={16} color={ui.tertiary} />
+                <Search size={16} color={ui.muted} />
                 <Input
                   label={undefined}
                   value={filters.q}
@@ -826,14 +813,19 @@ export function JobsScreen() {
                     style={{
                       width: 44,
                       height: 44,
-                      borderRadius: 12,
+                      borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: isFiltersActive ? '#007AFF' : ui.fill,
+                      backgroundColor: ADMIN_HEADER_COLOR,
                       opacity: pressed ? 0.7 : 1,
+                      shadowColor: ADMIN_HEADER_COLOR,
+                      shadowOpacity: 0.3,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 4,
                     }}
                   >
-                    <Entypo name="sound-mix" size={18} color={isFiltersActive ? '#FFFFFF' : ui.secondary} />
+                    <Entypo name="sound-mix" size={18} color="#FFFFFF" />
                   </View>
                 )}
               </Pressable>
@@ -851,9 +843,9 @@ export function JobsScreen() {
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: '#007AFF',
+                      backgroundColor: ADMIN_HEADER_COLOR,
                       opacity: pressed ? 0.7 : 1,
-                      shadowColor: '#007AFF',
+                      shadowColor: ADMIN_HEADER_COLOR,
                       shadowOpacity: 0.3,
                       shadowRadius: 8,
                       shadowOffset: { width: 0, height: 4 },
@@ -916,115 +908,68 @@ export function JobsScreen() {
         )}
         renderItem={({ item }) => {
           const isCompleted = item.status === 'completed';
-          const kindLabel = item.kind === 'installation' ? 'התקנה' : item.kind === 'special' ? 'מיוחדת' : 'ריח';
           const workerName = userMap.get(item.worker_id) ?? item.worker_id.slice(0, 6);
           const customerName = item.customer_id ? (userMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)) : null;
 
           return (
-            <Pressable
-              onPressIn={(e: any) => {
-                e.currentTarget?.measureInWindow?.((x: number, y: number, w: number, h: number) => {
-                  detailsOriginRectRef.current = { x, y, width: w, height: h };
-                });
-              }}
+            <AdminStyleJobRow
+              kind={item.kind}
+              status={item.status}
+              date={item.date}
+              avatarUri={userAvatarMap.get(item.worker_id) ?? null}
+              topRightLabel={workerName}
+              titleLine={customerName}
+              notes={item.notes ?? null}
               onPress={() => openDetails(item)}
-              style={({ pressed }) => ({ marginBottom: 10, opacity: pressed ? 0.95 : 1 })}
-            >
-              <View style={[
-                { borderRadius: 20 },
-                Platform.select({
-                  ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 3 } },
-                  android: { elevation: 3 },
-                }),
-                isCompleted && { opacity: 0.68 },
-              ]}>
-                <View style={{ backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)', overflow: 'hidden' }}>
-
-                  {/* Body */}
-                  <View style={{ paddingHorizontal: 16, paddingTop: 15, paddingBottom: 13 }}>
-                    {/* Top row */}
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                      {/* Right: avatar + worker */}
-                      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 7, flex: 1, marginLeft: 8 }}>
-                        <Avatar size={24} uri={userAvatarMap.get(item.worker_id) ?? null} name={workerName} />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#8E8E93', flex: 1, textAlign: 'right' }} numberOfLines={1}>
-                          {workerName}
-                        </Text>
-                      </View>
-                      {/* Left: chips */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                        <View style={CHIP_ST}>
-                          <Text style={CHIP_TXT_ST}>{yyyyMmDd(item.date)}</Text>
-                        </View>
-                        <View style={CHIP_ST}>
-                          <Text style={CHIP_TXT_ST}>{kindLabel}</Text>
-                        </View>
-                        <View style={[CHIP_ST, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
-                          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: isCompleted ? '#34C759' : '#FF9500' }} />
-                          <Text style={CHIP_TXT_ST}>{isCompleted ? 'הושלם' : 'ממתין'}</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Customer name */}
-                    {!!customerName && (
-                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#0F172A', textAlign: 'right', lineHeight: 22 }} numberOfLines={1}>
-                        {customerName}
-                      </Text>
-                    )}
-
-                    {/* Notes */}
-                    {!!item.notes && (
-                      <Text style={{ fontSize: 12, fontWeight: '500', color: '#64748B', textAlign: 'right', marginTop: 5, lineHeight: 17 }} numberOfLines={1}>
-                        {item.notes}
-                      </Text>
-                    )}
-                  </View>
-
-                  {/* Action strip */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 15, paddingVertical: 11, borderTopWidth: 1, borderTopColor: '#F2F2F7' }}>
-                    {item.kind === 'regular' && !isCompleted ? (
-                      <Pressable
-                        style={BTN_ST}
-                        onPress={(e) => { e.stopPropagation?.(); openJob(item, { mode: 'execute' }); }}
-                        accessibilityLabel="בצע"
-                      >
-                        <Rocket size={14} color='#1E3A8A' strokeWidth={2} />
-                      </Pressable>
-                    ) : isCompleted ? (
-                      <View style={[BTN_ST, { borderColor: 'rgba(52,199,89,0.30)', backgroundColor: 'rgba(52,199,89,0.08)' }]}>
-                        <Check size={15} color='#34C759' strokeWidth={2.2} />
-                      </View>
-                    ) : null}
-
+              onPressInCapture={(rect) => {
+                detailsOriginRectRef.current = rect;
+              }}
+              footer={
+                <>
+                  {item.kind === 'regular' && !isCompleted ? (
                     <Pressable
-                      style={BTN_ST}
+                      style={JOB_ROW_ACTION_BTN}
                       onPress={(e) => {
                         e.stopPropagation?.();
-                        Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
-                          { text: 'ביטול', style: 'cancel' },
-                          { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
-                        ]);
+                        openJob(item, { mode: 'execute' });
                       }}
-                      accessibilityLabel="מחיקה"
+                      accessibilityLabel="בצע"
                     >
-                      <Trash2 size={14} color='#1E3A8A' strokeWidth={2} />
+                      <Rocket size={14} color="#1E3A8A" strokeWidth={2} />
                     </Pressable>
+                  ) : isCompleted ? (
+                    <View style={[JOB_ROW_ACTION_BTN, { borderColor: 'rgba(52,199,89,0.30)', backgroundColor: 'rgba(52,199,89,0.08)' }]}>
+                      <Check size={15} color="#34C759" strokeWidth={2.2} />
+                    </View>
+                  ) : null}
 
-                    <Pressable
-                      style={BTN_ST}
-                      onPress={(e) => { e.stopPropagation?.(); openEdit(item); }}
-                      accessibilityLabel="עריכה"
-                    >
-                      <Pencil size={14} color='#1E3A8A' strokeWidth={2} />
-                    </Pressable>
+                  <Pressable
+                    style={JOB_ROW_ACTION_BTN}
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      Alert.alert('מחיקת משימה', 'למחוק את המשימה?', [
+                        { text: 'ביטול', style: 'cancel' },
+                        { text: 'מחק', style: 'destructive', onPress: () => deleteJob(item) },
+                      ]);
+                    }}
+                    accessibilityLabel="מחיקה"
+                  >
+                    <Trash2 size={14} color="#1E3A8A" strokeWidth={2} />
+                  </Pressable>
 
-                    <View style={{ flex: 1 }} />
-                  </View>
-
-                </View>
-              </View>
-            </Pressable>
+                  <Pressable
+                    style={JOB_ROW_ACTION_BTN}
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      openEdit(item);
+                    }}
+                    accessibilityLabel="עריכה"
+                  >
+                    <Pencil size={14} color="#1E3A8A" strokeWidth={2} />
+                  </Pressable>
+                </>
+              }
+            />
           );
         }}
         ListEmptyComponent={
@@ -1685,6 +1630,8 @@ export function JobsScreen() {
                   placeholder="בחר לקוח מהמערכת…"
                   options={createCustomerOptions}
                   onChange={setCreateCustomerId}
+                  searchable
+                  searchPlaceholder="חיפוש לקוח…"
                 />
               )}
 

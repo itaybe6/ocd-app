@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import type { DateData, MarkedDates } from 'react-native-calendars';
@@ -6,6 +6,27 @@ import { yyyyMmDd } from '../lib/time';
 import { colors } from '../theme/colors';
 
 const HE = 'he';
+
+function monthStart(dateYmd: string): string {
+  const [year, month] = dateYmd.slice(0, 10).split('-').map((x) => Number(x));
+  if (!year || !month) return dateYmd;
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+function shiftMonth(dateYmd: string, delta: number): string {
+  const [year, month] = monthStart(dateYmd).split('-').map((x) => Number(x));
+  const d = new Date(year, month - 1 + delta, 1);
+  return yyyyMmDd(d);
+}
+
+function clampVisibleMonth(dateYmd: string, minDate: string, maxDate: string): string {
+  const target = monthStart(dateYmd);
+  const min = monthStart(minDate);
+  const max = monthStart(maxDate);
+  if (target < min) return min;
+  if (target > max) return max;
+  return target;
+}
 
 function registerHebrewLocaleOnce() {
   if (LocaleConfig.locales[HE]) return;
@@ -60,6 +81,11 @@ export function HebrewMonthCalendar({ selected, onSelect, horizonDays = 180 }: H
   }, [horizonDays]);
 
   const current = selected || minDate;
+  const [visibleMonth, setVisibleMonth] = useState(() => monthStart(current));
+
+  useEffect(() => {
+    setVisibleMonth(clampVisibleMonth(current, minDate, maxDate));
+  }, [current, minDate, maxDate]);
 
   const markedDates: MarkedDates = useMemo(() => {
     const out: MarkedDates = {};
@@ -169,11 +195,15 @@ export function HebrewMonthCalendar({ selected, onSelect, horizonDays = 180 }: H
   return (
     <View style={styles.shell}>
       <Calendar
-        current={current}
+        key={visibleMonth}
+        current={visibleMonth}
         minDate={minDate}
         maxDate={maxDate}
         markedDates={markedDates}
         onDayPress={(day: DateData) => onSelect(day.dateString)}
+        onMonthChange={(month: DateData) => setVisibleMonth(monthStart(month.dateString))}
+        onPressArrowLeft={() => setVisibleMonth((month) => clampVisibleMonth(shiftMonth(month, 1), minDate, maxDate))}
+        onPressArrowRight={() => setVisibleMonth((month) => clampVisibleMonth(shiftMonth(month, -1), minDate, maxDate))}
         firstDay={0}
         enableSwipeMonths
         hideExtraDays

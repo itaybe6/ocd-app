@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { SelectSheet } from '../../components/ui/SelectSheet';
-import { JobCard, JobChip } from '../../components/jobs/JobCard';
+import { AdminStyleJobRow } from '../../components/jobs/AdminStyleJobRow';
 import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -37,8 +37,6 @@ type JobServicePoint = { id: string; job_id: string; service_point_id: string; i
 type ServicePoint = { id: string; device_type: string; scent_type: string; refill_amount: number };
 type InstallationDevice = { id: string; installation_job_id: string; device_name?: string | null; image_url?: string | null };
 type SpecialJob = { id: string; battery_type?: 'AA' | 'DC' | null; job_type?: string | null; image_url?: string | null };
-
-const kindLabel = (k: Kind) => (k === 'regular' ? 'רגילה' : k === 'installation' ? 'התקנה' : 'מיוחדת');
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -444,7 +442,7 @@ export function WorkerScheduleScreen() {
   }, [regularPoints, installationDevices.length, special?.battery_type]);
 
   return (
-    <Screen backgroundColor="#FAF9FE">
+    <Screen backgroundColor="#F2F2F7">
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button title={loading ? 'טוען…' : 'רענון'} fullWidth={false} onPress={fetchForDay} />
@@ -529,19 +527,18 @@ export function WorkerScheduleScreen() {
         style={{ marginTop: 12 }}
         data={filtered}
         keyExtractor={(i) => `${i.kind}:${i.id}`}
-        contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
+        ItemSeparatorComponent={() => <View style={{ height: 36 }} />}
+        contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16 }}
         renderItem={({ item }) => (
-          <JobCard
-            title={`#${item.order_number ?? '—'} - ${kindLabel(item.kind)}`}
+          <AdminStyleJobRow
+            kind={item.kind}
             status={item.status}
-            description={item.notes ?? null}
+            date={item.date}
+            avatarUri={user?.avatar_url ?? null}
+            topRightLabel={user?.name?.trim() || 'משימה'}
+            titleLine={`הזמנה מס׳ ${item.order_number ?? '—'}`}
+            notes={item.notes ?? null}
             onPress={() => open(item)}
-            chips={
-              <>
-                <JobChip text={kindLabel(item.kind)} />
-                <JobChip text={yyyyMmDd(item.date)} muted />
-              </>
-            }
           />
         )}
         ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'right', marginTop: 16 }}>אין משימות.</Text>}
@@ -550,16 +547,15 @@ export function WorkerScheduleScreen() {
       <ModalSheet visible={!!selected} onClose={() => setSelected(null)}>
         {!!selected && (
           <View style={{ gap: 12 }}>
-            <JobCard
-              title={`#${selected.order_number ?? '—'} - ${kindLabel(selected.kind)}`}
+            <AdminStyleJobRow
+              kind={selected.kind}
               status={selected.status}
-              description={selected.notes ?? null}
-              chips={
-                <>
-                  <JobChip text={kindLabel(selected.kind)} />
-                  <JobChip text={yyyyMmDd(selected.date)} muted />
-                </>
-              }
+              date={selected.date}
+              avatarUri={user?.avatar_url ?? null}
+              topRightLabel={user?.name?.trim() || 'משימה'}
+              titleLine={`הזמנה מס׳ ${selected.order_number ?? '—'}`}
+              notes={selected.notes ?? null}
+              showFooter={false}
             />
 
             {selected.kind === 'regular' ? (
