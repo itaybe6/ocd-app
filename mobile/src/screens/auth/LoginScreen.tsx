@@ -49,17 +49,17 @@ function SegmentedToggle({
   }, []);
 
   const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(slide.value, [0, 1], [0, pillWidth]) }],
+    transform: [{ translateX: interpolate(slide.value, [0, 1], [pillWidth, 0]) }],
   }));
 
   const loginTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(slide.value, [0, 1], [colors.muted, '#FFFFFF']),
+    color: interpolateColor(slide.value, [0, 1], [colors.primary, '#FFFFFF']),
     fontWeight: '800',
     fontSize: 14,
   }));
 
   const signupTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(slide.value, [0, 1], ['#FFFFFF', colors.muted]),
+    color: interpolateColor(slide.value, [0, 1], ['#FFFFFF', colors.primary]),
     fontWeight: '800',
     fontSize: 14,
   }));
