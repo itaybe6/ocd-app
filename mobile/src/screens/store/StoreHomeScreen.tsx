@@ -22,6 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, {
   Extrapolation,
   interpolate,
+  Easing,
   interpolateColor,
   runOnJS,
   useAnimatedReaction,
@@ -1097,19 +1098,28 @@ function StoreSubcategoryCircleStrip({
     prevHasItemsRef.current = hasItems;
 
     if (hasItems && !prevHasItems) {
-      // Appearing: update content immediately then animate the container in.
+      // Appearing: update content immediately then animate the container in
+      // with a smooth ease-out curve (no spring bounce / jump).
       setDisplayedItems(items);
       contentOpacity.value = 1;
-      heightAnim.value = withSpring(SUBCATEGORY_STRIP_HEIGHT, {
-        damping: 18,
-        stiffness: 160,
-        mass: 0.7,
+      heightAnim.value = withTiming(SUBCATEGORY_STRIP_HEIGHT, {
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
       });
-      containerOpacity.value = withTiming(1, { duration: 220 });
+      containerOpacity.value = withTiming(1, {
+        duration: 240,
+        easing: Easing.out(Easing.quad),
+      });
     } else if (!hasItems && prevHasItems) {
       // Disappearing: fade + collapse, keep old content visible during animation.
-      containerOpacity.value = withTiming(0, { duration: 150 });
-      heightAnim.value = withTiming(0, { duration: 250 });
+      containerOpacity.value = withTiming(0, {
+        duration: 180,
+        easing: Easing.in(Easing.quad),
+      });
+      heightAnim.value = withTiming(0, {
+        duration: 260,
+        easing: Easing.in(Easing.cubic),
+      });
     } else if (hasItems && itemsKey !== prevKey) {
       // Switching between two non-empty sets: cross-fade the content.
       const captured = items;
@@ -1135,7 +1145,7 @@ function StoreSubcategoryCircleStrip({
 
   return (
     <Animated.View style={animStyle}>
-      <Animated.View style={contentStyle}>
+      <Animated.View style={[contentStyle, { height: SUBCATEGORY_STRIP_HEIGHT }]}>
         <ScrollView
           ref={scrollViewRef}
           horizontal
@@ -2526,7 +2536,7 @@ export function StoreHomeScreen({
               </View>
             )}
 
-            {selectedCategory === 'all' && (
+            {selectedCategory === 'all' && !loading && !topLevelCategories.length && (
               <>
                 <View style={{ alignItems: 'flex-end', gap: 4, marginTop: 8 }}>
                   <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>כל המוצרים</Text>

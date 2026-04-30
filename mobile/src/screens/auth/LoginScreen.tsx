@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -9,6 +9,7 @@ import Animated, {
   withRepeat,
   withSpring,
   withTiming,
+  interpolateColor,
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
@@ -24,43 +25,105 @@ type LoginScreenProps = {
   onBackToStore: () => void;
 };
 
-function AuthModeButton({
-  title,
-  active,
-  onPress,
+function SegmentedToggle({
+  mode,
+  onChangeMode,
 }: {
-  title: string;
-  active: boolean;
-  onPress: () => void;
+  mode: 'login' | 'signup';
+  onChangeMode: (m: 'login' | 'signup') => void;
 }) {
+  const [pillWidth, setPillWidth] = useState(0);
+  const slide = useSharedValue(mode === 'login' ? 1 : 0);
+
+  useEffect(() => {
+    slide.value = withSpring(mode === 'login' ? 1 : 0, {
+      damping: 20,
+      stiffness: 180,
+      mass: 0.7,
+    });
+  }, [mode]);
+
+  const onLayout = useCallback((e: any) => {
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setPillWidth(w / 2);
+  }, []);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(slide.value, [0, 1], [0, pillWidth]) }],
+  }));
+
+  const loginTextStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(slide.value, [0, 1], [colors.muted, '#FFFFFF']),
+    fontWeight: '800',
+    fontSize: 14,
+  }));
+
+  const signupTextStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(slide.value, [0, 1], ['#FFFFFF', colors.muted]),
+    fontWeight: '800',
+    fontSize: 14,
+  }));
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.88 : 1 })}>
-      <View
-        style={{
-          borderRadius: 12,
-          paddingVertical: 13,
-          minHeight: 46,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: active ? colors.primary : 'transparent',
-          shadowColor: active ? colors.primary : 'transparent',
-          shadowOpacity: active ? 0.28 : 0,
-          shadowRadius: active ? 8 : 0,
-          shadowOffset: { width: 0, height: 3 },
-          elevation: active ? 4 : 0,
-        }}
+    <View
+      onLayout={onLayout}
+      style={{
+        height: 52,
+        borderRadius: 16,
+        backgroundColor: '#E8EEFF',
+        borderWidth: 1.5,
+        borderColor: 'rgba(37,99,235,0.15)',
+        flexDirection: 'row-reverse',
+        padding: 4,
+        overflow: 'hidden',
+      }}
+    >
+      {/* sliding pill indicator */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            top: 4,
+            bottom: 4,
+            left: 4,
+            width: pillWidth - 4,
+            borderRadius: 12,
+            backgroundColor: colors.primary,
+            shadowColor: colors.primary,
+            shadowOpacity: 0.35,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 5,
+          },
+          indicatorStyle,
+        ]}
+      />
+
+      {/* left tab: הרשמה ללקוח */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected: mode === 'signup' }}
+        onPress={() => onChangeMode('signup')}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
       >
-        <Text
-          style={{
-            color: active ? '#FFFFFF' : colors.muted,
-            fontWeight: '800',
-            fontSize: 14,
-          }}
-        >
-          {title}
-        </Text>
-      </View>
-    </Pressable>
+        <Animated.Text numberOfLines={1} style={signupTextStyle}>
+          הרשמה ללקוח
+        </Animated.Text>
+      </Pressable>
+
+      {/* right tab: התחברות */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected: mode === 'login' }}
+        onPress={() => onChangeMode('login')}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
+      >
+        <Animated.Text numberOfLines={1} style={loginTextStyle}>
+          התחברות
+        </Animated.Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -200,7 +263,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
 
   return (
     <Screen>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={{ flex: 1 }}>
           <Animated.View pointerEvents="none" style={[blobA, { backgroundColor: '#DBEAFE' }]} />
           <Animated.View pointerEvents="none" style={[blobB, { backgroundColor: '#E0E7FF' }]} />
@@ -208,7 +271,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
 
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1, paddingTop: 24, paddingBottom: 18 }}
+            contentContainerStyle={{ flexGrow: 1, paddingTop: 24, paddingBottom: 96 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -252,20 +315,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                 }}
               >
                 <View style={{ gap: 12 }}>
-                  <View
-                    style={{
-                      flexDirection: 'row-reverse',
-                      gap: 4,
-                      padding: 4,
-                      borderRadius: 16,
-                      backgroundColor: colors.elevated,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <AuthModeButton title="התחברות" active={mode === 'login'} onPress={() => setMode('login')} />
-                    <AuthModeButton title="הרשמה ללקוח" active={mode === 'signup'} onPress={() => setMode('signup')} />
-                  </View>
+                  <SegmentedToggle mode={mode} onChangeMode={setMode} />
 
                   {mode === 'signup' && (
                     <Input
@@ -386,11 +436,6 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                     )}
                   </View>
 
-                  <Text style={{ color: colors.muted, textAlign: 'center', fontSize: 12, fontWeight: '700' }}>
-                    {mode === 'login'
-                      ? 'ממשק בהיר • RTL • אנימציות חלקות'
-                      : 'חשבון לקוח • אהבתי • התחברות מהירה אחרי הרשמה'}
-                  </Text>
                 </View>
               </Card>
             </Animated.View>

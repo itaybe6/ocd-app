@@ -62,6 +62,21 @@ function scheduleResetMainToCustomerProfile() {
   scheduleResetMain({ initialCustomerProfile: true });
 }
 
+function scheduleResetToLogin() {
+  const run = () => {
+    if (!navigationRef.isReady()) return false;
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+    return true;
+  };
+  if (run()) return;
+  setTimeout(() => {
+    run();
+  }, 60);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<AuthUser | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -89,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await setUser(null);
+    scheduleResetToLogin();
   }, [setUser]);
 
   const hasRole = useCallback((role: UserRole) => user?.role === role, [user?.role]);
