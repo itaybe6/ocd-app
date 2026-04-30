@@ -11,13 +11,14 @@ import { HebrewMonthCalendar } from '../../components/HebrewMonthCalendar';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
-import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
+import { OriginWindow, ORIGIN_WINDOW_DEFAULT_DURATION_MS, type OriginRect } from '../../components/OriginWindow';
 import { AdminStyleJobRow, JOB_ROW_ACTION_BTN } from '../../components/jobs/AdminStyleJobRow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { Avatar } from '../../components/ui/Avatar';
 import { getPublicUrl } from '../../lib/storage';
 import { pickImageFromLibrary } from '../../lib/media';
 import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
+import { flushScheduledPushJobs } from '../../lib/pushAdmin';
 import { supabase } from '../../lib/supabase';
 import { yyyyMmDd } from '../../lib/time';
 import { colors } from '../../theme/colors';
@@ -305,7 +306,7 @@ export function JobsScreen() {
     execCloseTimerRef.current = setTimeout(() => {
       setExecJob(null);
       setExecPoints([]);
-    }, 520);
+    }, 320);
   }, []);
 
   const openJob = async (job: UnifiedJob, opts?: { mode?: 'view' | 'execute' }) => {
@@ -394,7 +395,7 @@ export function JobsScreen() {
       setRegularPoints([]);
       setImages([]);
       setPreviewImageUrl(null);
-    }, 520);
+    }, ORIGIN_WINDOW_DEFAULT_DURATION_MS + 48);
   }, []);
 
   const pickExecImage = async (jobServicePointId: string) => {
@@ -627,6 +628,11 @@ export function JobsScreen() {
       resetCreateFormMinimal();
       setCreateOpen(false);
       await fetchUnified();
+      try {
+        await flushScheduledPushJobs();
+      } catch {
+        /* queued in DB; delivery may wait for scheduler if flush fails */
+      }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'יצירה נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -1131,7 +1137,12 @@ export function JobsScreen() {
         </View>
       </ModalSheet>
 
-      <OriginWindow visible={detailsOpen} originRect={detailsOriginRect} onClose={closeDetails}>
+      <OriginWindow
+        visible={detailsOpen}
+        originRect={detailsOriginRect}
+        onClose={closeDetails}
+        durationMs={ORIGIN_WINDOW_DEFAULT_DURATION_MS}
+      >
         {!!selected && (
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 14, padding: 14, paddingBottom: 22 }}>
             {/* Summary card (like screenshot) */}

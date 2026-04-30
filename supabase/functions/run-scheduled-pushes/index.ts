@@ -7,6 +7,7 @@ type JobRow = {
   image_url?: string | null;
   scheduled_for: string;
   status: string;
+  target_user_id?: string | null;
 };
 
 type PushTokenRow = { expo_push_token: string };
@@ -29,16 +30,16 @@ function corsHeaders() {
   };
 }
 
-async function readAllTokens(supabaseAdmin: any): Promise<string[]> {
+async function readPushTokens(supabaseAdmin: any, targetUserId: string | null | undefined): Promise<string[]> {
+  const target = (targetUserId ?? '').trim() || null;
   const tokens: string[] = [];
   const pageSize = 1000;
   let from = 0;
   while (true) {
     const to = from + pageSize - 1;
-    const { data, error } = await supabaseAdmin
-      .from('push_tokens')
-      .select('expo_push_token')
-      .range(from, to);
+    let q = supabaseAdmin.from('push_tokens').select('expo_push_token');
+    if (target) q = q.eq('user_id', target);
+    const { data, error } = await q.range(from, to);
     if (error) throw error;
     const rows = (data ?? []) as PushTokenRow[];
     for (const r of rows) {
@@ -62,8 +63,9 @@ async function sendBroadcast(opts: {
   title: string;
   body: string;
   imageUrl: string | null;
+  targetUserId?: string | null;
 }) {
-  const { supabaseAdmin, title, body, imageUrl } = opts;
+  const { supabaseAdmin, title, body, imageUrl, targetUserId } = opts;
 
   const sentAt = new Date().toISOString();
   const { data: inserted, error: insertErr } = await supabaseAdmin
@@ -80,7 +82,7 @@ async function sendBroadcast(opts: {
   if (insertErr) throw new Error(insertErr.message);
   const notificationId = (inserted as any)?.id ?? null;
 
-  const tokens = await readAllTokens(supabaseAdmin);
+  const tokens = await readPushTokens(supabaseAdmin, targetUserId);
   if (!tokens.length) {
     if (notificationId) {
       await supabaseAdmin
@@ -91,12 +93,13 @@ async function sendBroadcast(opts: {
     return { notificationId, totalTokens: 0, successCount: 0, errorCount: 0, removedInvalidTokens: 0, errors: null };
   }
 
+  const target = (targetUserId ?? '').trim();
   const baseMessage: Record<string, unknown> = {
     title,
     body,
     sound: 'default',
     channelId: 'marketing',
-    data: { type: 'broadcast' },
+    data: target ? { type: 'job_assigned' } : { type: 'broadcast' },
   };
   if (imageUrl) {
     baseMessage.richContent = { image: imageUrl };
@@ -208,7 +211,7 @@ Deno.serve(async (req) => {
   const nowIso = new Date().toISOString();
   const { data: due, error: dueErr } = await supabaseAdmin
     .from('push_notification_jobs')
-    .select('id, title, body, image_url, scheduled_for, status')
+    .select('id, title, body, image_url, scheduled_for, status, target_user_id')
     .eq('status', 'scheduled')
     .lte('scheduled_for', nowIso)
     .order('scheduled_for', { ascending: true })
@@ -238,6 +241,7 @@ Deno.serve(async (req) => {
         title: String(job.title ?? '').trim(),
         body: String(job.body ?? '').trim(),
         imageUrl: (job.image_url ?? null) ? String(job.image_url).trim() : null,
+        targetUserId: (job as JobRow).target_user_id ?? null,
       });
       await supabaseAdmin
         .from('push_notification_jobs')
