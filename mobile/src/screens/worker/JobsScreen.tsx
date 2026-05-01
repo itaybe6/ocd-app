@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarDays, Check, Droplets, Eye, Play, Search } from 'lucide-react-native';
+import { CalendarDays, Droplets, Eye, Play, Search } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -39,6 +39,9 @@ import { useAuth } from '../../state/AuthContext';
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 /** Same slab as `AdminHeader` (`headerBg`) */
 const ADMIN_HEADER_COLOR = '#1F2937';
+
+/** Snappier morph than `ORIGIN_WINDOW_DEFAULT_DURATION_MS` — worker task details only */
+const WORKER_JOB_DETAILS_ORIGIN_MS = 260;
 
 const jsStat = StyleSheet.create({
   card: {
@@ -127,7 +130,7 @@ const SPECIAL_JOB_TYPE_LABELS: Record<string, string> = {
   other: 'אחר',
 };
 
-/** Measures on press-in so OriginWindow can open from the same control (like task row → details). */
+/** Measures on press-in so OriginWindow can open from the same control (details → execute). */
 function ExecOriginButton({
   originRef,
   onPressMeasured,
@@ -418,7 +421,7 @@ export function WorkerJobsScreen() {
       setInstallationDevices([]);
       setImages([]);
       setPreviewImageUrl(null);
-    }, ORIGIN_WINDOW_DEFAULT_DURATION_MS + 48);
+    }, WORKER_JOB_DETAILS_ORIGIN_MS + 48);
   }, []);
 
   const pickExecRegularImage = async (jobServicePointId: string) => {
@@ -727,7 +730,6 @@ export function WorkerJobsScreen() {
           </View>
         )}
         renderItem={({ item }) => {
-          const isCompleted = item.status === 'completed';
           const customerName = item.customer_id
             ? customerMap.get(item.customer_id) ?? item.customer_id.slice(0, 6)
             : null;
@@ -746,61 +748,7 @@ export function WorkerJobsScreen() {
               onPressInCapture={(rect) => {
                 detailsOriginRectRef.current = rect;
               }}
-              footer={
-                <>
-                  {!isCompleted ? (
-                    <ExecOriginButton
-                      originRef={execOriginRectRef}
-                      accessibilityLabel="בצע משימה"
-                      innerStyle={{
-                        minHeight: 44,
-                        paddingHorizontal: 14,
-                        paddingVertical: 10,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: ADMIN_HEADER_COLOR,
-                        shadowColor: ADMIN_HEADER_COLOR,
-                        shadowOpacity: 0.3,
-                        shadowRadius: 8,
-                        shadowOffset: { width: 0, height: 4 },
-                        elevation: 4,
-                      }}
-                      onPressMeasured={() => {
-                        setExecOriginRect(execOriginRectRef.current);
-                        void openJob(item, { mode: 'execute' });
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: '#FFFFFF',
-                          fontWeight: '700',
-                          fontSize: 13,
-                          textAlign: 'center',
-                        }}
-                        numberOfLines={1}
-                      >
-                        בצע משימה
-                      </Text>
-                    </ExecOriginButton>
-                  ) : (
-                    <View
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 11,
-                        borderWidth: 1.5,
-                        borderColor: 'rgba(52,199,89,0.30)',
-                        backgroundColor: 'rgba(52,199,89,0.08)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Check size={15} color="#34C759" strokeWidth={2.2} />
-                    </View>
-                  )}
-                </>
-              }
+              showFooter={false}
             />
           );
         }}
@@ -1002,7 +950,8 @@ export function WorkerJobsScreen() {
         visible={detailsOpen}
         originRect={detailsOriginRect}
         onClose={closeDetails}
-        durationMs={ORIGIN_WINDOW_DEFAULT_DURATION_MS}
+        durationMs={WORKER_JOB_DETAILS_ORIGIN_MS}
+        deferOpenByOneFrame={false}
       >
         {!!selected && (
           <ScrollView
@@ -1146,7 +1095,6 @@ export function WorkerJobsScreen() {
                 </Text>
               )}
 
-              {/* Action: execute */}
               {selected.status === 'pending' ? (
                 <View
                   style={{

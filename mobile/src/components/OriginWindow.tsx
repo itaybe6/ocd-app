@@ -28,6 +28,8 @@ type OriginWindowProps = {
   durationMs?: number;
   openedWidth?: number;
   openedHeight?: number;
+  /** When false, open animation starts immediately (snappier; row origin is already measured). Default true. */
+  deferOpenByOneFrame?: boolean;
 };
 
 const DEFAULT_W = Math.min(screenWidth * 0.92, 420);
@@ -46,6 +48,7 @@ export function OriginWindow({
   durationMs = ORIGIN_WINDOW_DEFAULT_DURATION_MS,
   openedWidth = DEFAULT_W,
   openedHeight = DEFAULT_H,
+  deferOpenByOneFrame = true,
 }: OriginWindowProps) {
   const [mounted, setMounted] = useState(visible);
   const progress = useSharedValue(visible ? 1 : 0);
@@ -74,11 +77,15 @@ export function OriginWindow({
     if (visible) {
       cancelAnimation(progress);
       setMounted(true);
-      // Give one frame so the layout is committed, then animate in
-      const id = requestAnimationFrame(() => {
+      const runOpen = () => {
         progress.value = withTiming(1, { duration: durationMs, easing: Easing.bezier(0.2, 0.9, 0.2, 1) });
-      });
-      return () => cancelAnimationFrame(id);
+      };
+      if (deferOpenByOneFrame) {
+        const id = requestAnimationFrame(runOpen);
+        return () => cancelAnimationFrame(id);
+      }
+      runOpen();
+      return undefined;
     }
 
     cancelAnimation(progress);
@@ -88,7 +95,7 @@ export function OriginWindow({
     return () => {
       cancelAnimation(progress);
     };
-  }, [durationMs, progress, visible]);
+  }, [deferOpenByOneFrame, durationMs, progress, visible]);
 
   const endLeft = useMemo(() => (screenWidth - openedWidth) / 2, [openedWidth]);
   const endTop = useMemo(() => Math.max(36, (screenHeight - openedHeight) / 2), [openedHeight]);

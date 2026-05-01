@@ -42,7 +42,7 @@ import {
   Upload,
 } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
-import { OriginWindow, ORIGIN_WINDOW_DEFAULT_DURATION_MS, type OriginRect } from '../../components/OriginWindow';
+import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -66,6 +66,9 @@ const HE_MONTHS = [
   'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
 ];
 const HE_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+
+/** Worker schedule execute morph — shorter than default + opens before fetch (see `openExecute`). */
+const SCHEDULE_EXEC_ORIGIN_MS = 280;
 
 type Unified = {
   kind: Kind;
@@ -128,6 +131,13 @@ function formatHm(iso: string) {
 function parseTimeToMinutes(iso: string): number {
   const d = new Date(iso);
   return d.getHours() * 60 + d.getMinutes();
+}
+
+/** Each job service point row = one physical point / device unit in the app model. */
+function devicesAtPointsLabel(n: number): string {
+  if (n <= 0) return '—';
+  if (n === 1) return 'מכשיר אחד';
+  return `${n} מכשירים`;
 }
 
 // ── Animated donut ───────────────────────────────────────────
@@ -264,7 +274,7 @@ export function WorkerScheduleScreen() {
   }>({ scent: [], equipmentCount: 0, batteries: [] });
 
   /** Per regular job: aggregated scent types → total ml for that job’s service points */
-  const [jobScentSummaries, setJobScentSummaries] = useState<Record<string, { key: string; amount: number }[]>>({});
+  const [jobScentSummaries, setJobScentSummaries] = useState<Record<string, { key: string; deviceCount: number }[]>>({});
 
   // Execute task — OriginWindow (same morph pattern as WorkerJobsScreen)
   const [execJob, setExecJob] = useState<Unified | null>(null);
@@ -285,6 +295,7 @@ export function WorkerScheduleScreen() {
   >(null);
 
   const customerMap = useMemo(() => new Map(customers.map((u) => [u.id, u.name])), [customers]);
+  const customerById = useMemo(() => new Map(customers.map((u) => [u.id, u])), [customers]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
 
   const parsedView = useMemo(() => {
@@ -449,7 +460,7 @@ export function WorkerScheduleScreen() {
         : [];
       const spMap = new Map((spData as any[]).map((sp) => [sp.id as string, sp]));
       const scentMap = new Map<string, number>();
-      const perJobScent = new Map<string, Map<string, number>>();
+      const perJobDevicesByScent = new Map<string, Map<string, number>>();
       const NO_NAME_KEY = '__no_name__';
       for (const r of scentRows) {
         const sp = spMap.get(r.service_point_id);
@@ -457,17 +468,18 @@ export function WorkerScheduleScreen() {
         const isMissing = !raw || raw.toLowerCase() === 'unknown';
         const key = isMissing ? NO_NAME_KEY : raw;
         const amt = Number(r.custom_refill_amount ?? sp?.refill_amount ?? 0);
-        if (!amt) continue;
-        scentMap.set(key, (scentMap.get(key) ?? 0) + amt);
-        if (!perJobScent.has(r.job_id)) perJobScent.set(r.job_id, new Map());
-        const jm = perJobScent.get(r.job_id)!;
-        jm.set(key, (jm.get(key) ?? 0) + amt);
+        if (amt) {
+          scentMap.set(key, (scentMap.get(key) ?? 0) + amt);
+        }
+        if (!perJobDevicesByScent.has(r.job_id)) perJobDevicesByScent.set(r.job_id, new Map());
+        const jm = perJobDevicesByScent.get(r.job_id)!;
+        jm.set(key, (jm.get(key) ?? 0) + 1);
       }
-      const jobScentRecord: Record<string, { key: string; amount: number }[]> = {};
-      for (const [jid, jm] of perJobScent) {
+      const jobScentRecord: Record<string, { key: string; deviceCount: number }[]> = {};
+      for (const [jid, jm] of perJobDevicesByScent) {
         jobScentRecord[jid] = Array.from(jm.entries())
-          .map(([key, amount]) => ({ key, amount }))
-          .sort((a, b) => b.amount - a.amount);
+          .map(([key, deviceCount]) => ({ key, deviceCount }))
+          .sort((a, b) => b.deviceCount - a.deviceCount);
       }
       setJobScentSummaries(jobScentRecord);
 
@@ -530,7 +542,7 @@ export function WorkerScheduleScreen() {
       setSpecial(null);
       setExecOriginRect(null);
       execOriginRectRef.current = null;
-    }, ORIGIN_WINDOW_DEFAULT_DURATION_MS + 48);
+    }, SCHEDULE_EXEC_ORIGIN_MS + 48);
   }, []);
 
   // ── Open execute window (OriginWindow morph from task row, like WorkerJobsScreen) ──
@@ -541,6 +553,9 @@ export function WorkerScheduleScreen() {
     setRegularPoints([]);
     setInstallationDevices([]);
     setSpecial(null);
+
+    // Open immediately on next tick so the morph starts while Supabase loads (same pattern as WorkerJobsScreen).
+    setTimeout(() => setExecOpen(true), 0);
 
     try {
       if (it.kind === 'regular') {
@@ -592,8 +607,6 @@ export function WorkerScheduleScreen() {
       }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת פרטים נכשלה', text2: e?.message ?? 'Unknown error' });
-    } finally {
-      setTimeout(() => setExecOpen(true), 0);
     }
   }, []);
 
@@ -944,6 +957,8 @@ export function WorkerScheduleScreen() {
           const isCompleted = item.status === 'completed';
           const kindConf = KIND_CONFIG[item.kind];
           const customer = customerLabel(item);
+          const customerUser = item.customer_id ? customerById.get(item.customer_id) : undefined;
+          const customerAvatarUri = customerUser?.avatar_url ?? null;
           const rowKey = `${item.kind}:${item.id}`;
           const scents = item.kind === 'regular' ? jobScentSummaries[item.id] : undefined;
 
@@ -977,9 +992,9 @@ export function WorkerScheduleScreen() {
                 <View style={st.taskBody}>
                   <View style={st.taskTopRow}>
                     <View style={st.taskWho}>
-                      <Avatar size={24} uri={user?.avatar_url ?? null} name={user?.name ?? ''} />
-                      <Text style={st.taskWorkerName} numberOfLines={1}>
-                        {user?.name?.trim() || 'אני'}
+                      <Avatar size={24} uri={customerAvatarUri} name={customer} />
+                      <Text style={st.taskCustomer} numberOfLines={1}>
+                        {customer}
                       </Text>
                     </View>
                     <View style={st.taskTopLeft}>
@@ -995,10 +1010,6 @@ export function WorkerScheduleScreen() {
                       </View>
                     </View>
                   </View>
-
-                  <Text style={st.taskCustomer} numberOfLines={1}>
-                    {customer}
-                  </Text>
 
                   {!!item.notes && (
                     <Text style={st.taskNotes} numberOfLines={2}>
@@ -1017,7 +1028,7 @@ export function WorkerScheduleScreen() {
                                 <Droplets size={11} color={colors.primary} strokeWidth={2.4} />
                               </View>
                               <View style={st.taskScentChipBody}>
-                                <Text style={st.taskScentChipAmount}>{Math.round(s.amount)} מ״ל</Text>
+                                <Text style={st.taskScentChipAmount}>{devicesAtPointsLabel(s.deviceCount)}</Text>
                                 <Text style={st.taskScentChipName} numberOfLines={1}>
                                   {isMissingName ? 'ללא שם ניחוח' : s.key}
                                 </Text>
@@ -1051,7 +1062,8 @@ export function WorkerScheduleScreen() {
         visible={execOpen}
         originRect={execOriginRect}
         onClose={closeExec}
-        durationMs={ORIGIN_WINDOW_DEFAULT_DURATION_MS}
+        durationMs={SCHEDULE_EXEC_ORIGIN_MS}
+        deferOpenByOneFrame={false}
         openedHeight={Math.min(screenHeight * 0.86, screenHeight - 40)}
         openedWidth={Math.min(screenWidth * 0.94, 440)}
       >
@@ -1143,7 +1155,6 @@ export function WorkerScheduleScreen() {
                   {regularPoints.map((p, idx) => {
                     const current = p.image_url ? getPublicUrl(p.image_url) : null;
                     const previewUri = p.localImageUri ?? current;
-                    const refill = p.custom_refill_amount ?? p.sp?.refill_amount ?? null;
                     return (
                       <View key={p.id} style={st.spCard}>
                         <View style={st.spCardHeader}>
@@ -1174,10 +1185,8 @@ export function WorkerScheduleScreen() {
                           </View>
                           <View style={st.spMetaSep} />
                           <View style={st.spMetaItem}>
-                            <Text style={st.spMetaLabel}>כמות מילוי</Text>
-                            <Text style={st.spMetaValue}>
-                              {refill != null ? `${refill} מ״ל` : '—'}
-                            </Text>
+                            <Text style={st.spMetaLabel}>מכשירים בנקודה</Text>
+                            <Text style={st.spMetaValue}>{devicesAtPointsLabel(1)}</Text>
                           </View>
                         </View>
 
@@ -1691,13 +1700,6 @@ const st = StyleSheet.create({
     marginLeft: 8,
   },
   taskTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  taskWorkerName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    flex: 1,
-    textAlign: 'right',
-  },
   taskTimePill: {
     backgroundColor: 'rgba(30,58,138,0.07)',
     borderRadius: 20,
@@ -1708,6 +1710,8 @@ const st = StyleSheet.create({
   },
   taskTimeText: { fontSize: 11, fontWeight: '700', color: '#1E3A8A', letterSpacing: 0.4 },
   taskCustomer: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 16,
     fontWeight: '800',
     color: colors.text,
