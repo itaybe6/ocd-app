@@ -26,7 +26,6 @@ import { svgPathProperties } from 'svg-path-properties';
 import { addDays, format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
-  ArrowUpRight,
   Battery,
   CalendarDays,
   Camera,
@@ -38,13 +37,12 @@ import {
   ImagePlus,
   Layers,
   Package,
+  Play,
   Sparkles,
   Upload,
-  X,
 } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
-import { ModalSheet } from '../../components/ModalSheet';
-import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
+import { OriginWindow, ORIGIN_WINDOW_DEFAULT_DURATION_MS, type OriginRect } from '../../components/OriginWindow';
 import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
@@ -115,6 +113,8 @@ const KIND_CONFIG = {
   installation: { label: 'התקנה',  color: '#7C3AED'      },
   special:      { label: 'מיוחדת', color: '#EA580C'      },
 } as const;
+
+const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -263,8 +263,17 @@ export function WorkerScheduleScreen() {
     batteries: { key: string; count: number }[];
   }>({ scent: [], equipmentCount: 0, batteries: [] });
 
-  // Job details / completion modal state
-  const [selected, setSelected] = useState<Unified | null>(null);
+  /** Per regular job: aggregated scent types → total ml for that job’s service points */
+  const [jobScentSummaries, setJobScentSummaries] = useState<Record<string, { key: string; amount: number }[]>>({});
+
+  // Execute task — OriginWindow (same morph pattern as WorkerJobsScreen)
+  const [execJob, setExecJob] = useState<Unified | null>(null);
+  const [execOpen, setExecOpen] = useState(false);
+  const [execOriginRect, setExecOriginRect] = useState<OriginRect | null>(null);
+  const execOriginRectRef = useRef<OriginRect | null>(null);
+  const execCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taskRowRefs = useRef<Map<string, View>>(new Map());
+
   const [regularPoints, setRegularPoints] = useState<
     (JobServicePoint & { sp?: ServicePoint | null; localImageUri?: string | null; uploading?: boolean })[]
   >([]);
@@ -274,14 +283,6 @@ export function WorkerScheduleScreen() {
   const [special, setSpecial] = useState<
     (SpecialJob & { localImageUri?: string | null; uploading?: boolean }) | null
   >(null);
-
-  // Service-points origin window
-  const [pointsOpen, setPointsOpen] = useState(false);
-  const [pointsLoading, setPointsLoading] = useState(false);
-  const [pointsJob, setPointsJob] = useState<Unified | null>(null);
-  const [pointsOriginRect, setPointsOriginRect] = useState<OriginRect | null>(null);
-  const pointsOriginRectRef = useRef<OriginRect | null>(null);
-  const [jobPoints, setJobPoints] = useState<(JobServicePoint & { sp?: ServicePoint | null })[]>([]);
 
   const customerMap = useMemo(() => new Map(customers.map((u) => [u.id, u.name])), [customers]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
@@ -429,12 +430,12 @@ export function WorkerScheduleScreen() {
         return (res.data ?? fallback) as T;
       };
 
-      let scentRows: { service_point_id: string; custom_refill_amount?: number | null }[] = [];
+      let scentRows: { job_id: string; service_point_id: string; custom_refill_amount?: number | null }[] = [];
       if (regularIds.length) {
         scentRows = await safe(
           supabase
             .from('job_service_points')
-            .select('service_point_id, custom_refill_amount')
+            .select('job_id, service_point_id, custom_refill_amount')
             .in('job_id', regularIds),
           [],
         );
@@ -448,12 +449,27 @@ export function WorkerScheduleScreen() {
         : [];
       const spMap = new Map((spData as any[]).map((sp) => [sp.id as string, sp]));
       const scentMap = new Map<string, number>();
+      const perJobScent = new Map<string, Map<string, number>>();
+      const NO_NAME_KEY = '__no_name__';
       for (const r of scentRows) {
         const sp = spMap.get(r.service_point_id);
-        const scent = String(sp?.scent_type ?? 'unknown');
+        const raw = String(sp?.scent_type ?? '').trim();
+        const isMissing = !raw || raw.toLowerCase() === 'unknown';
+        const key = isMissing ? NO_NAME_KEY : raw;
         const amt = Number(r.custom_refill_amount ?? sp?.refill_amount ?? 0);
-        scentMap.set(scent, (scentMap.get(scent) ?? 0) + amt);
+        if (!amt) continue;
+        scentMap.set(key, (scentMap.get(key) ?? 0) + amt);
+        if (!perJobScent.has(r.job_id)) perJobScent.set(r.job_id, new Map());
+        const jm = perJobScent.get(r.job_id)!;
+        jm.set(key, (jm.get(key) ?? 0) + amt);
       }
+      const jobScentRecord: Record<string, { key: string; amount: number }[]> = {};
+      for (const [jid, jm] of perJobScent) {
+        jobScentRecord[jid] = Array.from(jm.entries())
+          .map(([key, amount]) => ({ key, amount }))
+          .sort((a, b) => b.amount - a.amount);
+      }
+      setJobScentSummaries(jobScentRecord);
 
       const instDevices = installationIds.length
         ? await safe(
@@ -504,9 +520,24 @@ export function WorkerScheduleScreen() {
     [customerMap, oneTimeMap],
   );
 
-  // ── Job details / completion flow ─────────────────────────
-  const open = useCallback(async (it: Unified) => {
-    setSelected(it);
+  const closeExec = useCallback(() => {
+    setExecOpen(false);
+    if (execCloseTimerRef.current) clearTimeout(execCloseTimerRef.current);
+    execCloseTimerRef.current = setTimeout(() => {
+      setExecJob(null);
+      setRegularPoints([]);
+      setInstallationDevices([]);
+      setSpecial(null);
+      setExecOriginRect(null);
+      execOriginRectRef.current = null;
+    }, ORIGIN_WINDOW_DEFAULT_DURATION_MS + 48);
+  }, []);
+
+  // ── Open execute window (OriginWindow morph from task row, like WorkerJobsScreen) ──
+  const openExecute = useCallback(async (it: Unified) => {
+    setExecOriginRect(execOriginRectRef.current);
+    setExecJob(it);
+    setExecOpen(false);
     setRegularPoints([]);
     setInstallationDevices([]);
     setSpecial(null);
@@ -529,7 +560,14 @@ export function WorkerScheduleScreen() {
           if (spErr) throw spErr;
           spMap = new Map(((sps ?? []) as ServicePoint[]).map((sp) => [sp.id, sp]));
         }
-        setRegularPoints(rows.map((r) => ({ ...r, sp: spMap.get(r.service_point_id) ?? null })));
+        setRegularPoints(
+          rows.map((r) => ({
+            ...r,
+            sp: spMap.get(r.service_point_id) ?? null,
+            localImageUri: null,
+            uploading: false,
+          })),
+        );
       }
 
       if (it.kind === 'installation') {
@@ -538,7 +576,9 @@ export function WorkerScheduleScreen() {
           .select('id, installation_job_id, device_name, image_url')
           .eq('installation_job_id', it.id);
         if (error) throw error;
-        setInstallationDevices((data ?? []) as any);
+        setInstallationDevices(
+          ((data ?? []) as InstallationDevice[]).map((d) => ({ ...d, localImageUri: null, uploading: false })),
+        );
       }
 
       if (it.kind === 'special') {
@@ -548,10 +588,12 @@ export function WorkerScheduleScreen() {
           .eq('id', it.id)
           .single();
         if (error) throw error;
-        setSpecial(data as any);
+        setSpecial({ ...(data as SpecialJob), localImageUri: null, uploading: false });
       }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת פרטים נכשלה', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setTimeout(() => setExecOpen(true), 0);
     }
   }, []);
 
@@ -561,12 +603,12 @@ export function WorkerScheduleScreen() {
   };
 
   const uploadRegularPoint = async (p: (typeof regularPoints)[number]) => {
-    if (!selected) return;
+    if (!execJob) return;
     if (!p.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
     try {
       setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
       const storagePath = await uploadJobServicePointImage({
-        jobId: selected.id,
+        jobId: execJob.id,
         jobServicePointId: p.id,
         servicePointId: p.service_point_id,
         localUri: p.localImageUri,
@@ -580,12 +622,12 @@ export function WorkerScheduleScreen() {
   };
 
   const uploadInstallationDevice = async (d: (typeof installationDevices)[number]) => {
-    if (!selected) return;
+    if (!execJob) return;
     if (!d.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
     try {
       setInstallationDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: true } : x)));
       const storagePath = await uploadInstallationDeviceImage({
-        installationJobId: selected.id,
+        installationJobId: execJob.id,
         installationDeviceId: d.id,
         localUri: d.localImageUri,
       });
@@ -598,7 +640,7 @@ export function WorkerScheduleScreen() {
   };
 
   const uploadSpecial = async () => {
-    if (!selected || !special) return;
+    if (!execJob || !special) return;
     if (!special.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
     try {
       setSpecial((p) => (p ? { ...p, uploading: true } : p));
@@ -612,17 +654,17 @@ export function WorkerScheduleScreen() {
   };
 
   const complete = async () => {
-    if (!selected) return;
+    if (!execJob) return;
     try {
       setIsLoading(true);
-      await completeUnifiedJob(selected.kind, selected.id);
+      await completeUnifiedJob(execJob.kind, execJob.id);
       setItems((prev) =>
         prev.map((x) =>
-          x.kind === selected.kind && x.id === selected.id ? { ...x, status: 'completed' } : x,
+          x.kind === execJob.kind && x.id === execJob.id ? { ...x, status: 'completed' } : x,
         ),
       );
       Toast.show({ type: 'success', text1: 'הושלם' });
-      setSelected(null);
+      closeExec();
       // refresh totals
       fetchDay();
     } catch (e: any) {
@@ -648,54 +690,22 @@ export function WorkerScheduleScreen() {
     };
   }, [regularPoints, installationDevices.length, special?.battery_type]);
 
-  // ── Service points window (read-only quick view) ──────────
-  const openJobPoints = useCallback(async (job: Unified) => {
-    setPointsOriginRect(pointsOriginRectRef.current);
-    setPointsOpen(true);
-    setPointsLoading(true);
-    setPointsJob(job);
-    setJobPoints([]);
-
-    if (job.kind !== 'regular') {
-      setPointsLoading(false);
-      return;
+  const isExecCompletable = useMemo(() => {
+    if (!execJob) return false;
+    if (execJob.status !== 'pending') return false;
+    if (execJob.kind === 'regular') {
+      if (!regularPoints.length) return true;
+      return regularPoints.every((p) => !!p.image_url);
     }
-
-    try {
-      const { data: jsp, error: jspErr } = await supabase
-        .from('job_service_points')
-        .select('id, job_id, service_point_id, custom_refill_amount')
-        .eq('job_id', job.id);
-      if (jspErr) throw jspErr;
-
-      const rows = (jsp ?? []) as JobServicePoint[];
-      const spIds = rows.map((r) => r.service_point_id);
-      let spMap = new Map<string, ServicePoint>();
-
-      if (spIds.length) {
-        const { data: sps, error: spErr } = await supabase
-          .from('service_points')
-          .select('id, device_type, scent_type, refill_amount, notes')
-          .in('id', spIds);
-        if (spErr) throw spErr;
-        spMap = new Map(((sps ?? []) as ServicePoint[]).map((sp) => [sp.id, sp]));
-      }
-
-      setJobPoints(rows.map((r) => ({ ...r, sp: spMap.get(r.service_point_id) ?? null })));
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'טעינת נקודות נכשלה', text2: e?.message ?? 'Unknown error' });
-      setJobPoints([]);
-    } finally {
-      setPointsLoading(false);
+    if (execJob.kind === 'installation') {
+      if (!installationDevices.length) return true;
+      return installationDevices.every((d) => !!d.image_url);
     }
-  }, []);
-
-  const closePoints = useCallback(() => {
-    setPointsOpen(false);
-    setPointsLoading(false);
-    setPointsJob(null);
-    setJobPoints([]);
-  }, []);
+    if (execJob.kind === 'special') {
+      return !!special?.image_url;
+    }
+    return false;
+  }, [execJob, regularPoints, installationDevices, special?.image_url]);
 
   // ── List header (calendar + oil card + filter + stats) ────
   const listHeader = useMemo(
@@ -777,7 +787,7 @@ export function WorkerScheduleScreen() {
               <View key={pageIdx} style={[st.calWeekPage, { width: weekScrollWidth }]}>
                 {week.map((d) => {
                   const ds = yyyyMmDd(d);
-                  const isSelected = ds === day;
+                  const isDayPicked = ds === day;
                   const isToday = ds === todayStr;
                   const isOtherMonth = d.getMonth() !== parsedView.getMonth();
                   return (
@@ -792,22 +802,22 @@ export function WorkerScheduleScreen() {
                       <View
                         style={[
                           st.calDayBubble,
-                          isSelected && st.calDayBubbleSel,
-                          isToday && !isSelected && st.calDayBubbleToday,
+                          isDayPicked && st.calDayBubbleSel,
+                          isToday && !isDayPicked && st.calDayBubbleToday,
                         ]}
                       >
                         <Text
                           style={[
                             st.calDayNum,
-                            isSelected && st.calDayNumSel,
-                            isToday && !isSelected && st.calDayNumToday,
-                            isOtherMonth && !isSelected && st.calDayNumFaded,
+                            isDayPicked && st.calDayNumSel,
+                            isToday && !isDayPicked && st.calDayNumToday,
+                            isOtherMonth && !isDayPicked && st.calDayNumFaded,
                           ]}
                         >
                           {d.getDate()}
                         </Text>
                       </View>
-                      <View style={[st.calDayDot, isSelected && st.calDayDotVisible]} />
+                      <View style={[st.calDayDot, isDayPicked && st.calDayDotVisible]} />
                     </Pressable>
                   );
                 })}
@@ -934,20 +944,37 @@ export function WorkerScheduleScreen() {
           const isCompleted = item.status === 'completed';
           const kindConf = KIND_CONFIG[item.kind];
           const customer = customerLabel(item);
+          const rowKey = `${item.kind}:${item.id}`;
+          const scents = item.kind === 'regular' ? jobScentSummaries[item.id] : undefined;
 
           return (
             <Pressable
-              onPress={() => open(item)}
+              onPressIn={() => {
+                const v = taskRowRefs.current.get(rowKey);
+                v?.measureInWindow((x, y, w, h) => {
+                  if (w > 0 && h > 0) {
+                    execOriginRectRef.current = { x, y, width: w, height: h, borderRadius: 20 };
+                  }
+                });
+              }}
+              onPress={() => void openExecute(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`משימה: ${customer}`}
               style={({ pressed }) => [
                 st.taskWrap,
                 isCompleted && { opacity: 0.68 },
                 pressed && { opacity: 0.95 },
               ]}
             >
-              <View style={st.taskInner}>
-                {/* Body */}
+              <View
+                ref={(el) => {
+                  if (el) taskRowRefs.current.set(rowKey, el);
+                  else taskRowRefs.current.delete(rowKey);
+                }}
+                collapsable={false}
+                style={st.taskInner}
+              >
                 <View style={st.taskBody}>
-                  {/* Row 1: avatar + my name (right) | kind + time + status (left) */}
                   <View style={st.taskTopRow}>
                     <View style={st.taskWho}>
                       <Avatar size={24} uri={user?.avatar_url ?? null} name={user?.name ?? ''} />
@@ -969,49 +996,38 @@ export function WorkerScheduleScreen() {
                     </View>
                   </View>
 
-                  {/* Row 2: customer / location */}
                   <Text style={st.taskCustomer} numberOfLines={1}>
                     {customer}
                   </Text>
 
                   {!!item.notes && (
-                    <Text style={st.taskNotes} numberOfLines={1}>
+                    <Text style={st.taskNotes} numberOfLines={2}>
                       {item.notes}
                     </Text>
                   )}
-                </View>
 
-                {/* Action strip */}
-                <View style={st.taskActions}>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation?.();
-                      open(item);
-                    }}
-                    style={[st.tcBtn, isCompleted && st.tcBtnDone]}
-                    accessibilityLabel={isCompleted ? 'הושלם' : 'פתיחה'}
-                  >
-                    {isCompleted ? (
-                      <Check size={15} color="#34C759" strokeWidth={2.2} />
-                    ) : (
-                      <ArrowUpRight size={15} color="#1E3A8A" strokeWidth={2.2} />
-                    )}
-                  </Pressable>
-
-                  {item.kind === 'regular' && (
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        openJobPoints(item);
-                      }}
-                      style={st.tcBtn}
-                      accessibilityLabel="נקודות שירות"
-                    >
-                      <Layers size={14} color="#1E3A8A" strokeWidth={2} />
-                    </Pressable>
+                  {!!scents?.length && (
+                    <View style={st.taskScentBlock}>
+                      <View style={st.taskScentChipsRow}>
+                        {scents.map((s) => {
+                          const isMissingName = s.key === '__no_name__';
+                          return (
+                            <View key={s.key} style={st.taskScentChip}>
+                              <View style={st.taskScentChipIcon}>
+                                <Droplets size={11} color={colors.primary} strokeWidth={2.4} />
+                              </View>
+                              <View style={st.taskScentChipBody}>
+                                <Text style={st.taskScentChipAmount}>{Math.round(s.amount)} מ״ל</Text>
+                                <Text style={st.taskScentChipName} numberOfLines={1}>
+                                  {isMissingName ? 'ללא שם ניחוח' : s.key}
+                                </Text>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
                   )}
-
-                  <View style={{ flex: 1 }} />
                 </View>
               </View>
             </Pressable>
@@ -1030,23 +1046,23 @@ export function WorkerScheduleScreen() {
         ListFooterComponent={<View style={{ height: 40 }} />}
       />
 
-      {/* ── Job details / completion sheet ─────────────────── */}
-      <ModalSheet
-        visible={!!selected}
-        onClose={() => setSelected(null)}
-        containerStyle={{
-          maxHeight: Dimensions.get('window').height * 0.86,
-          paddingBottom: 0,
-        }}
+      {/* ── Execute task — OriginWindow (same morph as WorkerJobsScreen) ── */}
+      <OriginWindow
+        visible={execOpen}
+        originRect={execOriginRect}
+        onClose={closeExec}
+        durationMs={ORIGIN_WINDOW_DEFAULT_DURATION_MS}
+        openedHeight={Math.min(screenHeight * 0.86, screenHeight - 40)}
+        openedWidth={Math.min(screenWidth * 0.94, 440)}
       >
-        {!!selected && (
-          <View style={{ flexShrink: 1 }}>
+        {!!execJob && (
+          <View style={{ flex: 1, flexShrink: 1 }}>
             {/* Header */}
             <View style={st.detailsHeader}>
-              <View style={[st.detailsIconBubble, { backgroundColor: KIND_CONFIG[selected.kind].color }]}>
-                {selected.kind === 'regular' ? (
+              <View style={[st.detailsIconBubble, { backgroundColor: KIND_CONFIG[execJob.kind].color }]}>
+                {execJob.kind === 'regular' ? (
                   <Droplets size={18} color="#fff" strokeWidth={2.5} />
-                ) : selected.kind === 'installation' ? (
+                ) : execJob.kind === 'installation' ? (
                   <Package size={18} color="#fff" strokeWidth={2.5} />
                 ) : (
                   <Sparkles size={18} color="#fff" strokeWidth={2.5} />
@@ -1054,21 +1070,21 @@ export function WorkerScheduleScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={st.detailsTitle} numberOfLines={1}>
-                  {customerLabel(selected)}
+                  {customerLabel(execJob)}
                 </Text>
                 <View style={st.detailsSubRow}>
                   <View style={st.detailsTimePill}>
                     <Clock size={11} color="#1E3A8A" strokeWidth={2.2} />
-                    <Text style={st.detailsTimeText}>{formatHm(selected.date)}</Text>
+                    <Text style={st.detailsTimeText}>{formatHm(execJob.date)}</Text>
                   </View>
-                  <View style={[st.detailsKindPill, { backgroundColor: `${KIND_CONFIG[selected.kind].color}15`, borderColor: `${KIND_CONFIG[selected.kind].color}30` }]}>
-                    <Text style={[st.detailsKindText, { color: KIND_CONFIG[selected.kind].color }]}>
-                      {KIND_CONFIG[selected.kind].label}
+                  <View style={[st.detailsKindPill, { backgroundColor: `${KIND_CONFIG[execJob.kind].color}15`, borderColor: `${KIND_CONFIG[execJob.kind].color}30` }]}>
+                    <Text style={[st.detailsKindText, { color: KIND_CONFIG[execJob.kind].color }]}>
+                      {KIND_CONFIG[execJob.kind].label}
                     </Text>
                   </View>
-                  {selected.order_number != null && (
+                  {execJob.order_number != null && (
                     <View style={st.detailsOrderPill}>
-                      <Text style={st.detailsOrderText}>#{selected.order_number}</Text>
+                      <Text style={st.detailsOrderText}>#{execJob.order_number}</Text>
                     </View>
                   )}
                 </View>
@@ -1076,11 +1092,11 @@ export function WorkerScheduleScreen() {
             </View>
 
             {/* Quick stat strip */}
-            {(selected.kind === 'regular' && regularPoints.length > 0) ||
-            (selected.kind === 'installation' && installationDevices.length > 0) ||
-            (selected.kind === 'special' && !!special) ? (
+            {(execJob.kind === 'regular' && regularPoints.length > 0) ||
+            (execJob.kind === 'installation' && installationDevices.length > 0) ||
+            (execJob.kind === 'special' && !!special) ? (
               <View style={st.quickStatRow}>
-                {selected.kind === 'regular' && (
+                {execJob.kind === 'regular' && (
                   <>
                     <View style={st.quickStat}>
                       <Layers size={13} color={colors.primary} strokeWidth={2.2} />
@@ -1097,14 +1113,14 @@ export function WorkerScheduleScreen() {
                     </View>
                   </>
                 )}
-                {selected.kind === 'installation' && (
+                {execJob.kind === 'installation' && (
                   <View style={st.quickStat}>
                     <Package size={13} color={colors.primary} strokeWidth={2.2} />
                     <Text style={st.quickStatValue}>{installationDevices.length}</Text>
                     <Text style={st.quickStatLabel}>מכשירים</Text>
                   </View>
                 )}
-                {selected.kind === 'special' && special && (
+                {execJob.kind === 'special' && special && (
                   <View style={st.quickStat}>
                     <Battery size={13} color={colors.primary} strokeWidth={2.2} />
                     <Text style={st.quickStatValue}>{special.battery_type ?? '—'}</Text>
@@ -1116,11 +1132,12 @@ export function WorkerScheduleScreen() {
 
             {/* Scrollable content */}
             <ScrollView
-              style={{ marginTop: 14 }}
-              contentContainerStyle={{ paddingBottom: 16, gap: 12 }}
+              keyboardShouldPersistTaps="handled"
+              style={{ marginTop: 14, flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 12, gap: 12 }}
               showsVerticalScrollIndicator={false}
             >
-              {selected.kind === 'regular' ? (
+              {execJob.kind === 'regular' ? (
                 <View style={{ gap: 10 }}>
                   <Text style={st.sectionTitle}>נקודות שירות</Text>
                   {regularPoints.map((p, idx) => {
@@ -1208,7 +1225,7 @@ export function WorkerScheduleScreen() {
                 </View>
               ) : null}
 
-              {selected.kind === 'installation' ? (
+              {execJob.kind === 'installation' ? (
                 <View style={{ gap: 10 }}>
                   <Text style={st.sectionTitle}>מכשירים</Text>
                   {installationDevices.map((d, idx) => {
@@ -1279,7 +1296,7 @@ export function WorkerScheduleScreen() {
                 </View>
               ) : null}
 
-              {selected.kind === 'special' && special ? (
+              {execJob.kind === 'special' && special ? (
                 <View style={{ gap: 10 }}>
                   <Text style={st.sectionTitle}>משימה מיוחדת</Text>
                   <View style={st.spCard}>
@@ -1348,133 +1365,53 @@ export function WorkerScheduleScreen() {
                 </View>
               ) : null}
 
-              {!!selected.notes && (
+              {!!execJob.notes && (
                 <View style={st.notesCard}>
                   <Text style={st.notesLabel}>הערות</Text>
-                  <Text style={st.notesText}>{selected.notes}</Text>
+                  <Text style={st.notesText}>{execJob.notes}</Text>
                 </View>
               )}
             </ScrollView>
 
-            {/* Sticky action footer */}
             <View style={[st.detailsFooter, { paddingBottom: Math.max(12, insets.bottom) }]}>
-              {selected.status !== 'completed' ? (
+              {execJob.status !== 'completed' ? (
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <Button
                     title="סגור"
                     variant="secondary"
                     fullWidth={false}
                     style={{ flex: 1, borderRadius: 14 }}
-                    onPress={() => setSelected(null)}
+                    onPress={closeExec}
                   />
-                  <Button
-                    title="סיים משימה"
-                    fullWidth={false}
-                    style={{ flex: 1, borderRadius: 14 }}
+                  <Pressable
                     onPress={complete}
-                  />
+                    disabled={!isExecCompletable}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      borderRadius: 14,
+                      paddingVertical: 14,
+                      backgroundColor: !isExecCompletable
+                        ? 'rgba(37,99,235,0.35)'
+                        : pressed
+                          ? 'rgba(37,99,235,0.88)'
+                          : colors.primary,
+                      opacity: 1,
+                    })}
+                  >
+                    <Play size={17} color="#FFFFFF" fill="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>סיים משימה</Text>
+                  </Pressable>
                 </View>
               ) : (
-                <Button
-                  title="סגור"
-                  variant="secondary"
-                  style={{ borderRadius: 14 }}
-                  onPress={() => setSelected(null)}
-                />
+                <Button title="סגור" variant="secondary" style={{ borderRadius: 14 }} onPress={closeExec} />
               )}
             </View>
           </View>
         )}
-      </ModalSheet>
-
-      {/* ── Service Points Window ───────────────────────── */}
-      <OriginWindow visible={pointsOpen} originRect={pointsOriginRect} onClose={closePoints}>
-        <View style={{ flex: 1, padding: 16, gap: 14 }}>
-          <View style={st.pointsHeader}>
-            <View style={st.pointsIconBubble}>
-              <Layers size={16} color="#fff" strokeWidth={2.5} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.pointsTitle}>נקודות שירות</Text>
-              {!!pointsJob && (
-                <Text style={st.pointsSubtitle} numberOfLines={1}>
-                  {customerLabel(pointsJob)} · {formatHm(pointsJob.date)}
-                </Text>
-              )}
-            </View>
-            <Pressable
-              onPress={closePoints}
-              hitSlop={8}
-              style={({ pressed }) => [st.pointsCloseBtn, pressed && { opacity: 0.6 }]}
-            >
-              <X size={16} color={colors.muted} strokeWidth={2.5} />
-            </Pressable>
-          </View>
-
-          {pointsLoading ? (
-            <View style={st.pointsLoadingWrap}>
-              <Text style={st.pointsLoadingText}>טוען נקודות שירות…</Text>
-            </View>
-          ) : pointsJob?.kind !== 'regular' ? (
-            <View style={st.pointsEmptyWrap}>
-              <View style={st.pointsEmptyIcon}>
-                <Layers size={22} color={colors.muted} strokeWidth={1.5} />
-              </View>
-              <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={jobPoints}
-              keyExtractor={(i) => i.id}
-              contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
-              style={{ flex: 1 }}
-              renderItem={({ item }) => (
-                <View style={st.pointCard}>
-                  <View style={st.pointCardHeader}>
-                    <View style={st.pointDeviceIcon}>
-                      <Droplets size={14} color={colors.primary} strokeWidth={2} />
-                    </View>
-                    <Text style={st.pointDeviceText}>
-                      {item.sp?.device_type ?? item.service_point_id}
-                    </Text>
-                  </View>
-                  <View style={st.pointCardDivider} />
-                  <View style={st.pointMetaRow}>
-                    <View style={st.pointMetaItem}>
-                      <Text style={st.pointMetaLabel}>ניחוח</Text>
-                      <Text style={st.pointMetaValue}>{item.sp?.scent_type ?? '-'}</Text>
-                    </View>
-                    <View style={st.pointMetaSep} />
-                    <View style={st.pointMetaItem}>
-                      <Text style={st.pointMetaLabel}>מילוי</Text>
-                      <Text style={st.pointMetaValue}>
-                        {item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}
-                      </Text>
-                    </View>
-                  </View>
-                  {!!item.sp?.notes && (
-                    <>
-                      <View style={st.pointCardDivider} />
-                      <Text style={st.pointNotes} numberOfLines={2}>
-                        {item.sp.notes}
-                      </Text>
-                    </>
-                  )}
-                </View>
-              )}
-              ListEmptyComponent={
-                <View style={st.pointsEmptyWrap}>
-                  <View style={st.pointsEmptyIcon}>
-                    <Layers size={22} color={colors.muted} strokeWidth={1.5} />
-                  </View>
-                  <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
-                </View>
-              }
-            />
-          )}
-
-          <Button title="סגור" variant="secondary" onPress={closePoints} style={{ borderRadius: 14 }} />
-        </View>
       </OriginWindow>
     </View>
   );
@@ -1785,14 +1722,60 @@ const st = StyleSheet.create({
     marginTop: 5,
     lineHeight: 17,
   },
-  taskActions: {
-    flexDirection: 'row',
+  taskScentBlock: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F7',
+  },
+  taskScentChipsRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  taskScentChip: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    maxWidth: '100%',
+    ...Platform.select({
+      ios: { shadowColor: colors.primary, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
+      android: { elevation: 1 },
+    }),
+  },
+  taskScentChipIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 8,
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskScentChipBody: {
+    alignItems: 'flex-end',
+    flexShrink: 1,
+  },
+  taskScentChipAmount: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.primary,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  taskScentChipName: {
+    marginTop: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textAlign: 'right',
   },
   kindChip: {
     borderRadius: 20,
@@ -1816,20 +1799,6 @@ const st = StyleSheet.create({
   },
   statusDot: { width: 5, height: 5, borderRadius: 3 },
   statusChipText: { fontSize: 10, fontWeight: '700', color: '#1E3A8A' },
-  tcBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: 'rgba(30,58,138,0.16)',
-    backgroundColor: 'rgba(30,58,138,0.07)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tcBtnDone: {
-    borderColor: 'rgba(52,199,89,0.30)',
-    backgroundColor: 'rgba(52,199,89,0.08)',
-  },
 
   // ── Empty State ────────────────────────────────────
   emptyWrap: { alignItems: 'center', paddingVertical: 40, gap: 8 },
