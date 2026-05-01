@@ -148,13 +148,6 @@ function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamL
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (!user) return;
-    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-  }, [navigation, user]);
-
   return <LoginScreen onBackToStore={() => navigation.navigate('Main')} />;
 }
 
@@ -276,12 +269,9 @@ export function RootNavigator() {
       ref={navigationRef}
       onReady={() => flushPendingNavigation()}
     >
-      <Stack.Navigator
-        key={user ? `role:${user.role}` : 'anon'}
-        screenOptions={{ headerShown: false }}
-      >
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Main" component={MainEntryScreen} />
-        <Stack.Screen name="Login" component={LoginRoute} />
+        {!user && <Stack.Screen name="Login" component={LoginRoute} />}
         <Stack.Screen
           name="StoreCategory"
           component={StoreCategoryRoute}

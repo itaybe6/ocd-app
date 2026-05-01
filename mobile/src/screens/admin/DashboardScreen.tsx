@@ -44,15 +44,6 @@ function formatIls(amount: number) {
   }
 }
 
-const ACC = {
-  violet: { soft: 'rgba(124,58,237,0.07)', border: 'rgba(124,58,237,0.14)', solid: '#7C3AED', glow: 'rgba(124,58,237,0.025)' },
-  cyan: { soft: 'rgba(6,182,212,0.07)', border: 'rgba(6,182,212,0.14)', solid: '#06B6D4', glow: 'rgba(6,182,212,0.025)' },
-  amber: { soft: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.14)', solid: '#F59E0B', glow: 'rgba(245,158,11,0.025)' },
-  emerald: { soft: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.14)', solid: '#10B981', glow: 'rgba(16,185,129,0.025)' },
-} as const;
-
-const DEVICE_COLORS = [colors.primary, '#7C3AED', '#06B6D4', '#F59E0B', '#10B981', '#EC4899'];
-
 const S = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 44 },
@@ -61,9 +52,9 @@ const S = StyleSheet.create({
     marginTop: 0,
     borderRadius: 24,
     padding: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.adminHeader,
     ...Platform.select({
-      ios: { shadowColor: colors.primary, shadowOpacity: 0.28, shadowRadius: 24, shadowOffset: { width: 0, height: 10 } },
+      ios: { shadowColor: colors.adminHeader, shadowOpacity: 0.28, shadowRadius: 24, shadowOffset: { width: 0, height: 10 } },
       android: { elevation: 10 },
     }),
   },
@@ -140,7 +131,7 @@ const S = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
   },
-  devBar: { width: 72, height: 5, borderRadius: 999, backgroundColor: 'rgba(15,23,42,0.05)', overflow: 'hidden' },
+  devBar: { width: 72, height: 5, borderRadius: 999, backgroundColor: colors.adminHeaderBarTrack, overflow: 'hidden' },
   devBarFill: { height: '100%', borderRadius: 999 },
   devDivider: { height: 1, backgroundColor: 'rgba(15,23,42,0.04)', marginHorizontal: 14 },
 
@@ -438,40 +429,40 @@ export function DashboardScreen() {
 
         {/* ── KPI Grid ── */}
         <View style={S.kpiGrid}>
-          <View style={[S.kpiCard, { backgroundColor: ACC.violet.glow, borderColor: ACC.violet.border }]}>
-            <View style={[S.kpiIconWrap, { backgroundColor: ACC.violet.soft }]}>
-              <Users size={20} color={ACC.violet.solid} />
+          <View style={[S.kpiCard, { backgroundColor: colors.elevated, borderColor: colors.adminHeaderBorderSoft }]}>
+            <View style={[S.kpiIconWrap, { backgroundColor: colors.adminHeaderIconSoft }]}>
+              <Users size={20} color={colors.adminHeader} />
             </View>
             <Text style={S.kpiValue}>{stats.activeWorkers}</Text>
             <Text style={S.kpiLabel}>עובדים פעילים</Text>
-            <View style={[S.kpiAccentBar, { backgroundColor: `${ACC.violet.solid}20` }]} />
+            <View style={[S.kpiAccentBar, { backgroundColor: colors.adminHeaderAccentSoft }]} />
           </View>
 
-          <View style={[S.kpiCard, { backgroundColor: ACC.cyan.glow, borderColor: ACC.cyan.border }]}>
-            <View style={[S.kpiIconWrap, { backgroundColor: ACC.cyan.soft }]}>
-              <UserRound size={20} color={ACC.cyan.solid} />
+          <View style={[S.kpiCard, { backgroundColor: colors.elevated, borderColor: colors.adminHeaderBorderSoft }]}>
+            <View style={[S.kpiIconWrap, { backgroundColor: colors.adminHeaderIconSoft }]}>
+              <UserRound size={20} color={colors.adminHeader} />
             </View>
             <Text style={S.kpiValue}>{stats.customersCount}</Text>
             <Text style={S.kpiLabel}>לקוחות</Text>
-            <View style={[S.kpiAccentBar, { backgroundColor: `${ACC.cyan.solid}20` }]} />
+            <View style={[S.kpiAccentBar, { backgroundColor: colors.adminHeaderAccentSoft }]} />
           </View>
 
-          <View style={[S.kpiCard, { backgroundColor: ACC.amber.glow, borderColor: ACC.amber.border }]}>
-            <View style={[S.kpiIconWrap, { backgroundColor: ACC.amber.soft }]}>
-              <ClipboardList size={20} color={ACC.amber.solid} />
+          <View style={[S.kpiCard, { backgroundColor: colors.elevated, borderColor: colors.adminHeaderBorderSoft }]}>
+            <View style={[S.kpiIconWrap, { backgroundColor: colors.adminHeaderIconSoft }]}>
+              <ClipboardList size={20} color={colors.adminHeader} />
             </View>
             <Text style={S.kpiValue}>{stats.jobsThisMonth}</Text>
             <Text style={S.kpiLabel}>סה״כ משימות</Text>
-            <View style={[S.kpiAccentBar, { backgroundColor: `${ACC.amber.solid}20` }]} />
+            <View style={[S.kpiAccentBar, { backgroundColor: colors.adminHeaderAccentSoft }]} />
           </View>
 
-          <View style={[S.kpiCard, { backgroundColor: ACC.emerald.glow, borderColor: ACC.emerald.border }]}>
-            <View style={[S.kpiIconWrap, { backgroundColor: ACC.emerald.soft }]}>
-              <Coins size={20} color={ACC.emerald.solid} />
+          <View style={[S.kpiCard, { backgroundColor: colors.elevated, borderColor: colors.adminHeaderBorderSoft }]}>
+            <View style={[S.kpiIconWrap, { backgroundColor: colors.adminHeaderIconSoft }]}>
+              <Coins size={20} color={colors.adminHeader} />
             </View>
             <Text style={[S.kpiValue, { fontSize: 22 }]}>{formatIls(stats.totalPointsPrice)}</Text>
             <Text style={S.kpiLabel}>מחיר כל הנקודות</Text>
-            <View style={[S.kpiAccentBar, { backgroundColor: `${ACC.emerald.solid}20` }]} />
+            <View style={[S.kpiAccentBar, { backgroundColor: colors.adminHeaderAccentSoft }]} />
           </View>
         </View>
 
@@ -492,14 +483,13 @@ export function DashboardScreen() {
             {stats.deviceRows.length > 0 ? (
               stats.deviceRows.map((r, i) => {
                 const pct = Math.round((r.count / deviceMax) * 100);
-                const barColor = DEVICE_COLORS[i % DEVICE_COLORS.length];
                 return (
                   <React.Fragment key={r.device}>
                     {i > 0 && <View style={S.devDivider} />}
                     <View style={S.devRow}>
                       <Text style={S.devCount}>{r.count}</Text>
                       <View style={S.devBar}>
-                        <View style={[S.devBarFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                        <View style={[S.devBarFill, { width: `${pct}%`, backgroundColor: colors.adminHeader }]} />
                       </View>
                       <Text style={S.devName} numberOfLines={1}>
                         {r.device}

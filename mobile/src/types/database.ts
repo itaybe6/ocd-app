@@ -68,7 +68,8 @@ export type InstallationJobRow = {
 export type InstallationDeviceRow = {
   id: string;
   installation_job_id: string;
-  device_name: string;
+  device_type?: string | null;
+  device_name?: string | null;
   image_url?: string | null;
 };
 

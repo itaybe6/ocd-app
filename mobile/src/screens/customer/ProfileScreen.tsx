@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
 import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
+import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
 
   /* top bar — dark slab with rounded bottom corners */
   headerBg: {
-    backgroundColor: '#1F2937',
+    backgroundColor: colors.adminHeader,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: 'hidden',

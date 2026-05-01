@@ -11,7 +11,7 @@ module.exports = {
           elevated: '#111827',
         },
         card: '#0F172A',
-        border: '#1F2937',
+        border: '#0B2540',
         text: {
           DEFAULT: '#E5E7EB',
           muted: '#94A3B8',

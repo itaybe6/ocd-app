@@ -37,8 +37,6 @@ import { useLoading } from '../../state/LoadingContext';
 import { useAuth } from '../../state/AuthContext';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
-/** Same slab as `AdminHeader` (`headerBg`) */
-const ADMIN_HEADER_COLOR = '#1F2937';
 
 /** Snappier morph than `ORIGIN_WINDOW_DEFAULT_DURATION_MS` — worker task details only */
 const WORKER_JOB_DETAILS_ORIGIN_MS = 260;
@@ -53,13 +51,13 @@ const jsStat = StyleSheet.create({
   },
   textBlock: { alignItems: 'flex-end' },
   label: {
-    color: ADMIN_HEADER_COLOR,
+    color: colors.adminHeader,
     fontWeight: '800',
     fontSize: 11,
     textAlign: 'right',
   },
   value: {
-    color: ADMIN_HEADER_COLOR,
+    color: colors.adminHeader,
     fontWeight: '900',
     fontSize: 24,
     textAlign: 'right',
@@ -120,6 +118,7 @@ type InstallationDevice = {
   id: string;
   installation_job_id: string;
   image_url?: string | null;
+  device_type?: string | null;
   device_name?: string | null;
 };
 
@@ -385,7 +384,7 @@ export function WorkerJobsScreen() {
       if (job.kind === 'installation') {
         const { data, error } = await supabase
           .from('installation_devices')
-          .select('id, installation_job_id, image_url, device_name')
+          .select('id, installation_job_id, image_url, device_type, device_name')
           .eq('installation_job_id', job.id);
         if (error) throw error;
         const devs = ((data ?? []) as InstallationDevice[]);
@@ -554,7 +553,7 @@ export function WorkerJobsScreen() {
       outline: 'rgba(60,60,67,0.10)',
       text: '#1C1C1E',
       muted: '#8E8E93',
-      primary: ADMIN_HEADER_COLOR,
+      primary: colors.adminHeader,
       secondary: '#3C3C43',
       tertiary: '#8E8E93',
       fill: 'rgba(120,120,128,0.12)',
@@ -658,9 +657,9 @@ export function WorkerJobsScreen() {
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: ADMIN_HEADER_COLOR,
+                      backgroundColor: colors.adminHeader,
                       opacity: pressed ? 0.7 : 1,
-                      shadowColor: ADMIN_HEADER_COLOR,
+                      shadowColor: colors.adminHeader,
                       shadowOpacity: 0.3,
                       shadowRadius: 8,
                       shadowOffset: { width: 0, height: 4 },
@@ -1117,8 +1116,8 @@ export function WorkerJobsScreen() {
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: ADMIN_HEADER_COLOR,
-                      shadowColor: ADMIN_HEADER_COLOR,
+                      backgroundColor: colors.adminHeader,
+                      shadowColor: colors.adminHeader,
                       shadowOpacity: 0.3,
                       shadowRadius: 8,
                       shadowOffset: { width: 0, height: 4 },
@@ -1215,7 +1214,7 @@ export function WorkerJobsScreen() {
                         }}
                       >
                         <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>
-                          {item.device_name ?? 'מכשיר'}
+                          {item.device_name ?? item.device_type ?? 'מכשיר'}
                         </Text>
                         {!!item.image_url && (
                           <Pressable
@@ -1701,7 +1700,7 @@ export function WorkerJobsScreen() {
                             }}
                             numberOfLines={1}
                           >
-                            {d.device_name ?? 'מכשיר'}
+                            {d.device_name ?? d.device_type ?? 'מכשיר'}
                           </Text>
 
                           {hasImage && (

@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   FlatList,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -21,8 +23,10 @@ import {
   ChevronRight,
   Clock,
   Droplets,
+  Eye,
   Layers,
   Pencil,
+  Play,
   Trash2,
   X,
 } from 'lucide-react-native';
@@ -31,10 +35,15 @@ import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { Avatar } from '../../components/ui/Avatar';
+import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
+import { pickImageFromLibrary } from '../../lib/media';
+import { getPublicUrl } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { toDate, yyyyMmDd } from '../../lib/time';
 import { useLoading } from '../../state/LoadingContext';
+
+const { height: screenHeight } = Dimensions.get('window');
 
 type Kind = 'regular' | 'installation' | 'special';
 type Status = 'pending' | 'completed';
@@ -61,6 +70,7 @@ type JobServicePoint = {
   id: string;
   job_id: string;
   service_point_id: string;
+  image_url?: string | null;
   custom_refill_amount?: number | null;
 };
 type ServicePoint = {
@@ -109,6 +119,13 @@ export function DailyScheduleScreen() {
 
   const [edit, setEdit] = useState<Unified | null>(null);
   const [newTime, setNewTime] = useState('09:00');
+
+  /** חלון ביצוע משימה — מבנה ועיצוב כמו ב-JobsScreen */
+  const [executeJob, setExecuteJob] = useState<Unified | null>(null);
+  const [execPoints, setExecPoints] = useState<
+    (JobServicePoint & { sp?: ServicePoint | null; localImageUri?: string | null; uploading?: boolean })[]
+  >([]);
+  const [execPointsLoading, setExecPointsLoading] = useState(false);
 
   const [pointsOpen, setPointsOpen] = useState(false);
   const [pointsLoading, setPointsLoading] = useState(false);
@@ -285,6 +302,146 @@ export function DailyScheduleScreen() {
       setPointsLoading(false);
     }
   }, []);
+
+  const tableForKind = (k: Kind) => (k === 'regular' ? 'jobs' : k === 'installation' ? 'installation_jobs' : 'special_jobs');
+
+  const closeExecuteModal = useCallback(() => {
+    setExecuteJob(null);
+    setExecPoints([]);
+    setExecPointsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!executeJob) {
+      setExecPoints([]);
+      setExecPointsLoading(false);
+      return;
+    }
+    if (executeJob.kind !== 'regular') {
+      setExecPoints([]);
+      setExecPointsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setExecPointsLoading(true);
+      try {
+        const { data: jsp, error: jspErr } = await supabase
+          .from('job_service_points')
+          .select('id, job_id, service_point_id, image_url, custom_refill_amount')
+          .eq('job_id', executeJob.id);
+        if (jspErr) throw jspErr;
+        const rows = (jsp ?? []) as JobServicePoint[];
+        const spIds = rows.map((r) => r.service_point_id);
+        let spMap = new Map<string, ServicePoint>();
+        if (spIds.length) {
+          const { data: sps, error: spErr } = await supabase
+            .from('service_points')
+            .select('id, device_type, scent_type, refill_amount, notes')
+            .in('id', spIds);
+          if (spErr) throw spErr;
+          spMap = new Map(((sps ?? []) as ServicePoint[]).map((sp) => [sp.id, sp]));
+        }
+        if (!cancelled) {
+          setExecPoints(
+            rows.map((r) => ({
+              ...r,
+              sp: spMap.get(r.service_point_id) ?? null,
+              localImageUri: null,
+              uploading: false,
+            })),
+          );
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          Toast.show({ type: 'error', text1: 'טעינת נקודות נכשלה', text2: e?.message ?? 'Unknown error' });
+          setExecPoints([]);
+        }
+      } finally {
+        if (!cancelled) setExecPointsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [executeJob]);
+
+  const pickExecImage = async (jobServicePointId: string) => {
+    const uri = await pickImageFromLibrary();
+    if (!uri) return;
+    setExecPoints((prev) => prev.map((p) => (p.id === jobServicePointId ? { ...p, localImageUri: uri } : p)));
+  };
+
+  const uploadExecPoint = async (
+    p: JobServicePoint & { localImageUri?: string | null; uploading?: boolean },
+  ) => {
+    if (!executeJob || executeJob.kind !== 'regular') return;
+    if (!p.localImageUri) {
+      Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
+      return;
+    }
+    try {
+      setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
+      const storagePath = await uploadJobServicePointImage({
+        jobId: executeJob.id,
+        jobServicePointId: p.id,
+        servicePointId: p.service_point_id,
+        localUri: p.localImageUri,
+      });
+      setExecPoints((prev) =>
+        prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false, localImageUri: null } : x)),
+      );
+      Toast.show({ type: 'success', text1: 'התמונה הועלתה' });
+    } catch (e: any) {
+      setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: false } : x)));
+      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
+    }
+  };
+
+  const markExecuteCompleted = async () => {
+    if (!executeJob || executeJob.status !== 'pending') return;
+    try {
+      setIsLoading(true);
+      await completeUnifiedJob(executeJob.kind, executeJob.id);
+      setItems((prev) =>
+        prev.map((x) => (x.kind === executeJob.kind && x.id === executeJob.id ? { ...x, status: 'completed' } : x)),
+      );
+      setExecuteJob((j) => (j && j.id === executeJob.id ? { ...j, status: 'completed' } : j));
+      Toast.show({ type: 'success', text1: 'המשימה הושלמה' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'סיום נכשל', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmRevertToPending = () => {
+    if (!executeJob || executeJob.status !== 'completed') return;
+    const jobId = executeJob.id;
+    const jobKind = executeJob.kind;
+    Alert.alert('החזרת משימה', 'לסמן את המשימה שוב כממתינה?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'החזר',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setIsLoading(true);
+            const t = tableForKind(jobKind);
+            const { error } = await supabase.from(t).update({ status: 'pending' }).eq('id', jobId);
+            if (error) throw error;
+            setItems((prev) => prev.map((x) => (x.kind === jobKind && x.id === jobId ? { ...x, status: 'pending' } : x)));
+            setExecuteJob((j) => (j && j.id === jobId ? { ...j, status: 'pending' } : j));
+            Toast.show({ type: 'success', text1: 'המשימה סומנה כממתינה' });
+          } catch (e: any) {
+            Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
+          } finally {
+            setIsLoading(false);
+          }
+        },
+      },
+    ]);
+  };
 
   const saveTime = async () => {
     if (!edit) return;
@@ -499,11 +656,8 @@ export function DailyScheduleScreen() {
                   {/* Complete / done button */}
                   <Pressable
                     style={[st.tcBtn, isCompleted && st.tcBtnDone]}
-                    onPress={() => {
-                      setEdit(item);
-                      setNewTime(new Date(item.date).toISOString().slice(11, 16));
-                    }}
-                    accessibilityLabel="ביצוע"
+                    onPress={() => setExecuteJob(item)}
+                    accessibilityLabel="ביצוע משימה"
                   >
                     {isCompleted
                       ? <Check size={15} color='#34C759' strokeWidth={2.2} />
@@ -613,6 +767,233 @@ export function DailyScheduleScreen() {
               <Button title="שמור"  fullWidth={false}  style={{ flex: 1, borderRadius: 14 }} onPress={saveTime} />
             </View>
           </View>
+        )}
+      </ModalSheet>
+
+      {/* ── Execute task — עיצוב כמו JobsScreen (בצע משימה) ─ */}
+      <ModalSheet
+        visible={!!executeJob}
+        onClose={closeExecuteModal}
+        containerStyle={{ maxHeight: screenHeight * 0.82 }}
+      >
+        {!!executeJob && (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 34 }}
+          >
+            <View style={st.jbExecHeaderWrap}>
+              <View style={st.jbExecHeaderRow}>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Text style={st.jbExecTitle}>ביצוע משימה</Text>
+                  <View style={st.jbExecBadgeRow}>
+                    {executeJob.order_number != null && (
+                      <View style={st.jbExecOrderBadge}>
+                        <Text style={st.jbExecOrderBadgeText}>#{executeJob.order_number}</Text>
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        st.jbExecStatusBadge,
+                        executeJob.status === 'completed' ? st.jbExecStatusBadgeDone : null,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          st.jbExecStatusDot,
+                          { backgroundColor: executeJob.status === 'completed' ? '#34C759' : '#FF9500' },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          st.jbExecStatusText,
+                          { color: executeJob.status === 'completed' ? '#248A3D' : '#C93400' },
+                        ]}
+                      >
+                        {executeJob.status === 'completed' ? 'הושלם' : 'ממתין'}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        st.jbExecKindBadge,
+                        executeJob.kind === 'regular' && st.jbExecKindRegular,
+                        executeJob.kind === 'installation' && st.jbExecKindInstall,
+                        executeJob.kind === 'special' && st.jbExecKindSpecial,
+                      ]}
+                    >
+                      <Text style={[st.jbExecKindBadgeText, { color: KIND_CONFIG[executeJob.kind].color }]}>
+                        {KIND_CONFIG[executeJob.kind].label}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <Pressable onPress={closeExecuteModal} hitSlop={12}>
+                  {({ pressed }) => (
+                    <View style={[st.jbExecCloseBtn, pressed && { opacity: 0.75 }]}>
+                      <Text style={st.jbExecCloseBtnText}>✕</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+              <View style={st.jbExecHeaderDivider} />
+            </View>
+
+            <View style={st.jbExecSummaryCard}>
+              <Text style={st.jbExecCustomerLine} numberOfLines={2}>
+                לקוח: {customerLabel(executeJob)}
+              </Text>
+              <View style={st.jbExecWorkerRow}>
+                <Avatar
+                  size={36}
+                  uri={userAvatarMap.get(executeJob.worker_id) ?? null}
+                  name={userMap.get(executeJob.worker_id) ?? ''}
+                  style={{ borderWidth: 2, borderColor: 'rgba(0,0,0,0.04)' }}
+                />
+                <Text style={st.jbExecWorkerName} numberOfLines={1}>
+                  {userMap.get(executeJob.worker_id) ?? executeJob.worker_id.slice(0, 6)}
+                </Text>
+              </View>
+              <View style={st.jbExecMetaRow}>
+                <Clock size={14} color="#8E8E93" strokeWidth={2} />
+                <Text style={st.jbExecMetaText}>{formatHm(executeJob.date)}</Text>
+              </View>
+              {!!executeJob.notes && (
+                <Text style={st.jbExecNotes} numberOfLines={3}>
+                  {executeJob.notes}
+                </Text>
+              )}
+            </View>
+
+            {executeJob.kind === 'regular' ? (
+              execPointsLoading ? (
+                <View style={st.jbExecPointsLoading}>
+                  <Text style={st.jbExecPointsLoadingText}>טוען נקודות שירות…</Text>
+                </View>
+              ) : execPoints.length === 0 ? (
+                <View style={st.jbExecEmptyPoints}>
+                  <View style={st.jbExecEmptyPointsIcon}>
+                    <Droplets size={24} color="#8E8E93" />
+                  </View>
+                  <Text style={st.jbExecEmptyPointsText}>אין נקודות שירות</Text>
+                </View>
+              ) : (
+                <View style={{ gap: 12 }}>
+                  <Text style={st.jbExecSectionLabel}>נקודות שירות ({execPoints.length})</Text>
+                  {execPoints.map((item) => {
+                    const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
+                    const previewUri = item.localImageUri ?? currentImageUrl ?? null;
+                    const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
+                    const hasImage = !!item.image_url;
+                    const canEdit = executeJob.status === 'pending';
+
+                    return (
+                      <View key={item.id} style={st.jbExecPointCard}>
+                        <View style={st.jbExecPointCardHeader}>
+                          <View style={{ flex: 1, gap: 4 }}>
+                            <Text style={st.jbExecPointTitle} numberOfLines={1}>
+                              {item.sp?.device_type ?? `נקודה ${item.service_point_id.slice(0, 6)}`}
+                            </Text>
+                            <View style={st.jbExecPointSubRow}>
+                              <Droplets size={12} color="#8E8E93" />
+                              <Text style={st.jbExecPointSubText}>
+                                {item.sp?.scent_type ?? '—'} · {refill ?? '—'} מ״ל
+                              </Text>
+                            </View>
+                          </View>
+                          {hasImage && (
+                            <View style={st.jbExecPointDoneDot}>
+                              <Text style={st.jbExecPointDoneCheck}>✓</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {!!previewUri ? (
+                          <View style={st.jbExecPointImageWrap}>
+                            <Image
+                              source={{ uri: previewUri }}
+                              style={st.jbExecPointImage}
+                              resizeMode="cover"
+                            />
+                          </View>
+                        ) : (
+                          <View style={st.jbExecPointPlaceholder}>
+                            <Eye size={20} color="#C7C7CC" />
+                            <Text style={st.jbExecPointPlaceholderText}>טרם הועלתה תמונה</Text>
+                          </View>
+                        )}
+
+                        {canEdit && (
+                          <View style={st.jbExecPointActions}>
+                            <Pressable onPress={() => pickExecImage(item.id)} style={{ flex: 1 }}>
+                              {({ pressed }) => (
+                                <View style={[st.jbExecPickBtn, pressed && { opacity: 0.92 }]}>
+                                  <Eye size={15} color="#3C3C43" />
+                                  <Text style={st.jbExecPickBtnText}>בחר תמונה</Text>
+                                </View>
+                              )}
+                            </Pressable>
+                            <Pressable
+                              onPress={() => uploadExecPoint(item)}
+                              disabled={!!item.uploading}
+                              style={{ flex: 1, opacity: item.uploading ? 0.6 : 1 }}
+                            >
+                              {({ pressed }) => (
+                                <View
+                                  style={[
+                                    st.jbExecUploadBtn,
+                                    pressed && !item.uploading && { opacity: 0.92 },
+                                  ]}
+                                >
+                                  <Text style={st.jbExecUploadBtnText}>
+                                    {item.uploading ? 'מעלה…' : 'העלה'}
+                                  </Text>
+                                </View>
+                              )}
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )
+            ) : (
+              <View style={st.jbExecEmptyPoints}>
+                <View style={st.jbExecEmptyPointsIcon}>
+                  <Layers size={22} color="#8E8E93" strokeWidth={1.5} />
+                </View>
+                <Text style={st.jbExecEmptyPointsText}>אין נקודות למשימה זו</Text>
+              </View>
+            )}
+
+            <View style={{ marginTop: 24 }}>
+              {executeJob.status === 'completed' ? (
+                <View style={st.jbExecDoneBanner}>
+                  <View style={st.jbExecDoneIcon}>
+                    <Text style={st.jbExecDoneIconText}>✓</Text>
+                  </View>
+                  <Text style={st.jbExecDoneLabel}>המשימה הושלמה</Text>
+                </View>
+              ) : (
+                <Pressable onPress={markExecuteCompleted}>
+                  {({ pressed }) => (
+                    <View style={[st.jbExecCompleteBtn, pressed && { opacity: 0.92 }]}>
+                      <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                      <Text style={st.jbExecCompleteBtnText}>סיים משימה</Text>
+                    </View>
+                  )}
+                </Pressable>
+              )}
+            </View>
+
+            {executeJob.status === 'completed' && (
+              <View style={{ marginTop: 12, gap: 10 }}>
+                <Button title="סגור" variant="secondary" style={{ borderRadius: 14 }} onPress={closeExecuteModal} />
+                <Button title="החזר לממתין" variant="danger" style={{ borderRadius: 14 }} onPress={confirmRevertToPending} />
+              </View>
+            )}
+          </ScrollView>
         )}
       </ModalSheet>
 
@@ -1114,6 +1495,338 @@ const st = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: colors.primary,
+  },
+
+  // ── Execute modal (JobsScreen-style) ───────────────
+  jbExecHeaderWrap: {
+    paddingBottom: 20,
+  },
+  jbExecHeaderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  jbExecTitle: {
+    color: '#1C1C1E',
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'right',
+    letterSpacing: -0.6,
+  },
+  jbExecBadgeRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  jbExecOrderBadge: {
+    backgroundColor: 'rgba(120,120,128,0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  jbExecOrderBadgeText: {
+    color: '#8E8E93',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  jbExecStatusBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,149,0,0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  jbExecStatusBadgeDone: {
+    backgroundColor: 'rgba(52,199,89,0.12)',
+  },
+  jbExecStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  jbExecStatusText: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  jbExecKindBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  jbExecKindRegular: {
+    backgroundColor: 'rgba(0,122,255,0.10)',
+  },
+  jbExecKindInstall: {
+    backgroundColor: 'rgba(175,82,222,0.10)',
+  },
+  jbExecKindSpecial: {
+    backgroundColor: 'rgba(255,149,0,0.10)',
+  },
+  jbExecKindBadgeText: {
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  jbExecCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(120,120,128,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jbExecCloseBtnText: {
+    fontSize: 14,
+    color: '#3C3C43',
+    fontWeight: '600',
+    marginTop: -1,
+  },
+  jbExecHeaderDivider: {
+    height: 1,
+    backgroundColor: 'rgba(60,60,67,0.08)',
+  },
+  jbExecSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(60,60,67,0.06)',
+    padding: 16,
+    gap: 12,
+    marginBottom: 16,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+      android: { elevation: 1 },
+    }),
+  },
+  jbExecCustomerLine: {
+    color: '#007AFF',
+    fontWeight: '600',
+    textAlign: 'right',
+    fontSize: 15,
+  },
+  jbExecWorkerRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  jbExecWorkerName: {
+    color: '#8E8E93',
+    textAlign: 'right',
+    fontWeight: '600',
+    flex: 1,
+    fontSize: 15,
+  },
+  jbExecMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  jbExecMetaText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  jbExecNotes: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.muted,
+    textAlign: 'right',
+    lineHeight: 19,
+  },
+  jbExecPointsLoading: {
+    alignItems: 'center',
+    paddingVertical: 28,
+  },
+  jbExecPointsLoadingText: {
+    color: '#8E8E93',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  jbExecEmptyPoints: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 12,
+  },
+  jbExecEmptyPointsIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(120,120,128,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jbExecEmptyPointsText: {
+    color: '#8E8E93',
+    fontWeight: '500',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  jbExecSectionLabel: {
+    color: '#8E8E93',
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'right',
+    marginBottom: 2,
+    paddingHorizontal: 2,
+  },
+  jbExecPointCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(60,60,67,0.06)',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+      android: { elevation: 1 },
+    }),
+  },
+  jbExecPointCardHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    paddingBottom: 12,
+  },
+  jbExecPointTitle: {
+    color: '#1C1C1E',
+    fontWeight: '700',
+    fontSize: 16,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  jbExecPointSubRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+  },
+  jbExecPointSubText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  jbExecPointDoneDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(52,199,89,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jbExecPointDoneCheck: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  jbExecPointImageWrap: {
+    marginHorizontal: 14,
+    marginBottom: 12,
+  },
+  jbExecPointImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: 'rgba(120,120,128,0.08)',
+  },
+  jbExecPointPlaceholder: {
+    marginHorizontal: 14,
+    marginBottom: 12,
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: 'rgba(120,120,128,0.04)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(120,120,128,0.08)',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  jbExecPointPlaceholderText: {
+    color: '#C7C7CC',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  jbExecPointActions: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  jbExecPickBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(120,120,128,0.08)',
+    borderRadius: 12,
+    paddingVertical: 11,
+  },
+  jbExecPickBtnText: {
+    color: '#3C3C43',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  jbExecUploadBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,122,255,0.10)',
+    borderRadius: 12,
+    paddingVertical: 11,
+  },
+  jbExecUploadBtnText: {
+    color: '#007AFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  jbExecDoneBanner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(52,199,89,0.10)',
+    borderRadius: 14,
+    paddingVertical: 16,
+  },
+  jbExecDoneIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#34C759',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jbExecDoneIconText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  jbExecDoneLabel: {
+    color: '#248A3D',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  jbExecCompleteBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    ...Platform.select({
+      ios:     { shadowColor: '#007AFF', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
+      android: { elevation: 4 },
+    }),
+  },
+  jbExecCompleteBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 17,
+    letterSpacing: -0.2,
   },
 
   // ── Service Points Window ──────────────────────────

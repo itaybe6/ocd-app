@@ -47,6 +47,7 @@ import { FavoriteToggleButton } from '../../components/FavoriteToggleButton';
 import { favoriteInputFromStoreProduct } from '../../lib/favorites';
 import { OcdPlusProductPriceBlock } from '../../components/OcdPlusProductPriceBlock';
 import { useAuth } from '../../state/AuthContext';
+import { colors } from '../../theme/colors';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 
@@ -1256,8 +1257,8 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorO
   return <Ionicons name={iconName} size={size} color={color} />;
 }
 
-/** Focused bottom-tab bubble fill — same slate as profile header (`ProfileScreen` headerBg) */
-export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = '#1F2937';
+/** Focused bottom-tab bubble fill — same navy as profile / admin headers */
+export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = colors.adminHeader;
 
 function AnimatedStoreTabButton({
   focused,
@@ -2160,7 +2161,7 @@ export function StoreHomeScreen({
         <View style={{ backgroundColor: '#F5F5F5' }}>
           <View
             style={{
-              backgroundColor: '#1F2937',
+              backgroundColor: colors.adminHeader,
               paddingTop: insets.top,
               borderBottomLeftRadius: 28,
               borderBottomRightRadius: 28,
@@ -2641,10 +2642,10 @@ export function StoreHomeScreen({
             >
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={{ color: '#C8A467', fontSize: 9, fontWeight: '800' }}>EXCLUSIVE</Text>
-                <Text style={{ color: '#1F2937', fontSize: 16, fontWeight: '900', marginTop: 6 }}>
+                <Text style={{ color: colors.adminHeader, fontSize: 16, fontWeight: '900', marginTop: 6 }}>
                   Midnight in
                 </Text>
-                <Text style={{ color: '#1F2937', fontSize: 18, fontWeight: '900' }}>Spa</Text>
+                <Text style={{ color: colors.adminHeader, fontSize: 18, fontWeight: '900' }}>Spa</Text>
                 <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', marginTop: 10 }}>
                   ₪120.00
                 </Text>

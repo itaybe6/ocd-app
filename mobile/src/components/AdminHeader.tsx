@@ -4,6 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Menu } from 'lucide-react-native';
 import { useAuth } from '../state/AuthContext';
+import { colors } from '../theme/colors';
 
 /** Same mark as `ProfileScreen` hero — centered on dark slab */
 function OcdLogo({ height = 52, fill = '#FFFFFF' }: { height?: number; fill?: string }) {
@@ -18,11 +19,13 @@ function OcdLogo({ height = 52, fill = '#FFFFFF' }: { height?: number; fill?: st
 interface AdminHeaderProps {
   onMenuPress: () => void;
   onBackPress?: () => void;
+  /** When `user.name` is missing (e.g. worker app) */
+  nameFallback?: string;
 }
 
 const HERO_LIGHT_BG = '#F5F5F5';
 
-export function AdminHeader({ onMenuPress, onBackPress }: AdminHeaderProps) {
+export function AdminHeader({ onMenuPress, onBackPress, nameFallback = 'מנהל' }: AdminHeaderProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -63,7 +66,7 @@ export function AdminHeader({ onMenuPress, onBackPress }: AdminHeaderProps) {
           <View style={styles.greetingWrap}>
             <Text style={styles.greetingLine}>{greeting},</Text>
             <Text style={styles.greetingName} numberOfLines={1}>
-              {user?.name ?? 'מנהל'}
+              {user?.name ?? nameFallback}
             </Text>
           </View>
 
@@ -82,7 +85,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerBg: {
-    backgroundColor: '#1F2937',
+    backgroundColor: colors.adminHeader,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: 'hidden',

@@ -8,6 +8,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, ClipboardList, LogOut } from 'lucide-react-native';
 import { useAuth } from '../state/AuthContext';
+import { AdminHeader } from '../components/AdminHeader';
 import { WorkerScheduleScreen } from '../screens/worker/ScheduleScreen';
 import { WorkerJobsScreen } from '../screens/worker/JobsScreen';
 import { Badge } from '../components/ui/Badge';
@@ -233,9 +234,12 @@ export function WorkerDrawer() {
     <Drawer.Navigator
       drawerContent={(p) => <WorkerDrawerContent {...p} />}
       screenOptions={{
-        headerStyle: { backgroundColor: D.surface },
-        headerTintColor: D.text,
-        headerTitleStyle: { fontWeight: '900' },
+        header: ({ navigation }) => (
+          <AdminHeader
+            nameFallback="עובד"
+            onMenuPress={() => (navigation as any).openDrawer()}
+          />
+        ),
         sceneStyle: { backgroundColor: '#F6F7FB' },
         drawerPosition: 'right',
         drawerType: 'front',

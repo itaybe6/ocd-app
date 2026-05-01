@@ -26,8 +26,6 @@ import { useLoading } from '../../state/LoadingContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: screenHeight } = Dimensions.get('window');
-/** Same slab as `AdminHeader` (`headerBg`) */
-const ADMIN_HEADER_COLOR = '#1F2937';
 
 const jsStat = StyleSheet.create({
   card: {
@@ -39,13 +37,13 @@ const jsStat = StyleSheet.create({
   },
   textBlock: { alignItems: 'flex-end' },
   label: {
-    color: ADMIN_HEADER_COLOR,
+    color: colors.adminHeader,
     fontWeight: '800',
     fontSize: 11,
     textAlign: 'right',
   },
   value: {
-    color: ADMIN_HEADER_COLOR,
+    color: colors.adminHeader,
     fontWeight: '900',
     fontSize: 24,
     textAlign: 'right',
@@ -98,11 +96,18 @@ type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer
 type JobServicePoint = { id: string; job_id: string; service_point_id: string; image_url?: string | null; custom_refill_amount?: number | null };
 type ServicePoint = { id: string; device_type: string; scent_type: string; refill_amount: number };
 
-type InstallationDevice = { id: string; installation_job_id: string; image_url?: string | null; device_name?: string | null };
+type InstallationDevice = {
+  id: string;
+  installation_job_id: string;
+  image_url?: string | null;
+  device_type?: string | null;
+  device_name?: string | null;
+};
 
 type OneTimeCustomerPayload = { name: string; phone?: string; address?: string };
 type CreateSelectedPoint = ServicePoint & { selected: boolean; custom_refill_amount: string }; // empty => none
 type InstallationDeviceDraft = { device_name: string };
+type DeviceCatalogRow = { id: string; name: string; refill_amount: number };
 
 type CustomerServicePoint = {
   id: string;
@@ -197,6 +202,8 @@ export function JobsScreen() {
   const [createSpecialJobType, setCreateSpecialJobType] = useState<string>(SPECIAL_JOB_TYPES[0].value);
   const [createBatteryType, setCreateBatteryType] = useState<string>('AA');
   const [createInstallationDevices, setCreateInstallationDevices] = useState<InstallationDeviceDraft[]>([{ device_name: '' }]);
+  const [installationCatalogDevices, setInstallationCatalogDevices] = useState<DeviceCatalogRow[]>([]);
+  const [installationCatalogLoading, setInstallationCatalogLoading] = useState(false);
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
   const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
@@ -364,7 +371,7 @@ export function JobsScreen() {
       if (job.kind === 'installation') {
         const { data, error } = await supabase
           .from('installation_devices')
-          .select('id, installation_job_id, image_url, device_name')
+          .select('id, installation_job_id, image_url, device_type, device_name')
           .eq('installation_job_id', job.id);
         if (error) throw error;
         const urls = ((data ?? []) as InstallationDevice[])
@@ -517,9 +524,45 @@ export function JobsScreen() {
     });
   }, [createCustomerId, createUseOneTimeCustomer, createKind, createOpen, fetchCreateServicePoints]);
 
+  useEffect(() => {
+    if (!createOpen || createKind !== 'installation') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setInstallationCatalogLoading(true);
+        const { data, error } = await supabase
+          .from('devices')
+          .select('id, name, refill_amount')
+          .order('name', { ascending: true });
+        if (error) throw error;
+        if (!cancelled) setInstallationCatalogDevices((data ?? []) as DeviceCatalogRow[]);
+      } catch (e: any) {
+        if (!cancelled) {
+          setInstallationCatalogDevices([]);
+          Toast.show({ type: 'error', text1: 'טעינת מכשירים נכשלה', text2: e?.message ?? 'Unknown error' });
+        }
+      } finally {
+        if (!cancelled) setInstallationCatalogLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, createKind]);
+
+  const installationDeviceSelectOptions = useMemo(
+    () =>
+      installationCatalogDevices.map((d) => ({
+        value: d.name,
+        label: `${d.name} · ברירת מחדל מילוי ${d.refill_amount}`,
+      })),
+    [installationCatalogDevices]
+  );
+
   const resetCreateFormMinimal = () => {
     setCreateNotes('');
     setCreateOrderNumber('');
+    setCreateInstallationDevices([{ device_name: '' }]);
   };
 
   const validateCreateCommon = () => {
@@ -555,12 +598,14 @@ export function JobsScreen() {
       const dateIso = combineDateTimeToIso(createDateYmd.trim(), '09:00');
       const oneTimeId = await createOneTimeCustomerIfNeeded();
 
+      const omitOrderNotesForOneTime = createKind !== 'special' && createUseOneTimeCustomer;
+
       const common: any = {
         worker_id: createWorkerId,
         date: dateIso,
         status: 'pending' as const,
-        notes: createNotes.trim() || null,
-        order_number: createOrderNumber ? Number(createOrderNumber) : null,
+        notes: omitOrderNotesForOneTime ? null : createNotes.trim() || null,
+        order_number: omitOrderNotesForOneTime ? null : createOrderNumber ? Number(createOrderNumber) : null,
       };
 
       const customerFields =
@@ -605,8 +650,12 @@ export function JobsScreen() {
         const instId = (inst as any).id as string;
 
         const devices = createInstallationDevices.map((d) => d.device_name.trim()).filter(Boolean);
-        if (!devices.length) throw new Error('הוסף לפחות מכשיר אחד');
-        const rows = devices.map((name) => ({ installation_job_id: instId, device_name: name }));
+        if (!devices.length) throw new Error('בחר לפחות מכשיר אחד מהרשימה');
+        const rows = devices.map((name) => ({
+          installation_job_id: instId,
+          device_type: name,
+          device_name: name,
+        }));
         const { error: devErr } = await supabase.from('installation_devices').insert(rows);
         if (devErr) throw devErr;
 
@@ -723,7 +772,7 @@ export function JobsScreen() {
       outline: 'rgba(60,60,67,0.10)',
       text: '#1C1C1E',
       muted: '#8E8E93',
-      primary: ADMIN_HEADER_COLOR,
+      primary: colors.adminHeader,
       secondary: '#3C3C43',
       tertiary: '#8E8E93',
       fill: 'rgba(120,120,128,0.12)',
@@ -822,9 +871,9 @@ export function JobsScreen() {
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: ADMIN_HEADER_COLOR,
+                      backgroundColor: colors.adminHeader,
                       opacity: pressed ? 0.7 : 1,
-                      shadowColor: ADMIN_HEADER_COLOR,
+                      shadowColor: colors.adminHeader,
                       shadowOpacity: 0.3,
                       shadowRadius: 8,
                       shadowOffset: { width: 0, height: 4 },
@@ -849,9 +898,9 @@ export function JobsScreen() {
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: ADMIN_HEADER_COLOR,
+                      backgroundColor: colors.adminHeader,
                       opacity: pressed ? 0.7 : 1,
-                      shadowColor: ADMIN_HEADER_COLOR,
+                      shadowColor: colors.adminHeader,
                       shadowOpacity: 0.3,
                       shadowRadius: 8,
                       shadowOffset: { width: 0, height: 4 },
@@ -1646,8 +1695,12 @@ export function JobsScreen() {
                 />
               )}
 
-              <Input label="מספר הזמנה (אופציונלי)" value={createOrderNumber} onChangeText={setCreateOrderNumber} keyboardType="numeric" />
-              <Input label="הערות (אופציונלי)" value={createNotes} onChangeText={setCreateNotes} />
+              {createKind !== 'special' && createUseOneTimeCustomer ? null : (
+                <>
+                  <Input label="מספר הזמנה (אופציונלי)" value={createOrderNumber} onChangeText={setCreateOrderNumber} keyboardType="numeric" />
+                  <Input label="הערות (אופציונלי)" value={createNotes} onChangeText={setCreateNotes} />
+                </>
+              )}
             </View>
           </Card>
 
@@ -1698,37 +1751,48 @@ export function JobsScreen() {
           {createKind === 'installation' ? (
             <Card>
               <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', marginBottom: 10 }}>מכשירים להתקנה</Text>
-              <View style={{ gap: 10 }}>
-                {createInstallationDevices.map((d, idx) => (
-                  <View key={idx} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-end' }}>
-                    <View style={{ flex: 1 }}>
-                      <Input
-                        label={`מכשיר #${idx + 1}`}
-                        value={d.device_name}
-                        onChangeText={(v) => setCreateInstallationDevices((prev) => prev.map((x, i) => (i === idx ? { ...x, device_name: v } : x)))}
-                        placeholder="Device name"
-                      />
+              {installationCatalogLoading ? (
+                <Text style={{ color: colors.muted, textAlign: 'right' }}>טוען רשימת מכשירים…</Text>
+              ) : !installationDeviceSelectOptions.length ? (
+                <Text style={{ color: colors.muted, textAlign: 'right' }}>
+                  אין מכשירים במערכת. הוסיפו מכשירים תחת מכשירים וניחוחות בתפריט האדמין לפני יצירת משימת התקנה.
+                </Text>
+              ) : (
+                <View style={{ gap: 10 }}>
+                  {createInstallationDevices.map((d, idx) => (
+                    <View key={idx} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-end' }}>
+                      <View style={{ flex: 1 }}>
+                        <SelectSheet
+                          label={`מכשיר #${idx + 1}`}
+                          value={d.device_name || undefined}
+                          placeholder="בחר מכשיר מהרשימה…"
+                          options={installationDeviceSelectOptions}
+                          searchable
+                          searchPlaceholder="חיפוש מכשיר…"
+                          onChange={(v) => setCreateInstallationDevices((prev) => prev.map((x, i) => (i === idx ? { ...x, device_name: v } : x)))}
+                        />
+                      </View>
+                      <Pressable
+                        onPress={() => setCreateInstallationDevices((prev) => prev.filter((_, i) => i !== idx))}
+                        disabled={createInstallationDevices.length <= 1}
+                        style={{
+                          backgroundColor: createInstallationDevices.length <= 1 ? colors.border : colors.danger,
+                          borderRadius: 14,
+                          paddingHorizontal: 12,
+                          paddingVertical: 12,
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '900' }}>מחק</Text>
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => setCreateInstallationDevices((prev) => prev.filter((_, i) => i !== idx))}
-                      disabled={createInstallationDevices.length <= 1}
-                      style={{
-                        backgroundColor: createInstallationDevices.length <= 1 ? colors.border : colors.danger,
-                        borderRadius: 14,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: '900' }}>מחק</Text>
-                    </Pressable>
-                  </View>
-                ))}
-                <Button
-                  title="הוסף מכשיר"
-                  variant="secondary"
-                  onPress={() => setCreateInstallationDevices((prev) => [...prev, { device_name: '' }])}
-                />
-              </View>
+                  ))}
+                  <Button
+                    title="הוסף מכשיר"
+                    variant="secondary"
+                    onPress={() => setCreateInstallationDevices((prev) => [...prev, { device_name: '' }])}
+                  />
+                </View>
+              )}
             </Card>
           ) : null}
 

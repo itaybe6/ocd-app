@@ -37,11 +37,9 @@ import {
   ImagePlus,
   Layers,
   Package,
-  Play,
   Sparkles,
-  Upload,
+  X,
 } from 'lucide-react-native';
-import { Button } from '../../components/ui/Button';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
@@ -101,6 +99,7 @@ type ServicePoint = {
 type InstallationDevice = {
   id: string;
   installation_job_id: string;
+  device_type?: string | null;
   device_name?: string | null;
   image_url?: string | null;
 };
@@ -588,7 +587,7 @@ export function WorkerScheduleScreen() {
       if (it.kind === 'installation') {
         const { data, error } = await supabase
           .from('installation_devices')
-          .select('id, installation_job_id, device_name, image_url')
+          .select('id, installation_job_id, device_type, device_name, image_url')
           .eq('installation_job_id', it.id);
         if (error) throw error;
         setInstallationDevices(
@@ -615,70 +614,77 @@ export function WorkerScheduleScreen() {
     if (uri) onPicked(uri);
   };
 
-  const uploadRegularPoint = async (p: (typeof regularPoints)[number]) => {
-    if (!execJob) return;
-    if (!p.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
-    try {
-      setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
-      const storagePath = await uploadJobServicePointImage({
-        jobId: execJob.id,
-        jobServicePointId: p.id,
-        servicePointId: p.service_point_id,
-        localUri: p.localImageUri,
-      });
-      setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false } : x)));
-      Toast.show({ type: 'success', text1: 'הועלה' });
-    } catch (e: any) {
-      setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: false } : x)));
-      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
-    }
+  const removeRegularImage = (id: string) => {
+    setRegularPoints((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, localImageUri: null, image_url: null } : x)),
+    );
   };
 
-  const uploadInstallationDevice = async (d: (typeof installationDevices)[number]) => {
-    if (!execJob) return;
-    if (!d.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
-    try {
-      setInstallationDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: true } : x)));
-      const storagePath = await uploadInstallationDeviceImage({
-        installationJobId: execJob.id,
-        installationDeviceId: d.id,
-        localUri: d.localImageUri,
-      });
-      setInstallationDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, image_url: storagePath, uploading: false } : x)));
-      Toast.show({ type: 'success', text1: 'הועלה' });
-    } catch (e: any) {
-      setInstallationDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: false } : x)));
-      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
-    }
+  const removeInstallationImage = (id: string) => {
+    setInstallationDevices((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, localImageUri: null, image_url: null } : x)),
+    );
   };
 
-  const uploadSpecial = async () => {
-    if (!execJob || !special) return;
-    if (!special.localImageUri) return Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
-    try {
-      setSpecial((p) => (p ? { ...p, uploading: true } : p));
-      const storagePath = await uploadSpecialJobImage({ specialJobId: special.id, localUri: special.localImageUri });
-      setSpecial((p) => (p ? { ...p, image_url: storagePath, uploading: false } : p));
-      Toast.show({ type: 'success', text1: 'הועלה' });
-    } catch (e: any) {
-      setSpecial((p) => (p ? { ...p, uploading: false } : p));
-      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
-    }
+  const removeSpecialImage = () => {
+    setSpecial((p) => (p ? { ...p, localImageUri: null, image_url: null } : p));
   };
 
   const complete = async () => {
     if (!execJob) return;
     try {
       setIsLoading(true);
+
+      // Upload any locally-picked images before completing the job.
+      if (execJob.kind === 'regular') {
+        const snapshot = [...regularPoints];
+        for (const p of snapshot) {
+          if (p.localImageUri) {
+            const storagePath = await uploadJobServicePointImage({
+              jobId: execJob.id,
+              jobServicePointId: p.id,
+              servicePointId: p.service_point_id,
+              localUri: p.localImageUri,
+            });
+            setRegularPoints((prev) =>
+              prev.map((x) =>
+                x.id === p.id ? { ...x, image_url: storagePath, localImageUri: null } : x,
+              ),
+            );
+          }
+        }
+      } else if (execJob.kind === 'installation') {
+        const snapshot = [...installationDevices];
+        for (const d of snapshot) {
+          if (d.localImageUri) {
+            const storagePath = await uploadInstallationDeviceImage({
+              installationJobId: execJob.id,
+              installationDeviceId: d.id,
+              localUri: d.localImageUri,
+            });
+            setInstallationDevices((prev) =>
+              prev.map((x) =>
+                x.id === d.id ? { ...x, image_url: storagePath, localImageUri: null } : x,
+              ),
+            );
+          }
+        }
+      } else if (execJob.kind === 'special' && special?.localImageUri) {
+        const storagePath = await uploadSpecialJobImage({
+          specialJobId: special.id,
+          localUri: special.localImageUri,
+        });
+        setSpecial((p) => (p ? { ...p, image_url: storagePath, localImageUri: null } : p));
+      }
+
       await completeUnifiedJob(execJob.kind, execJob.id);
       setItems((prev) =>
         prev.map((x) =>
           x.kind === execJob.kind && x.id === execJob.id ? { ...x, status: 'completed' } : x,
         ),
       );
-      Toast.show({ type: 'success', text1: 'הושלם' });
+      Toast.show({ type: 'success', text1: 'המשימה הושלמה' });
       closeExec();
-      // refresh totals
       fetchDay();
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'סיום נכשל', text2: e?.message ?? 'Unknown error' });
@@ -708,17 +714,17 @@ export function WorkerScheduleScreen() {
     if (execJob.status !== 'pending') return false;
     if (execJob.kind === 'regular') {
       if (!regularPoints.length) return true;
-      return regularPoints.every((p) => !!p.image_url);
+      return regularPoints.every((p) => !!p.image_url || !!p.localImageUri);
     }
     if (execJob.kind === 'installation') {
       if (!installationDevices.length) return true;
-      return installationDevices.every((d) => !!d.image_url);
+      return installationDevices.every((d) => !!d.image_url || !!d.localImageUri);
     }
     if (execJob.kind === 'special') {
-      return !!special?.image_url;
+      return !!special?.image_url || !!special?.localImageUri;
     }
     return false;
-  }, [execJob, regularPoints, installationDevices, special?.image_url]);
+  }, [execJob, regularPoints, installationDevices, special?.image_url, special?.localImageUri]);
 
   // ── List header (calendar + oil card + filter + stats) ────
   const listHeader = useMemo(
@@ -1191,15 +1197,22 @@ export function WorkerScheduleScreen() {
                         </View>
 
                         {previewUri ? (
-                          <Image source={{ uri: previewUri }} style={st.spImage} resizeMode="cover" />
-                        ) : (
-                          <View style={st.spImagePlaceholder}>
-                            <Camera size={20} color={colors.muted} strokeWidth={1.6} />
-                            <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
+                          <View style={st.spImageWrap}>
+                            <Image source={{ uri: previewUri }} style={st.spImage} resizeMode="cover" />
+                            <Pressable
+                              onPress={() => removeRegularImage(p.id)}
+                              hitSlop={10}
+                              style={({ pressed }) => [
+                                st.spImageRemoveBtn,
+                                pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityLabel="מחק תמונה"
+                            >
+                              <X size={14} color="#fff" strokeWidth={3} />
+                            </Pressable>
                           </View>
-                        )}
-
-                        <View style={st.spActionRow}>
+                        ) : (
                           <Pressable
                             onPress={() =>
                               pick((uri) =>
@@ -1208,26 +1221,34 @@ export function WorkerScheduleScreen() {
                                 ),
                               )
                             }
-                            style={({ pressed }) => [st.spActionBtn, pressed && { opacity: 0.7 }]}
-                          >
-                            <ImagePlus size={14} color="#1E3A8A" strokeWidth={2.2} />
-                            <Text style={st.spActionBtnText}>בחר תמונה</Text>
-                          </Pressable>
-                          <Pressable
-                            disabled={p.uploading || !p.localImageUri}
-                            onPress={() => uploadRegularPoint(p)}
                             style={({ pressed }) => [
-                              st.spActionBtnPrimary,
-                              (!p.localImageUri || p.uploading) && { opacity: 0.5 },
-                              pressed && { opacity: 0.85 },
+                              st.spImagePlaceholder,
+                              pressed && { opacity: 0.75 },
                             ]}
                           >
-                            <Upload size={14} color="#fff" strokeWidth={2.4} />
-                            <Text style={st.spActionBtnPrimaryText}>
-                              {p.uploading ? 'מעלה…' : 'העלה'}
-                            </Text>
+                            <Camera size={22} color={colors.primary} strokeWidth={1.8} />
+                            <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
                           </Pressable>
-                        </View>
+                        )}
+
+                        <Pressable
+                          onPress={() =>
+                            pick((uri) =>
+                              setRegularPoints((prev) =>
+                                prev.map((x) => (x.id === p.id ? { ...x, localImageUri: uri } : x)),
+                              ),
+                            )
+                          }
+                          style={({ pressed }) => [
+                            st.spPickBtn,
+                            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+                          ]}
+                        >
+                          <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
+                          <Text style={st.spPickBtnText}>
+                            {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
+                          </Text>
+                        </Pressable>
                       </View>
                     );
                   })}
@@ -1248,7 +1269,7 @@ export function WorkerScheduleScreen() {
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={st.spDeviceName} numberOfLines={1}>
-                              {d.device_name ?? `מכשיר ${idx + 1}`}
+                              {d.device_name ?? d.device_type ?? `מכשיר ${idx + 1}`}
                             </Text>
                             <Text style={st.spDeviceSub}>
                               מכשיר {idx + 1} מתוך {installationDevices.length}
@@ -1262,15 +1283,22 @@ export function WorkerScheduleScreen() {
                         </View>
 
                         {previewUri ? (
-                          <Image source={{ uri: previewUri }} style={st.spImage} resizeMode="cover" />
-                        ) : (
-                          <View style={st.spImagePlaceholder}>
-                            <Camera size={20} color={colors.muted} strokeWidth={1.6} />
-                            <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
+                          <View style={st.spImageWrap}>
+                            <Image source={{ uri: previewUri }} style={st.spImage} resizeMode="cover" />
+                            <Pressable
+                              onPress={() => removeInstallationImage(d.id)}
+                              hitSlop={10}
+                              style={({ pressed }) => [
+                                st.spImageRemoveBtn,
+                                pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityLabel="מחק תמונה"
+                            >
+                              <X size={14} color="#fff" strokeWidth={3} />
+                            </Pressable>
                           </View>
-                        )}
-
-                        <View style={st.spActionRow}>
+                        ) : (
                           <Pressable
                             onPress={() =>
                               pick((uri) =>
@@ -1279,26 +1307,34 @@ export function WorkerScheduleScreen() {
                                 ),
                               )
                             }
-                            style={({ pressed }) => [st.spActionBtn, pressed && { opacity: 0.7 }]}
-                          >
-                            <ImagePlus size={14} color="#1E3A8A" strokeWidth={2.2} />
-                            <Text style={st.spActionBtnText}>בחר תמונה</Text>
-                          </Pressable>
-                          <Pressable
-                            disabled={d.uploading || !d.localImageUri}
-                            onPress={() => uploadInstallationDevice(d)}
                             style={({ pressed }) => [
-                              st.spActionBtnPrimary,
-                              (!d.localImageUri || d.uploading) && { opacity: 0.5 },
-                              pressed && { opacity: 0.85 },
+                              st.spImagePlaceholder,
+                              pressed && { opacity: 0.75 },
                             ]}
                           >
-                            <Upload size={14} color="#fff" strokeWidth={2.4} />
-                            <Text style={st.spActionBtnPrimaryText}>
-                              {d.uploading ? 'מעלה…' : 'העלה'}
-                            </Text>
+                            <Camera size={22} color={colors.primary} strokeWidth={1.8} />
+                            <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
                           </Pressable>
-                        </View>
+                        )}
+
+                        <Pressable
+                          onPress={() =>
+                            pick((uri) =>
+                              setInstallationDevices((prev) =>
+                                prev.map((x) => (x.id === d.id ? { ...x, localImageUri: uri } : x)),
+                              ),
+                            )
+                          }
+                          style={({ pressed }) => [
+                            st.spPickBtn,
+                            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+                          ]}
+                        >
+                          <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
+                          <Text style={st.spPickBtnText}>
+                            {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
+                          </Text>
+                        </Pressable>
                       </View>
                     );
                   })}
@@ -1334,42 +1370,55 @@ export function WorkerScheduleScreen() {
                       </View>
                     ) : null}
 
-                    {special.localImageUri ? (
-                      <Image source={{ uri: special.localImageUri }} style={st.spImage} resizeMode="cover" />
-                    ) : special.image_url ? (
-                      <Image source={{ uri: getPublicUrl(special.image_url) }} style={st.spImage} resizeMode="cover" />
-                    ) : (
-                      <View style={st.spImagePlaceholder}>
-                        <Camera size={20} color={colors.muted} strokeWidth={1.6} />
-                        <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
-                      </View>
-                    )}
+                    {(() => {
+                      const previewUri =
+                        special.localImageUri ?? (special.image_url ? getPublicUrl(special.image_url) : null);
+                      return previewUri ? (
+                        <View style={st.spImageWrap}>
+                          <Image source={{ uri: previewUri }} style={st.spImage} resizeMode="cover" />
+                          <Pressable
+                            onPress={removeSpecialImage}
+                            hitSlop={10}
+                            style={({ pressed }) => [
+                              st.spImageRemoveBtn,
+                              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel="מחק תמונה"
+                          >
+                            <X size={14} color="#fff" strokeWidth={3} />
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <Pressable
+                          onPress={() =>
+                            pick((uri) => setSpecial((p) => (p ? { ...p, localImageUri: uri } : p)))
+                          }
+                          style={({ pressed }) => [
+                            st.spImagePlaceholder,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                        >
+                          <Camera size={22} color={colors.primary} strokeWidth={1.8} />
+                          <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
+                        </Pressable>
+                      );
+                    })()}
 
-                    <View style={st.spActionRow}>
-                      <Pressable
-                        onPress={() =>
-                          pick((uri) => setSpecial((p) => (p ? { ...p, localImageUri: uri } : p)))
-                        }
-                        style={({ pressed }) => [st.spActionBtn, pressed && { opacity: 0.7 }]}
-                      >
-                        <ImagePlus size={14} color="#1E3A8A" strokeWidth={2.2} />
-                        <Text style={st.spActionBtnText}>בחר תמונה</Text>
-                      </Pressable>
-                      <Pressable
-                        disabled={special.uploading || !special.localImageUri}
-                        onPress={uploadSpecial}
-                        style={({ pressed }) => [
-                          st.spActionBtnPrimary,
-                          (!special.localImageUri || special.uploading) && { opacity: 0.5 },
-                          pressed && { opacity: 0.85 },
-                        ]}
-                      >
-                        <Upload size={14} color="#fff" strokeWidth={2.4} />
-                        <Text style={st.spActionBtnPrimaryText}>
-                          {special.uploading ? 'מעלה…' : 'העלה'}
-                        </Text>
-                      </Pressable>
-                    </View>
+                    <Pressable
+                      onPress={() =>
+                        pick((uri) => setSpecial((p) => (p ? { ...p, localImageUri: uri } : p)))
+                      }
+                      style={({ pressed }) => [
+                        st.spPickBtn,
+                        pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+                      ]}
+                    >
+                      <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
+                      <Text style={st.spPickBtnText}>
+                        {special.localImageUri || special.image_url ? 'החלף תמונה' : 'בחר תמונה'}
+                      </Text>
+                    </Pressable>
                   </View>
                 </View>
               ) : null}
@@ -1384,39 +1433,27 @@ export function WorkerScheduleScreen() {
 
             <View style={[st.detailsFooter, { paddingBottom: Math.max(12, insets.bottom) }]}>
               {execJob.status !== 'completed' ? (
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <Button
-                    title="סגור"
-                    variant="secondary"
-                    fullWidth={false}
-                    style={{ flex: 1, borderRadius: 14 }}
-                    onPress={closeExec}
-                  />
-                  <Pressable
-                    onPress={complete}
-                    disabled={!isExecCompletable}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      flexDirection: 'row-reverse',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      borderRadius: 14,
-                      paddingVertical: 14,
-                      backgroundColor: !isExecCompletable
-                        ? 'rgba(37,99,235,0.35)'
-                        : pressed
-                          ? 'rgba(37,99,235,0.88)'
-                          : colors.primary,
-                      opacity: 1,
-                    })}
-                  >
-                    <Play size={17} color="#FFFFFF" fill="#FFFFFF" />
-                    <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>סיים משימה</Text>
-                  </Pressable>
-                </View>
+                <Pressable
+                  onPress={complete}
+                  disabled={!isExecCompletable}
+                  accessibilityRole="button"
+                  accessibilityLabel="בצע משימה"
+                  style={({ pressed }) => [
+                    st.executeBtn,
+                    !isExecCompletable && st.executeBtnDisabled,
+                    pressed && isExecCompletable && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+                  ]}
+                >
+                  <Check size={18} color="#FFFFFF" strokeWidth={2.8} />
+                  <Text style={st.executeBtnText}>בצע</Text>
+                </Pressable>
               ) : (
-                <Button title="סגור" variant="secondary" style={{ borderRadius: 14 }} onPress={closeExec} />
+                <View style={st.completedBanner}>
+                  <View style={st.completedBannerIcon}>
+                    <Check size={14} color="#16A34A" strokeWidth={2.8} />
+                  </View>
+                  <Text style={st.completedBannerText}>המשימה הושלמה</Text>
+                </View>
               )}
             </View>
           </View>
@@ -1840,8 +1877,9 @@ const st = StyleSheet.create({
     letterSpacing: -0.2,
   },
   detailsSubRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: 6,
     marginTop: 6,
     flexWrap: 'wrap',
@@ -2014,20 +2052,41 @@ const st = StyleSheet.create({
     height: 26,
     backgroundColor: '#E5E7EB',
   },
+  spImageWrap: {
+    position: 'relative',
+    width: '100%',
+  },
   spImage: {
     width: '100%',
     aspectRatio: 16 / 10,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: '#F2F2F7',
+  },
+  spImageRemoveBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(17,24,39,0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 4 },
+    }),
   },
   spImagePlaceholder: {
     width: '100%',
     aspectRatio: 16 / 7,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
+    borderRadius: 14,
+    backgroundColor: 'rgba(37,99,235,0.04)',
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#E5E7EB',
+    borderColor: 'rgba(37,99,235,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
@@ -2037,41 +2096,78 @@ const st = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
-  spActionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  spActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
+  spPickBtn: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    height: 40,
+    gap: 8,
+    height: 44,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: 'rgba(30,58,138,0.16)',
-    backgroundColor: 'rgba(30,58,138,0.07)',
+    borderColor: 'rgba(37,99,235,0.22)',
+    backgroundColor: 'rgba(37,99,235,0.06)',
   },
-  spActionBtnText: {
-    fontSize: 12,
+  spPickBtnText: {
+    fontSize: 13,
     fontWeight: '800',
-    color: '#1E3A8A',
+    color: colors.primary,
+    letterSpacing: 0.2,
   },
-  spActionBtnPrimary: {
-    flex: 1,
-    flexDirection: 'row',
+  executeBtn: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 12,
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 15,
     backgroundColor: colors.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOpacity: 0.32,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 4 },
+    }),
   },
-  spActionBtnPrimaryText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#fff',
+  executeBtnDisabled: {
+    backgroundColor: 'rgba(37,99,235,0.35)',
+    ...Platform.select({
+      ios: { shadowOpacity: 0 },
+      android: { elevation: 0 },
+    }),
+  },
+  executeBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 16,
+    letterSpacing: 0.4,
+  },
+  completedBanner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(22,163,74,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(22,163,74,0.22)',
+  },
+  completedBannerIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(22,163,74,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedBannerText: {
+    color: '#16A34A',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
 
   // ── Notes card (modal) ─────────────────────────────
