@@ -3,6 +3,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -36,7 +37,9 @@ import {
   Droplets,
   ImagePlus,
   Layers,
+  MapPin,
   Package,
+  Phone,
   Sparkles,
   X,
 } from 'lucide-react-native';
@@ -79,8 +82,14 @@ type Unified = {
   notes?: string | null;
 };
 
-type UserLite = { id: string; name: string; avatar_url?: string | null };
-type OneTimeCustomerLite = { id: string; name: string };
+type UserLite = {
+  id: string;
+  name: string;
+  avatar_url?: string | null;
+  phone?: string | null;
+  address?: string | null;
+};
+type OneTimeCustomerLite = { id: string; name: string; phone?: string | null; address?: string | null };
 
 type JobServicePoint = {
   id: string;
@@ -100,7 +109,6 @@ type InstallationDevice = {
   id: string;
   installation_job_id: string;
   device_type?: string | null;
-  device_name?: string | null;
   image_url?: string | null;
 };
 type SpecialJob = {
@@ -115,6 +123,8 @@ const KIND_CONFIG = {
   installation: { label: 'התקנה',  color: '#7C3AED'      },
   special:      { label: 'מיוחדת', color: '#EA580C'      },
 } as const;
+
+const INSTALL_ACCENT = '#7C3AED';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -296,6 +306,7 @@ export function WorkerScheduleScreen() {
   const customerMap = useMemo(() => new Map(customers.map((u) => [u.id, u.name])), [customers]);
   const customerById = useMemo(() => new Map(customers.map((u) => [u.id, u])), [customers]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
+  const oneTimeById = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c])), [oneTimeCustomers]);
 
   const parsedView = useMemo(() => {
     const d = new Date(`${viewDate}T00:00:00`);
@@ -361,7 +372,7 @@ export function WorkerScheduleScreen() {
     const uniqueIds = Array.from(new Set(ids));
     const { data, error } = await supabase
       .from('users')
-      .select('id, name, avatar_url')
+      .select('id, name, avatar_url, phone, address')
       .in('id', uniqueIds);
     if (!error) setCustomers((data ?? []) as any);
   }, []);
@@ -374,7 +385,7 @@ export function WorkerScheduleScreen() {
     const uniqueIds = Array.from(new Set(ids));
     const { data, error } = await supabase
       .from('one_time_customers')
-      .select('id, name')
+      .select('id, name, phone, address')
       .in('id', uniqueIds);
     if (!error) setOneTimeCustomers((data ?? []) as any);
   }, []);
@@ -395,7 +406,7 @@ export function WorkerScheduleScreen() {
           .lte('date', end),
         supabase
           .from('installation_jobs')
-          .select('id, date, status, customer_id, one_time_customer_id, order_number, notes')
+          .select('id, date, status, customer_id, one_time_customer_id, order_number, notes, device_type')
           .eq('worker_id', user.id)
           .gte('date', start)
           .lte('date', end),
@@ -531,6 +542,49 @@ export function WorkerScheduleScreen() {
     [customerMap, oneTimeMap],
   );
 
+  const customerAddressLine = useCallback(
+    (x: Unified): string | null => {
+      if (x.customer_id) {
+        const u = customerById.get(x.customer_id);
+        const a = String(u?.address ?? '').trim();
+        return a.length ? a : null;
+      }
+      if (x.one_time_customer_id) {
+        const o = oneTimeById.get(x.one_time_customer_id);
+        const a = String(o?.address ?? '').trim();
+        return a.length ? a : null;
+      }
+      return null;
+    },
+    [customerById, oneTimeById],
+  );
+
+  const customerPhoneRaw = useCallback(
+    (x: Unified): string | null => {
+      if (x.customer_id) {
+        const u = customerById.get(x.customer_id);
+        const p = String(u?.phone ?? '').trim();
+        return p.length ? p : null;
+      }
+      if (x.one_time_customer_id) {
+        const o = oneTimeById.get(x.one_time_customer_id);
+        const p = String(o?.phone ?? '').trim();
+        return p.length ? p : null;
+      }
+      return null;
+    },
+    [customerById, oneTimeById],
+  );
+
+  const dialCustomerPhone = useCallback((raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const url = `tel:${trimmed.replace(/\s+/g, '')}`;
+    void Linking.openURL(url).catch(() => {
+      Toast.show({ type: 'error', text1: 'לא ניתן לחייג', text2: 'בדקו שהמספר תקין' });
+    });
+  }, []);
+
   const closeExec = useCallback(() => {
     setExecOpen(false);
     if (execCloseTimerRef.current) clearTimeout(execCloseTimerRef.current);
@@ -587,7 +641,7 @@ export function WorkerScheduleScreen() {
       if (it.kind === 'installation') {
         const { data, error } = await supabase
           .from('installation_devices')
-          .select('id, installation_job_id, device_type, device_name, image_url')
+          .select('id, installation_job_id, device_type, image_url')
           .eq('installation_job_id', it.id);
         if (error) throw error;
         setInstallationDevices(
@@ -963,6 +1017,7 @@ export function WorkerScheduleScreen() {
           const isCompleted = item.status === 'completed';
           const kindConf = KIND_CONFIG[item.kind];
           const customer = customerLabel(item);
+          const addressLine = customerAddressLine(item);
           const customerUser = item.customer_id ? customerById.get(item.customer_id) : undefined;
           const customerAvatarUri = customerUser?.avatar_url ?? null;
           const rowKey = `${item.kind}:${item.id}`;
@@ -999,9 +1054,21 @@ export function WorkerScheduleScreen() {
                   <View style={st.taskTopRow}>
                     <View style={st.taskWho}>
                       <Avatar size={24} uri={customerAvatarUri} name={customer} />
-                      <Text style={st.taskCustomer} numberOfLines={1}>
-                        {customer}
-                      </Text>
+                      <View style={st.taskWhoTexts}>
+                        <Text style={st.taskCustomer} numberOfLines={1}>
+                          {customer}
+                        </Text>
+                        {addressLine ? (
+                          <View style={st.taskAddressChip}>
+                            <View style={st.taskAddressChipIconWrap}>
+                              <MapPin size={13} color="#0F766E" strokeWidth={2.5} />
+                            </View>
+                            <Text style={st.taskAddressChipText} numberOfLines={2}>
+                              {addressLine}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
                     <View style={st.taskTopLeft}>
                       <View style={st.taskTimePill}>
@@ -1086,10 +1153,25 @@ export function WorkerScheduleScreen() {
                   <Sparkles size={18} color="#fff" strokeWidth={2.5} />
                 )}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={st.detailsTitle} numberOfLines={1}>
-                  {customerLabel(execJob)}
-                </Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={st.detailsTitleRow}>
+                  <Text style={st.detailsTitle} numberOfLines={1}>
+                    {customerLabel(execJob)}
+                  </Text>
+                  {customerPhoneRaw(execJob) ? (
+                    <Pressable
+                      onPress={() => dialCustomerPhone(customerPhoneRaw(execJob)!)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="חיוג ללקוח"
+                      style={({ pressed }) => [st.detailsHeaderPhoneHit, pressed && { opacity: 0.86 }]}
+                    >
+                      <View style={st.detailsHeaderPhone} pointerEvents="none">
+                        <Phone size={20} color={colors.primary} strokeWidth={2.3} />
+                      </View>
+                    </Pressable>
+                  ) : null}
+                </View>
                 <View style={st.detailsSubRow}>
                   <View style={st.detailsTimePill}>
                     <Clock size={11} color="#1E3A8A" strokeWidth={2.2} />
@@ -1109,9 +1191,68 @@ export function WorkerScheduleScreen() {
               </View>
             </View>
 
+            {(execJob.customer_id || execJob.one_time_customer_id) &&
+            (execJob.one_time_customer_id ||
+              !!customerPhoneRaw(execJob) ||
+              !!customerAddressLine(execJob)) ? (
+              <View style={st.execContactCard}>
+                {!!execJob.one_time_customer_id && (
+                  <View style={st.execOneTimeBadge}>
+                    <Text style={st.execOneTimeBadgeText}>לקוח חד־פעמי</Text>
+                  </View>
+                )}
+                {customerPhoneRaw(execJob) ? (
+                  <View style={st.execPhoneRow}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={st.execContactLabel}>טלפון</Text>
+                      <Text style={st.execContactValue} numberOfLines={1}>
+                        {customerPhoneRaw(execJob)}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => dialCustomerPhone(customerPhoneRaw(execJob)!)}
+                      accessibilityRole="button"
+                      accessibilityLabel="חיוג ללקוח"
+                      style={({ pressed }) => [st.execPhoneDialHit, pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] }]}
+                    >
+                      <View style={st.execPhoneDialBtn} pointerEvents="none">
+                        <Phone size={22} color="#FFFFFF" strokeWidth={2.4} />
+                      </View>
+                    </Pressable>
+                  </View>
+                ) : execJob.one_time_customer_id ? (
+                  <View style={st.execContactBlock}>
+                    <Text style={st.execContactLabel}>טלפון</Text>
+                    <Text style={st.execContactMuted}>לא נרשם במערכת</Text>
+                  </View>
+                ) : null}
+                {customerAddressLine(execJob) ? (
+                  <View style={st.execAddressTag}>
+                    <View style={st.execAddressTagIconWrap}>
+                      <MapPin size={18} color="#0F766E" strokeWidth={2.4} />
+                    </View>
+                    <View style={st.execAddressTagBody}>
+                      <Text style={st.execAddressTagLabel}>כתובת</Text>
+                      <Text style={st.execAddressTagValue}>{customerAddressLine(execJob)}</Text>
+                    </View>
+                  </View>
+                ) : execJob.one_time_customer_id ? (
+                  <View style={[st.execAddressTag, st.execAddressTagMuted]}>
+                    <View style={[st.execAddressTagIconWrap, st.execAddressTagIconWrapMuted]}>
+                      <MapPin size={18} color="#94A3B8" strokeWidth={2.2} />
+                    </View>
+                    <View style={st.execAddressTagBody}>
+                      <Text style={[st.execAddressTagLabel, st.execAddressTagLabelMuted]}>כתובת</Text>
+                      <Text style={st.execContactMuted}>לא נרשמה במערכת</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             {/* Quick stat strip */}
             {(execJob.kind === 'regular' && regularPoints.length > 0) ||
-            (execJob.kind === 'installation' && installationDevices.length > 0) ||
+            execJob.kind === 'installation' ||
             (execJob.kind === 'special' && !!special) ? (
               <View style={st.quickStatRow}>
                 {execJob.kind === 'regular' && (
@@ -1133,7 +1274,7 @@ export function WorkerScheduleScreen() {
                 )}
                 {execJob.kind === 'installation' && (
                   <View style={st.quickStat}>
-                    <Package size={13} color={colors.primary} strokeWidth={2.2} />
+                    <Package size={13} color={INSTALL_ACCENT} strokeWidth={2.2} />
                     <Text style={st.quickStatValue}>{installationDevices.length}</Text>
                     <Text style={st.quickStatLabel}>מכשירים</Text>
                   </View>
@@ -1239,15 +1380,14 @@ export function WorkerScheduleScreen() {
                               ),
                             )
                           }
-                          style={({ pressed }) => [
-                            st.spPickBtn,
-                            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
-                          ]}
+                          style={({ pressed }) => [pressed && { opacity: 0.88 }]}
                         >
-                          <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
-                          <Text style={st.spPickBtnText}>
-                            {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
-                          </Text>
+                          <View style={st.spPickBtn} pointerEvents="none">
+                            <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
+                            <Text style={st.spPickBtnText}>
+                              {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
+                            </Text>
+                          </View>
                         </Pressable>
                       </View>
                     );
@@ -1256,22 +1396,43 @@ export function WorkerScheduleScreen() {
               ) : null}
 
               {execJob.kind === 'installation' ? (
-                <View style={{ gap: 10 }}>
-                  <Text style={st.sectionTitle}>מכשירים</Text>
+                <View style={st.instSection}>
+                  <View style={st.instSectionHead}>
+                    <View style={st.instSectionIconWrap}>
+                      <Package size={16} color={INSTALL_ACCENT} strokeWidth={2.4} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={st.instSectionTitle}>מכשירים להתקנה</Text>
+                      <Text style={st.instSectionSubtitle}>
+                        צלמו כל מכשיר לאחר ההתקנה כדי לסמן את המשימה כהושלמה
+                      </Text>
+                    </View>
+                  </View>
+
+                  {installationDevices.length === 0 ? (
+                    <View style={st.instEmptyCard}>
+                      <Package size={28} color={INSTALL_ACCENT} strokeWidth={2} />
+                      <Text style={st.instEmptyTitle}>אין מכשירים משויכים</Text>
+                      <Text style={st.instEmptySubtitle}>
+                        אם אמורים להופיע מכשירים, רעננו את המסך או פנו למשרד
+                      </Text>
+                    </View>
+                  ) : null}
+
                   {installationDevices.map((d, idx) => {
                     const current = d.image_url ? getPublicUrl(d.image_url) : null;
                     const previewUri = d.localImageUri ?? current;
                     return (
-                      <View key={d.id} style={st.spCard}>
+                      <View key={d.id} style={st.instDeviceCard}>
                         <View style={st.spCardHeader}>
-                          <View style={[st.spDeviceIcon, { backgroundColor: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.18)' }]}>
-                            <Package size={14} color="#7C3AED" strokeWidth={2.2} />
+                          <View style={st.instDeviceIconBubble}>
+                            <Package size={14} color={INSTALL_ACCENT} strokeWidth={2.2} />
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={st.spDeviceName} numberOfLines={1}>
-                              {d.device_name ?? d.device_type ?? `מכשיר ${idx + 1}`}
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={st.instDeviceTitle} numberOfLines={1}>
+                              {d.device_type ?? `מכשיר ${idx + 1}`}
                             </Text>
-                            <Text style={st.spDeviceSub}>
+                            <Text style={st.instDeviceCaption}>
                               מכשיר {idx + 1} מתוך {installationDevices.length}
                             </Text>
                           </View>
@@ -1308,12 +1469,12 @@ export function WorkerScheduleScreen() {
                               )
                             }
                             style={({ pressed }) => [
-                              st.spImagePlaceholder,
+                              st.instImagePlaceholder,
                               pressed && { opacity: 0.75 },
                             ]}
                           >
-                            <Camera size={22} color={colors.primary} strokeWidth={1.8} />
-                            <Text style={st.spImagePlaceholderText}>לא הועלתה תמונה</Text>
+                            <Camera size={22} color={INSTALL_ACCENT} strokeWidth={1.8} />
+                            <Text style={st.instImagePlaceholderText}>לא הועלתה תמונה</Text>
                           </Pressable>
                         )}
 
@@ -1325,15 +1486,14 @@ export function WorkerScheduleScreen() {
                               ),
                             )
                           }
-                          style={({ pressed }) => [
-                            st.spPickBtn,
-                            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
-                          ]}
+                          style={({ pressed }) => [pressed && { opacity: 0.88 }]}
                         >
-                          <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
-                          <Text style={st.spPickBtnText}>
-                            {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
-                          </Text>
+                          <View style={st.instPickBtn} pointerEvents="none">
+                            <ImagePlus size={16} color={INSTALL_ACCENT} strokeWidth={2.4} />
+                            <Text style={st.instPickBtnText}>
+                              {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
+                            </Text>
+                          </View>
                         </Pressable>
                       </View>
                     );
@@ -1409,15 +1569,14 @@ export function WorkerScheduleScreen() {
                       onPress={() =>
                         pick((uri) => setSpecial((p) => (p ? { ...p, localImageUri: uri } : p)))
                       }
-                      style={({ pressed }) => [
-                        st.spPickBtn,
-                        pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
-                      ]}
+                      style={({ pressed }) => [pressed && { opacity: 0.88 }]}
                     >
-                      <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
-                      <Text style={st.spPickBtnText}>
-                        {special.localImageUri || special.image_url ? 'החלף תמונה' : 'בחר תמונה'}
-                      </Text>
+                      <View style={st.spPickBtn} pointerEvents="none">
+                        <ImagePlus size={16} color={colors.primary} strokeWidth={2.4} />
+                        <Text style={st.spPickBtnText}>
+                          {special.localImageUri || special.image_url ? 'החלף תמונה' : 'בחר תמונה'}
+                        </Text>
+                      </View>
                     </Pressable>
                   </View>
                 </View>
@@ -1736,6 +1895,12 @@ const st = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
   },
+  taskWhoTexts: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
   taskTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   taskTimePill: {
     backgroundColor: 'rgba(30,58,138,0.07)',
@@ -1747,13 +1912,49 @@ const st = StyleSheet.create({
   },
   taskTimeText: { fontSize: 11, fontWeight: '700', color: '#1E3A8A', letterSpacing: 0.4 },
   taskCustomer: {
-    flex: 1,
-    minWidth: 0,
+    alignSelf: 'stretch',
     fontSize: 16,
     fontWeight: '800',
     color: colors.text,
     textAlign: 'right',
     lineHeight: 22,
+  },
+  taskAddressChip: {
+    alignSelf: 'stretch',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(15,118,110,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,118,110,0.14)',
+    maxWidth: '100%',
+    ...Platform.select({
+      ios: { shadowColor: '#0F766E', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 1 },
+    }),
+  },
+  taskAddressChipIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15,118,110,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,118,110,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskAddressChipText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#115E59',
+    textAlign: 'right',
+    lineHeight: 17,
   },
   taskNotes: {
     fontSize: 12,
@@ -1869,12 +2070,159 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  detailsTitleRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
   detailsTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: '900',
     color: colors.text,
     textAlign: 'right',
     letterSpacing: -0.2,
+  },
+  detailsHeaderPhoneHit: {
+    flexShrink: 0,
+  },
+  detailsHeaderPhone: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.22)',
+  },
+  execContactCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EEF2F7',
+    gap: 12,
+  },
+  execOneTimeBadge: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(124,58,237,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.28)',
+  },
+  execOneTimeBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: INSTALL_ACCENT,
+  },
+  execContactBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  execContactLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textAlign: 'right',
+  },
+  execContactValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'right',
+    lineHeight: 21,
+  },
+  execContactMuted: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textAlign: 'right',
+  },
+  execPhoneRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  execPhoneDialHit: {
+    flexShrink: 0,
+  },
+  execPhoneDialBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    ...Platform.select({
+      ios: { shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 3 },
+    }),
+  },
+  execAddressTag: {
+    flexDirection: 'row-reverse',
+    alignItems: 'stretch',
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,118,110,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,118,110,0.16)',
+    ...Platform.select({
+      ios: { shadowColor: '#0F766E', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 2 },
+    }),
+  },
+  execAddressTagMuted: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
+      android: { elevation: 0 },
+    }),
+  },
+  execAddressTagIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,118,110,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(15,118,110,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  execAddressTagIconWrapMuted: {
+    backgroundColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
+  },
+  execAddressTagBody: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  execAddressTagLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F766E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'right',
+  },
+  execAddressTagLabelMuted: {
+    color: '#64748B',
+  },
+  execAddressTagValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#134E4A',
+    textAlign: 'right',
+    lineHeight: 21,
   },
   detailsSubRow: {
     flexDirection: 'row-reverse',
@@ -2097,11 +2445,13 @@ const st = StyleSheet.create({
     fontSize: 12,
   },
   spPickBtn: {
+    alignSelf: 'stretch',
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 44,
+    minHeight: 44,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: 'rgba(37,99,235,0.22)',
@@ -2113,6 +2463,141 @@ const st = StyleSheet.create({
     color: colors.primary,
     letterSpacing: 0.2,
   },
+
+  instSection: {
+    gap: 12,
+    marginTop: 2,
+  },
+  instSectionHead: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(124,58,237,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.14)',
+  },
+  instSectionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(124,58,237,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  instSectionTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  instSectionSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+    lineHeight: 17,
+  },
+  instEmptyCard: {
+    alignItems: 'center',
+    paddingVertical: 22,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.18)',
+    borderStyle: 'dashed',
+    gap: 8,
+  },
+  instEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  instEmptySubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  instDeviceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.16)',
+    padding: 12,
+    gap: 10,
+    ...Platform.select({
+      ios: { shadowColor: INSTALL_ACCENT, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 2 },
+    }),
+  },
+  instDeviceIconBubble: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    backgroundColor: 'rgba(124,58,237,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  instDeviceTitle: {
+    color: colors.text,
+    fontWeight: '900',
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  instDeviceCaption: {
+    color: colors.muted,
+    fontWeight: '600',
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: 1,
+  },
+  instImagePlaceholder: {
+    height: 140,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(124,58,237,0.22)',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(124,58,237,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  instImagePlaceholderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: INSTALL_ACCENT,
+  },
+  instPickBtn: {
+    alignSelf: 'stretch',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 48,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(124,58,237,0.35)',
+    backgroundColor: 'rgba(124,58,237,0.06)',
+  },
+  instPickBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: INSTALL_ACCENT,
+    letterSpacing: 0.2,
+  },
+
   executeBtn: {
     flexDirection: 'row-reverse',
     alignItems: 'center',

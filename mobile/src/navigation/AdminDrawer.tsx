@@ -20,7 +20,6 @@ import { useAuth } from '../state/AuthContext';
 import { AdminHeader } from '../components/AdminHeader';
 import { DashboardScreen } from '../screens/admin/DashboardScreen';
 import { UsersScreen } from '../screens/admin/UsersScreen';
-import { JobsScreen } from '../screens/admin/JobsScreen';
 import { WorkTemplatesStack } from './WorkTemplatesStack';
 import { WorkScheduleScreen } from '../screens/admin/WorkScheduleScreen';
 import { DailyScheduleScreen } from '../screens/admin/DailyScheduleScreen';
@@ -33,7 +32,6 @@ export type AdminDrawerParamList = {
   Jobs: undefined;
   WorkTemplates: undefined;
   WorkSchedule: undefined;
-  DailySchedule: undefined;
   DevicesAndScents: undefined;
   StoreManagement: undefined;
 };
@@ -113,7 +111,6 @@ function AdminDrawerContent(props: DrawerContentComponentProps) {
     () => [
       { key: 'Jobs', label: 'משימות', icon: ClipboardList },
       { key: 'Dashboard', label: 'לוח בקרה', icon: LayoutDashboard },
-      { key: 'DailySchedule', label: 'לוז יומי', icon: CalendarDays },
       { key: 'WorkSchedule', label: 'קווי עבודה', icon: CalendarDays },
       { key: 'Users', label: 'משתמשים', icon: UsersIcon },
       { key: 'DevicesAndScents', label: 'מכשירים וניחוחות', icon: Package },
@@ -227,10 +224,9 @@ export function AdminDrawer() {
     >
       <Drawer.Screen name="Dashboard" options={{ title: 'לוח בקרה' }} component={DashboardScreen} />
       <Drawer.Screen name="Users" options={{ title: 'משתמשים' }} component={UsersScreen} />
-      <Drawer.Screen name="Jobs" options={{ title: 'משימות' }} component={JobsScreen} />
+      <Drawer.Screen name="Jobs" options={{ title: 'משימות' }} component={DailyScheduleScreen} />
       <Drawer.Screen name="WorkTemplates" options={{ title: 'תבניות עבודה', headerShown: false }} component={WorkTemplatesStack} />
       <Drawer.Screen name="WorkSchedule" options={{ title: 'קווי עבודה' }} component={WorkScheduleScreen} />
-      <Drawer.Screen name="DailySchedule" options={{ title: 'לוז יומי' }} component={DailyScheduleScreen} />
       <Drawer.Screen name="DevicesAndScents" options={{ title: 'מכשירים וניחוחות' }} component={DevicesAndScentsScreen} />
       <Drawer.Screen name="StoreManagement" options={{ title: 'ניהול חנות' }} component={StoreManagementScreen} />
     </Drawer.Navigator>

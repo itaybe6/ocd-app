@@ -27,10 +27,14 @@ import {
   Layers,
   Pencil,
   Play,
+  Plus,
+  Search,
   Trash2,
-  X,
 } from 'lucide-react-native';
+import { Entypo } from '@expo/vector-icons';
+import { AdminCreateJobSheet, ADMIN_SPECIAL_JOB_TYPES } from '../../components/jobs/AdminCreateJobSheet';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
@@ -61,6 +65,10 @@ type Unified = {
   one_time_customer_id?: string | null;
   order_number?: number | null;
   notes?: string | null;
+  /** installation_jobs */
+  device_type?: string | null;
+  /** special_jobs */
+  job_type?: string | null;
 };
 
 type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; avatar_url?: string | null };
@@ -116,9 +124,14 @@ export function DailyScheduleScreen() {
   const [workerId, setWorkerId] = useState('');
   const [items, setItems] = useState<Unified[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [workerFilterOpen, setWorkerFilterOpen] = useState(false);
+  const [deleteConfirmJob, setDeleteConfirmJob] = useState<Unified | null>(null);
 
   const [edit, setEdit] = useState<Unified | null>(null);
   const [newTime, setNewTime] = useState('09:00');
+  const [newWorkerId, setNewWorkerId] = useState('');
 
   /** חלון ביצוע משימה — מבנה ועיצוב כמו ב-JobsScreen */
   const [executeJob, setExecuteJob] = useState<Unified | null>(null);
@@ -134,17 +147,55 @@ export function DailyScheduleScreen() {
   const pointsOriginRectRef = useRef<OriginRect | null>(null);
   const [jobPoints, setJobPoints] = useState<(JobServicePoint & { sp?: ServicePoint | null })[]>([]);
 
-  const workerOptions = useMemo(
-    () => [
-      { value: '', label: 'הכל' },
-      ...users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
-    ],
-    [users],
-  );
-
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
   const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
+
+  const ui = useMemo(
+    () => ({
+      text: '#1C1C1E',
+      secondary: '#3C3C43',
+      tertiary: '#8E8E93',
+      muted: '#8E8E93',
+      outline: 'rgba(60,60,67,0.10)',
+      fill: 'rgba(120,120,128,0.12)',
+    }),
+    [],
+  );
+
+  const filteredItems = useMemo(() => {
+    const q = searchQ.trim().toLowerCase();
+    if (!q) return items;
+    const specialTypeLabel = (code: string | null | undefined) =>
+      ADMIN_SPECIAL_JOB_TYPES.find((t) => t.value === (code ?? ''))?.label ?? '';
+    return items.filter((it) => {
+      const workerName = userMap.get(it.worker_id) ?? '';
+      const cust =
+        it.customer_id
+          ? (userMap.get(it.customer_id) ?? it.customer_id.slice(0, 6))
+          : it.one_time_customer_id
+            ? (oneTimeMap.get(it.one_time_customer_id) ?? it.one_time_customer_id.slice(0, 6))
+            : '—';
+      const kindLabel = KIND_CONFIG[it.kind].label;
+      const haystack = [
+        it.id.toLowerCase(),
+        workerName.toLowerCase(),
+        cust.toLowerCase(),
+        String(it.order_number ?? ''),
+        String(it.notes ?? '').toLowerCase(),
+        kindLabel.toLowerCase(),
+        formatHm(it.date),
+      ];
+      if (it.kind === 'installation' && it.device_type) haystack.push(String(it.device_type).toLowerCase());
+      if (it.kind === 'special') {
+        const jt = String(it.job_type ?? '');
+        haystack.push(jt.toLowerCase(), specialTypeLabel(it.job_type).toLowerCase());
+      }
+      return haystack.some((s) => s.includes(q));
+    });
+  }, [items, searchQ, userMap, oneTimeMap]);
+
+  const isSearchActive = !!searchQ.trim();
 
   const parsedDay = useMemo(() => {
     const d = new Date(`${day}T00:00:00`);
@@ -220,8 +271,12 @@ export function DailyScheduleScreen() {
 
       const [regRes, instRes, specRes] = await Promise.all([
         baseFilter(supabase.from('jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')),
-        baseFilter(supabase.from('installation_jobs').select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')),
-        baseFilter(supabase.from('special_jobs').select('id, date, status, worker_id, order_number, notes')),
+        baseFilter(
+          supabase
+            .from('installation_jobs')
+            .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, device_type')
+        ),
+        baseFilter(supabase.from('special_jobs').select('id, date, status, worker_id, order_number, notes, job_type')),
       ]);
 
       if (regRes.error)  throw regRes.error;
@@ -443,20 +498,25 @@ export function DailyScheduleScreen() {
     ]);
   };
 
-  const saveTime = async () => {
+  const saveEdit = async () => {
     if (!edit) return;
-    if (edit.kind !== 'regular') {
-      Toast.show({ type: 'error', text1: 'עריכת שעה זמינה כרגע רק למשימות regular' });
-      return;
-    }
     try {
       setIsLoading(true);
+      const table = tableForKind(edit.kind);
       const updatedIso = updateIsoTime(edit.date, newTime.trim());
-      const { error } = await supabase.from('jobs').update({ date: updatedIso }).eq('id', edit.id);
+      const patch: Record<string, any> = { date: updatedIso };
+      if (newWorkerId && newWorkerId !== edit.worker_id) patch.worker_id = newWorkerId;
+      const { error } = await supabase.from(table).update(patch).eq('id', edit.id);
       if (error) throw error;
-      setItems((prev) => prev.map((x) => (x.kind === 'regular' && x.id === edit.id ? { ...x, date: updatedIso } : x)));
+      setItems((prev) =>
+        prev.map((x) =>
+          x.kind === edit.kind && x.id === edit.id
+            ? { ...x, date: updatedIso, worker_id: newWorkerId || edit.worker_id }
+            : x,
+        ),
+      );
       setEdit(null);
-      Toast.show({ type: 'success', text1: 'עודכן' });
+      Toast.show({ type: 'success', text1: 'המשימה עודכנה' });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -470,6 +530,42 @@ export function DailyScheduleScreen() {
     setPointsJob(null);
     setJobPoints([]);
   }, []);
+
+  const deleteJob = useCallback(
+    async (job: Unified) => {
+      try {
+        setIsLoading(true);
+        if (job.kind === 'regular') {
+          const { error: jspErr } = await supabase.from('job_service_points').delete().eq('job_id', job.id);
+          if (jspErr) throw jspErr;
+          const { error } = await supabase.from('jobs').delete().eq('id', job.id);
+          if (error) throw error;
+        } else if (job.kind === 'installation') {
+          const { error: dErr } = await supabase.from('installation_devices').delete().eq('installation_job_id', job.id);
+          if (dErr) throw dErr;
+          const { error } = await supabase.from('installation_jobs').delete().eq('id', job.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('special_jobs').delete().eq('id', job.id);
+          if (error) throw error;
+        }
+
+        setItems((prev) => prev.filter((x) => !(x.kind === job.kind && x.id === job.id)));
+        setExecuteJob((j) => (j && j.kind === job.kind && j.id === job.id ? null : j));
+        setEdit((e) => (e && e.kind === job.kind && e.id === job.id ? null : e));
+        if (pointsJob && pointsJob.kind === job.kind && pointsJob.id === job.id) {
+          closePoints();
+        }
+
+        Toast.show({ type: 'success', text1: 'נמחק' });
+      } catch (e: any) {
+        Toast.show({ type: 'error', text1: 'מחיקה נכשלה', text2: e?.message ?? 'Unknown error' });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [closePoints, pointsJob],
+  );
 
   const listHeader = useMemo(
     () => (
@@ -561,44 +657,145 @@ export function DailyScheduleScreen() {
           </ScrollView>
 
           <View style={st.calPrettyRow}>
-            <Text style={st.calPrettyText}>{prettyDay}</Text>
+            <View style={st.calStatsRow}>
+              <View style={st.calStatItem}>
+                <Text style={st.calStatNumber}>{stats.completed}</Text>
+                <Text style={st.calStatLabel}>הושלמו</Text>
+              </View>
+              <View style={st.calStatDivider} />
+              <View style={st.calStatItem}>
+                <Text style={st.calStatNumber}>{stats.pending}</Text>
+                <Text style={st.calStatLabel}>ממתינות</Text>
+              </View>
+              <View style={st.calStatDivider} />
+              <View style={st.calStatItem}>
+                <Text style={st.calStatNumber}>{stats.total}</Text>
+                <Text style={st.calStatLabel}>סה״כ</Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* ── Worker Filter ─────────────────────────────── */}
-        <SelectSheet label="עובד" value={workerId} options={workerOptions} onChange={setWorkerId} />
+        {/* ── חיפוש + סינון עובד + הוספת משימה (כמו JobsScreen) ── */}
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+          <View
+            style={{
+              flex: 1,
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 8,
+              backgroundColor: '#FFFFFF',
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              height: 44,
+            }}
+          >
+            <Search size={16} color={ui.muted} />
+            <Input
+              label={undefined}
+              value={searchQ}
+              onChangeText={setSearchQ}
+              placeholder="חיפוש…"
+              style={{
+                flex: 1,
+                borderWidth: 0,
+                paddingVertical: 0,
+                paddingHorizontal: 0,
+                backgroundColor: 'transparent',
+                fontSize: 15,
+              }}
+            />
+          </View>
 
-        {/* ── Stats Card ────────────────────────────────── */}
-        {items.length > 0 && (
-          <View style={st.statsCard}>
-            <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#34C759' }]} />
-              <Text style={[st.statNumber, { color: '#34C759' }]}>{stats.completed}</Text>
-              <Text style={st.statLabel}>הושלמו</Text>
-            </View>
-            <View style={st.statDivider} />
-            <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#FF9500' }]} />
-              <Text style={[st.statNumber, { color: '#FF9500' }]}>{stats.pending}</Text>
-              <Text style={st.statLabel}>ממתינות</Text>
-            </View>
-            <View style={st.statDivider} />
-            <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#C7C7CC' }]} />
-              <Text style={[st.statNumber, { color: colors.text }]}>{stats.total}</Text>
-              <Text style={st.statLabel}>סה״כ</Text>
-            </View>
+          <Pressable accessibilityRole="button" onPress={() => setWorkerFilterOpen(true)} hitSlop={8}>
+            {({ pressed }) => (
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.adminHeader,
+                  opacity: pressed ? 0.7 : 1,
+                  shadowColor: colors.adminHeader,
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 4,
+                }}
+              >
+                <Entypo name="sound-mix" size={18} color="#FFFFFF" />
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable accessibilityRole="button" onPress={() => setCreateOpen(true)} hitSlop={8}>
+            {({ pressed }) => (
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.adminHeader,
+                  opacity: pressed ? 0.7 : 1,
+                  shadowColor: colors.adminHeader,
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 4,
+                }}
+              >
+                <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
+              </View>
+            )}
+          </Pressable>
+        </View>
+
+        {isSearchActive && (
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: 'rgba(0,122,255,0.08)',
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              alignSelf: 'flex-end',
+            }}
+          >
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#007AFF' }} />
+            <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 13 }}>
+              {filteredItems.length} תוצאות
+            </Text>
           </View>
         )}
+
       </View>
     ),
-    [calMonthLabel, day, items.length, parsedDay, prettyDay, stats, threeWeeks, todayStr, weekDates, weekScrollWidth, workerId, workerOptions],
+    [
+      calMonthLabel,
+      day,
+      filteredItems.length,
+      isSearchActive,
+      parsedDay,
+      searchQ,
+      stats,
+      threeWeeks,
+      todayStr,
+      weekDates,
+      weekScrollWidth,
+      ui.muted,
+    ],
   );
 
   return (
     <View style={st.screen}>
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(i) => `${i.kind}:${i.id}`}
         contentContainerStyle={st.listContent}
         refreshing={loading}
@@ -666,7 +863,11 @@ export function DailyScheduleScreen() {
                   </Pressable>
 
                   {/* Delete button */}
-                  <Pressable style={st.tcBtn} accessibilityLabel="מחיקה">
+                  <Pressable
+                    style={st.tcBtn}
+                    accessibilityLabel="מחיקה"
+                    onPress={() => setDeleteConfirmJob(item)}
+                  >
                     <Trash2 size={14} color='#1E3A8A' strokeWidth={2} />
                   </Pressable>
 
@@ -675,7 +876,8 @@ export function DailyScheduleScreen() {
                     style={st.tcBtn}
                     onPress={() => {
                       setEdit(item);
-                      setNewTime(new Date(item.date).toISOString().slice(11, 16));
+                      setNewTime(formatHm(item.date));
+                      setNewWorkerId(item.worker_id);
                     }}
                     accessibilityLabel="עריכה"
                   >
@@ -690,83 +892,161 @@ export function DailyScheduleScreen() {
         }}
         ItemSeparatorComponent={() => <View style={{ height: 9 }} />}
         ListEmptyComponent={
-          <View style={st.emptyWrap}>
-            <View style={st.emptyIconWrap}>
-              <CalendarDays size={26} color={colors.muted} strokeWidth={1.5} />
+          items.length === 0 ? (
+            <View style={st.emptyWrap}>
+              <View style={st.emptyIconWrap}>
+                <CalendarDays size={26} color={colors.muted} strokeWidth={1.5} />
+              </View>
+              <Text style={st.emptyTitle}>אין משימות ליום הזה</Text>
+              <Text style={st.emptySubtitle}>שייך תבנית לתאריך ליצירת משימות</Text>
             </View>
-            <Text style={st.emptyTitle}>אין משימות ליום הזה</Text>
-            <Text style={st.emptySubtitle}>שייך תבנית לתאריך ליצירת משימות</Text>
-          </View>
+          ) : (
+            <View style={st.emptyWrap}>
+              <View style={st.emptyIconWrap}>
+                <Search size={26} color={colors.muted} strokeWidth={1.5} />
+              </View>
+              <Text style={st.emptyTitle}>לא נמצאו תוצאות</Text>
+              <Text style={st.emptySubtitle}>נסו מילת חיפוש אחרת</Text>
+            </View>
+          )
         }
         ListFooterComponent={<View style={{ height: 40 }} />}
       />
 
-      {/* ── Edit Time Sheet ─────────────────────────────── */}
-      <ModalSheet visible={!!edit} onClose={() => setEdit(null)}>
+      {/* ── Edit task modal — redesigned ─── */}
+      <ModalSheet
+        visible={!!edit}
+        onClose={() => setEdit(null)}
+        containerStyle={{ maxHeight: screenHeight * 0.92 }}
+      >
         {!!edit && (
-          <View style={{ gap: 16 }}>
-            <View style={st.editHeader}>
-              <View style={st.editIconBubble}>
-                <Clock size={16} color="#fff" strokeWidth={2.5} />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 32 }}
+          >
+            {/* ── Header ── */}
+            <View style={st.editHdr}>
+              <View style={st.editHdrLeft}>
+                <View style={[st.editHdrKindDot, { backgroundColor: KIND_CONFIG[edit.kind].color }]} />
+                <View>
+                  <Text style={st.editHdrTitle}>עריכת משימה</Text>
+                  <Text style={st.editHdrSub}>{KIND_CONFIG[edit.kind].label}{edit.order_number != null ? ` · #${edit.order_number}` : ''}</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={st.editTitle}>עריכת שעה</Text>
-                <Text style={st.editSubtitle}>
-                  {KIND_CONFIG[edit.kind].label} · #{edit.order_number ?? '—'}
-                </Text>
+              <Pressable onPress={() => setEdit(null)} hitSlop={12}>
+                {({ pressed }) => (
+                  <View style={[st.jbExecCloseBtn, pressed && { opacity: 0.75 }]}>
+                    <Text style={st.jbExecCloseBtnText}>✕</Text>
+                  </View>
+                )}
+              </Pressable>
+            </View>
+
+            {/* ── Customer + status info strip ── */}
+            <View style={st.editInfoStrip}>
+              <View style={st.editInfoItem}>
+                <Text style={st.editInfoLabel}>לקוח</Text>
+                <Text style={st.editInfoValue} numberOfLines={1}>{customerLabel(edit)}</Text>
+              </View>
+              <View style={st.editInfoDivider} />
+              <View style={st.editInfoItem}>
+                <Text style={st.editInfoLabel}>סטטוס</Text>
+                <View style={[st.editStatusPill, edit.status === 'completed' ? st.editStatusDone : st.editStatusPending]}>
+                  <View style={[st.editStatusDot, { backgroundColor: edit.status === 'completed' ? '#34C759' : '#FF9500' }]} />
+                  <Text style={[st.editStatusText, { color: edit.status === 'completed' ? '#248A3D' : '#C93400' }]}>
+                    {edit.status === 'completed' ? 'הושלם' : 'ממתין'}
+                  </Text>
+                </View>
+              </View>
+              <View style={st.editInfoDivider} />
+              <View style={st.editInfoItem}>
+                <Text style={st.editInfoLabel}>שעה נוכחית</Text>
+                <View style={st.editCurrentTimePill}>
+                  <Clock size={12} color="#007AFF" strokeWidth={2.5} />
+                  <Text style={st.editCurrentTimeText}>{formatHm(edit.date)}</Text>
+                </View>
               </View>
             </View>
 
-            <View style={st.editDetailsCard}>
-              <View style={st.editDetailRow}>
-                <Text style={st.editDetailLabel}>לקוח</Text>
-                <Text style={st.editDetailValue}>{customerLabel(edit)}</Text>
+            {/* ── Section: עריכת שעה ── */}
+            <View style={st.editSection}>
+              <View style={st.editSectionTitleRow}>
+                <Clock size={16} color="#007AFF" strokeWidth={2.2} />
+                <Text style={st.editSectionTitle}>שעת ביצוע</Text>
               </View>
-              <View style={st.editDetailDivider} />
-              <View style={st.editDetailRow}>
-                <Text style={st.editDetailLabel}>עובד</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Avatar size={20} uri={userAvatarMap.get(edit.worker_id) ?? null} name={userMap.get(edit.worker_id) ?? ''} />
-                  <Text style={st.editDetailValue}>{userMap.get(edit.worker_id) ?? edit.worker_id.slice(0, 6)}</Text>
-                </View>
-              </View>
-              <View style={st.editDetailDivider} />
-              <View style={st.editDetailRow}>
-                <Text style={st.editDetailLabel}>שעה נוכחית</Text>
-                <View style={st.currentTimeBadge}>
-                  <Clock size={12} color={colors.primary} strokeWidth={2} />
-                  <Text style={st.currentTimeText}>{formatHm(edit.date)}</Text>
-                </View>
+              <View style={st.editTimeGrid}>
+                {[
+                  '07:00','07:30','08:00','08:30','09:00','09:30',
+                  '10:00','10:30','11:00','11:30','12:00','12:30',
+                  '13:00','13:30','14:00','14:30','15:00','15:30',
+                  '16:00','16:30','17:00','17:30','18:00','18:30',
+                  '19:00','19:30','20:00',
+                ].map((t) => {
+                  const isSel = newTime === t;
+                  return (
+                    <Pressable key={t} onPress={() => setNewTime(t)} style={[st.editTimeBtn, isSel && st.editTimeBtnSel]}>
+                      <Text style={[st.editTimeBtnText, isSel && st.editTimeBtnTextSel]}>{t}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
 
-            <SelectSheet
-              label="שעה חדשה"
-              value={newTime}
-              placeholder="בחר שעה…"
-              options={[
-                { value: '07:00' }, { value: '07:30' },
-                { value: '08:00' }, { value: '08:30' },
-                { value: '09:00' }, { value: '09:30' },
-                { value: '10:00' }, { value: '10:30' },
-                { value: '11:00' }, { value: '11:30' },
-                { value: '12:00' }, { value: '12:30' },
-                { value: '13:00' }, { value: '13:30' },
-                { value: '14:00' }, { value: '14:30' },
-                { value: '15:00' }, { value: '15:30' },
-                { value: '16:00' }, { value: '16:30' },
-                { value: '17:00' }, { value: '17:30' },
-                { value: '18:00' }, { value: '18:30' },
-                { value: '19:00' }, { value: '19:30' },
-                { value: '20:00' },
-              ]}
-              onChange={setNewTime}
-            />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Button title="ביטול" variant="secondary" fullWidth={false} style={{ flex: 1, borderRadius: 14 }} onPress={() => setEdit(null)} />
-              <Button title="שמור"  fullWidth={false}  style={{ flex: 1, borderRadius: 14 }} onPress={saveTime} />
+            {/* ── Section: בחירת עובד ── */}
+            <View style={st.editSection}>
+              <View style={st.editSectionTitleRow}>
+                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>W</Text>
+                </View>
+                <Text style={st.editSectionTitle}>עובד מבצע</Text>
+              </View>
+              <View style={st.editWorkerList}>
+                {users.filter((u) => u.role === 'worker' || u.role === 'admin').map((u) => {
+                  const isSel = (newWorkerId || edit.worker_id) === u.id;
+                  return (
+                    <Pressable key={u.id} onPress={() => setNewWorkerId(u.id)}>
+                      {({ pressed }) => (
+                        <View style={[st.editWorkerCard, isSel && st.editWorkerCardSel, pressed && !isSel && { opacity: 0.7 }]}>
+                          <Avatar
+                            size={40}
+                            uri={u.avatar_url ?? null}
+                            name={u.name}
+                            style={isSel ? { borderWidth: 2.5, borderColor: '#007AFF' } : { borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.06)' }}
+                          />
+                          <Text style={[st.editWorkerCardName, isSel && st.editWorkerCardNameSel]} numberOfLines={1}>{u.name}</Text>
+                          {isSel && (
+                            <View style={st.editWorkerCheckBubble}>
+                              <Check size={13} color="#fff" strokeWidth={3} />
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+
+            {/* ── Action buttons ── */}
+            <View style={st.editActions}>
+              <Pressable onPress={saveEdit} style={{ flex: 2 }}>
+                {({ pressed }) => (
+                  <View style={[st.editSaveBtn, pressed && { opacity: 0.9 }]}>
+                    <Check size={18} color="#fff" strokeWidth={2.5} />
+                    <Text style={st.editSaveBtnText}>שמור שינויים</Text>
+                  </View>
+                )}
+              </Pressable>
+              <Pressable onPress={() => setEdit(null)} style={{ flex: 1 }}>
+                {({ pressed }) => (
+                  <View style={[st.editCancelBtn, pressed && { opacity: 0.75 }]}>
+                    <Text style={st.editCancelBtnText}>ביטול</Text>
+                  </View>
+                )}
+              </Pressable>
+            </View>
+          </ScrollView>
         )}
       </ModalSheet>
 
@@ -999,79 +1279,351 @@ export function DailyScheduleScreen() {
 
       {/* ── Service Points Window ───────────────────────── */}
       <OriginWindow visible={pointsOpen} originRect={pointsOriginRect} onClose={closePoints}>
-        <View style={{ flex: 1, padding: 16, gap: 14 }}>
-          <View style={st.pointsHeader}>
-            <View style={st.pointsIconBubble}>
-              <Layers size={16} color="#fff" strokeWidth={2.5} />
+        <View style={{ flex: 1, padding: 14 }}>
+          <View style={st.jbExecHeaderWrap}>
+            <View style={st.jbExecHeaderRow}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={st.jbExecTitle}>נקודות שירות</Text>
+                {!!pointsJob && (
+                  <Text style={st.jbPointsSheetSubtitle} numberOfLines={1}>
+                    {customerLabel(pointsJob)} · {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id.slice(0, 6)}
+                  </Text>
+                )}
+              </View>
+              <Pressable onPress={closePoints} hitSlop={12}>
+                {({ pressed }) => (
+                  <View style={[st.jbExecCloseBtn, pressed && { opacity: 0.75 }]}>
+                    <Text style={st.jbExecCloseBtnText}>✕</Text>
+                  </View>
+                )}
+              </Pressable>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.pointsTitle}>נקודות שירות</Text>
-              {!!pointsJob && (
-                <Text style={st.pointsSubtitle} numberOfLines={1}>
-                  {customerLabel(pointsJob)} · {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id.slice(0, 6)}
-                </Text>
-              )}
-            </View>
-            <Pressable onPress={closePoints} hitSlop={8} style={({ pressed }) => [st.pointsCloseBtn, pressed && { opacity: 0.6 }]}>
-              <X size={16} color={colors.muted} strokeWidth={2.5} />
-            </Pressable>
+            <View style={st.jbExecHeaderDivider} />
           </View>
 
+          {!!pointsJob && pointsJob.kind === 'regular' && (
+            <View style={[st.jbExecSummaryCard, { marginTop: 12, marginBottom: 12 }]}>
+              <Text style={st.jbExecCustomerLine} numberOfLines={2}>
+                לקוח: {customerLabel(pointsJob)}
+              </Text>
+              <View style={st.jbExecWorkerRow}>
+                <Avatar
+                  size={36}
+                  uri={userAvatarMap.get(pointsJob.worker_id) ?? null}
+                  name={userMap.get(pointsJob.worker_id) ?? ''}
+                  style={{ borderWidth: 2, borderColor: 'rgba(0,0,0,0.04)' }}
+                />
+                <Text style={st.jbExecWorkerName} numberOfLines={1}>
+                  {userMap.get(pointsJob.worker_id) ?? pointsJob.worker_id.slice(0, 6)}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {pointsLoading ? (
-            <View style={st.pointsLoadingWrap}>
-              <Text style={st.pointsLoadingText}>טוען נקודות שירות…</Text>
+            <View style={st.jbExecPointsLoading}>
+              <Text style={st.jbExecPointsLoadingText}>טוען נקודות שירות…</Text>
             </View>
           ) : pointsJob?.kind !== 'regular' ? (
-            <View style={st.pointsEmptyWrap}>
-              <View style={st.pointsEmptyIcon}><Layers size={22} color={colors.muted} strokeWidth={1.5} /></View>
-              <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
+            <View style={st.jbExecEmptyPoints}>
+              <View style={st.jbExecEmptyPointsIcon}>
+                <Layers size={22} color="#8E8E93" strokeWidth={1.5} />
+              </View>
+              <Text style={st.jbExecEmptyPointsText}>אין נקודות למשימה זו</Text>
             </View>
           ) : (
             <FlatList
               data={jobPoints}
               keyExtractor={(i) => i.id}
-              contentContainerStyle={{ gap: 8, paddingBottom: 6 }}
+              contentContainerStyle={{ gap: 10, paddingBottom: 12 }}
               style={{ flex: 1 }}
               renderItem={({ item }) => (
-                <View style={st.pointCard}>
-                  <View style={st.pointCardHeader}>
-                    <View style={st.pointDeviceIcon}>
-                      <Droplets size={14} color={colors.primary} strokeWidth={2} />
-                    </View>
-                    <Text style={st.pointDeviceText}>{item.sp?.device_type ?? item.service_point_id}</Text>
-                  </View>
-                  <View style={st.pointCardDivider} />
-                  <View style={st.pointMetaRow}>
-                    <View style={st.pointMetaItem}>
-                      <Text style={st.pointMetaLabel}>ניחוח</Text>
-                      <Text style={st.pointMetaValue}>{item.sp?.scent_type ?? '-'}</Text>
-                    </View>
-                    <View style={st.pointMetaSep} />
-                    <View style={st.pointMetaItem}>
-                      <Text style={st.pointMetaLabel}>מילוי</Text>
-                      <Text style={st.pointMetaValue}>{item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}</Text>
+                <View style={st.jbExecPointCard}>
+                  <View style={st.jbExecPointCardHeader}>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <Text style={st.jbExecPointTitle} numberOfLines={1}>
+                        {item.sp?.device_type ?? item.service_point_id}
+                      </Text>
+                      <View style={st.jbExecPointSubRow}>
+                        <Droplets size={12} color="#8E8E93" />
+                        <Text style={st.jbExecPointSubText}>
+                          ניחוח: {item.sp?.scent_type ?? '-'} · מילוי: {item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   {!!item.sp?.notes && (
-                    <>
-                      <View style={st.pointCardDivider} />
-                      <Text style={st.pointNotes} numberOfLines={2}>{item.sp.notes}</Text>
-                    </>
+                    <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                      <View style={st.jbPointInlineDivider} />
+                      <Text style={st.jbExecNotes} numberOfLines={3}>
+                        {item.sp.notes}
+                      </Text>
+                    </View>
                   )}
                 </View>
               )}
               ListEmptyComponent={
-                <View style={st.pointsEmptyWrap}>
-                  <View style={st.pointsEmptyIcon}><Layers size={22} color={colors.muted} strokeWidth={1.5} /></View>
-                  <Text style={st.pointsEmptyText}>אין נקודות למשימה זו</Text>
+                <View style={st.jbExecEmptyPoints}>
+                  <View style={st.jbExecEmptyPointsIcon}>
+                    <Layers size={22} color="#8E8E93" strokeWidth={1.5} />
+                  </View>
+                  <Text style={st.jbExecEmptyPointsText}>אין נקודות למשימה זו</Text>
                 </View>
               }
             />
           )}
 
-          <Button title="סגור" variant="secondary" onPress={closePoints} style={{ borderRadius: 14 }} />
+          <Button title="סגור" variant="secondary" onPress={closePoints} style={{ borderRadius: 14, marginTop: 8 }} />
         </View>
       </OriginWindow>
+
+      <AdminCreateJobSheet
+        visible={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={fetchDay}
+        initialDateYmd={day}
+        users={users}
+      />
+
+      <ModalSheet visible={!!deleteConfirmJob} onClose={() => setDeleteConfirmJob(null)} containerStyle={{ paddingHorizontal: 18, paddingTop: 4, paddingBottom: 8 }}>
+        {!!deleteConfirmJob && (
+          <View style={{ width: '100%', alignItems: 'stretch' }}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              <Text
+                style={{
+                  flex: 1,
+                  textAlign: 'right',
+                  writingDirection: 'rtl',
+                  fontSize: 20,
+                  fontWeight: '900',
+                  color: colors.text,
+                  letterSpacing: -0.3,
+                }}
+                numberOfLines={2}
+              >
+                מחיקת משימה
+              </Text>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255,59,48,0.12)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Trash2 size={22} color="#FF3B30" strokeWidth={2.2} />
+              </View>
+            </View>
+
+            <Text
+              style={{
+                textAlign: 'right',
+                writingDirection: 'rtl',
+                fontSize: 15,
+                fontWeight: '500',
+                color: colors.muted,
+                lineHeight: 22,
+                marginBottom: 14,
+              }}
+            >
+              האם למחוק את המשימה? הפעולה אינה הפיכה.
+            </Text>
+
+            <View
+              style={{
+                backgroundColor: colors.elevated,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                padding: 14,
+                gap: 8,
+              }}
+            >
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <View
+                  style={[
+                    st.jbExecKindBadge,
+                    deleteConfirmJob.kind === 'regular' && st.jbExecKindRegular,
+                    deleteConfirmJob.kind === 'installation' && st.jbExecKindInstall,
+                    deleteConfirmJob.kind === 'special' && st.jbExecKindSpecial,
+                  ]}
+                >
+                  <Text style={[st.jbExecKindBadgeText, { color: KIND_CONFIG[deleteConfirmJob.kind].color }]}>
+                    {KIND_CONFIG[deleteConfirmJob.kind].label}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                  <Clock size={14} color="#8E8E93" strokeWidth={2} />
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, textAlign: 'right', writingDirection: 'rtl' }}>
+                    {formatHm(deleteConfirmJob.date)}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, textAlign: 'right', writingDirection: 'rtl' }} numberOfLines={2}>
+                לקוח: {customerLabel(deleteConfirmJob)}
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.muted, textAlign: 'right', writingDirection: 'rtl' }} numberOfLines={1}>
+                עובד: {userMap.get(deleteConfirmJob.worker_id) ?? deleteConfirmJob.worker_id.slice(0, 8)}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 22 }}>
+              <Pressable
+                onPress={() => {
+                  const j = deleteConfirmJob;
+                  setDeleteConfirmJob(null);
+                  void deleteJob(j);
+                }}
+                style={{ flex: 1 }}
+              >
+                {({ pressed }) => (
+                  <View
+                    style={{
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      backgroundColor: pressed ? 'rgba(255,59,48,0.92)' : '#FF3B30',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      ...Platform.select({
+                        ios: { shadowColor: '#FF3B30', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
+                        android: { elevation: 3 },
+                      }),
+                    }}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 16, textAlign: 'center', writingDirection: 'rtl' }}>מחק</Text>
+                  </View>
+                )}
+              </Pressable>
+              <Pressable onPress={() => setDeleteConfirmJob(null)} style={{ flex: 1 }}>
+                {({ pressed }) => (
+                  <View
+                    style={{
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      backgroundColor: pressed ? 'rgba(120,120,128,0.14)' : 'rgba(120,120,128,0.10)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, textAlign: 'center', writingDirection: 'rtl' }}>ביטול</Text>
+                  </View>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </ModalSheet>
+
+      <ModalSheet visible={workerFilterOpen} onClose={() => setWorkerFilterOpen(false)}>
+        <View style={{ gap: 0, paddingBottom: 8 }}>
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <Text style={{ color: ui.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 }}>סינון עובד</Text>
+            <Pressable
+              onPress={() => setWorkerId('')}
+              style={({ pressed }) => ({
+                paddingHorizontal: 14,
+                paddingVertical: 7,
+                borderRadius: 10,
+                backgroundColor: pressed ? 'rgba(255,59,48,0.12)' : 'rgba(255,59,48,0.08)',
+              })}
+            >
+              <Text style={{ color: '#FF3B30', fontWeight: '600', fontSize: 14 }}>נקה</Text>
+            </Pressable>
+          </View>
+
+          <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 13, textAlign: 'right', marginBottom: 10 }}>עובד</Text>
+          <ScrollView
+            style={{ maxHeight: 340 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+          >
+            {[
+              { id: '', label: 'הכל', avatarUrl: null as string | null },
+              ...users
+                .filter((u) => u.role === 'worker')
+                .map((u) => ({ id: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
+            ].map((row) => {
+              const selected = workerId === row.id;
+              return (
+                <Pressable key={row.id || 'all'} onPress={() => setWorkerId(row.id)}>
+                  {({ pressed }) => (
+                    <View
+                      style={{
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        gap: 10,
+                        paddingVertical: 12,
+                        paddingHorizontal: 14,
+                        borderRadius: 12,
+                        backgroundColor: selected ? 'rgba(0,122,255,0.12)' : ui.fill,
+                        borderWidth: selected ? 1.5 : 0,
+                        borderColor: selected ? '#007AFF' : 'transparent',
+                        opacity: pressed ? 0.88 : 1,
+                      }}
+                    >
+                      {row.id ? (
+                        <Avatar size={32} uri={row.avatarUrl} name={row.label} />
+                      ) : (
+                        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(120,120,128,0.14)' }} />
+                      )}
+                      <Text
+                        style={{
+                          flex: 1,
+                          textAlign: 'right',
+                          fontWeight: selected ? '800' : '600',
+                          color: selected ? '#007AFF' : ui.text,
+                          fontSize: 15,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {row.label}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingTop: 16,
+              marginTop: 8,
+              borderTopWidth: 1,
+              borderTopColor: ui.outline,
+            }}
+          >
+            <Text style={{ color: ui.secondary, fontWeight: '600', fontSize: 14 }}>
+              {items.length} משימות ביום
+            </Text>
+            <Pressable onPress={() => setWorkerFilterOpen(false)}>
+              {({ pressed }) => (
+                <View
+                  style={{
+                    paddingHorizontal: 28,
+                    paddingVertical: 12,
+                    borderRadius: 14,
+                    backgroundColor: pressed ? 'rgba(0,122,255,0.85)' : '#007AFF',
+                    shadowColor: '#007AFF',
+                    shadowOpacity: 0.25,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 4,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 16 }}>הצג תוצאות</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </ModalSheet>
     </View>
   );
 }
@@ -1214,16 +1766,37 @@ const st = StyleSheet.create({
     opacity: 1,
   },
   calPrettyRow: {
-    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderTopWidth: 1,
     borderTopColor: '#F2F2F7',
   },
-  calPrettyText: {
-    fontSize: 12,
+  calStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  calStatItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  calStatNumber: {
+    fontSize: 14,
     fontWeight: '700',
+    color: colors.text,
+  },
+  calStatLabel: {
+    fontSize: 12,
     color: colors.muted,
+    fontWeight: '500',
+  },
+  calStatDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: '#E5E5EA',
   },
 
   // ── Stats Card ─────────────────────────────────────
@@ -1424,77 +1997,6 @@ const st = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
-  },
-
-  // ── Edit Time Sheet ────────────────────────────────
-  editHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-  },
-  editIconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  editTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text,
-    textAlign: 'right',
-  },
-  editSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
-    textAlign: 'right',
-    marginTop: 1,
-  },
-  editDetailsCard: {
-    backgroundColor: colors.bg,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 10,
-  },
-  editDetailRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  editDetailLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.muted,
-    textAlign: 'right',
-  },
-  editDetailValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'left',
-  },
-  editDetailDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  currentTimeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(37,99,235,0.08)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  currentTimeText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.primary,
   },
 
   // ── Execute modal (JobsScreen-style) ───────────────
@@ -1828,138 +2330,262 @@ const st = StyleSheet.create({
     fontSize: 17,
     letterSpacing: -0.2,
   },
+  jbPointsSheetSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textAlign: 'right',
+  },
+  jbPointInlineDivider: {
+    height: 1,
+    backgroundColor: 'rgba(60,60,67,0.08)',
+    marginBottom: 10,
+  },
 
-  // ── Service Points Window ──────────────────────────
-  pointsHeader: {
+  // ── Edit task modal ────────────────────────────────
+  editHdr: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(60,60,67,0.08)',
+    marginBottom: 16,
+  },
+  editHdrLeft: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 12,
   },
-  pointsIconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
+  editHdrKindDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  pointsTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text,
+  editHdrTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1C1C1E',
     textAlign: 'right',
+    letterSpacing: -0.4,
   },
-  pointsSubtitle: {
-    fontSize: 12,
+  editHdrSub: {
+    fontSize: 13,
     fontWeight: '600',
-    color: colors.muted,
+    color: '#8E8E93',
     textAlign: 'right',
-    marginTop: 1,
+    marginTop: 2,
   },
-  pointsCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pointsLoadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pointsLoadingText: {
-    color: colors.muted,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  pointsEmptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 8,
-  },
-  pointsEmptyIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: 'rgba(37,99,235,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  pointsEmptyText: {
-    color: colors.muted,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-
-  // ── Service Point Card ─────────────────────────────
-  pointCard: {
-    backgroundColor: colors.elevated,
+  editInfoStrip: {
+    flexDirection: 'row-reverse',
+    backgroundColor: '#F8FAFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    borderColor: 'rgba(0,122,255,0.10)',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    marginBottom: 20,
+    ...Platform.select({
+      ios:     { shadowColor: '#2563EB', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 1 },
+    }),
   },
-  pointCardHeader: {
+  editInfoItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 4,
+  },
+  editInfoLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+  editInfoValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    textAlign: 'center',
+  },
+  editInfoDivider: {
+    width: 1,
+    backgroundColor: 'rgba(60,60,67,0.10)',
+    alignSelf: 'stretch',
+    marginVertical: 4,
+  },
+  editStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  editStatusDone: {
+    backgroundColor: 'rgba(52,199,89,0.12)',
+  },
+  editStatusPending: {
+    backgroundColor: 'rgba(255,149,0,0.12)',
+  },
+  editStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  editStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  editCurrentTimePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,122,255,0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  editCurrentTimeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#007AFF',
+    letterSpacing: 0.5,
+  },
+  editSection: {
+    marginBottom: 20,
+  },
+  editSectionTitleRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 12,
+    paddingHorizontal: 2,
   },
-  pointDeviceIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgba(37,99,235,0.08)',
+  editSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    textAlign: 'right',
+  },
+  editTimeGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  editTimeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
     borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.15)',
+    borderColor: 'rgba(60,60,67,0.06)',
+    minWidth: 68,
+    alignItems: 'center',
+  },
+  editTimeBtnSel: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+    ...Platform.select({
+      ios:     { shadowColor: '#007AFF', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 3 },
+    }),
+  },
+  editTimeBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3C3C43',
+    letterSpacing: 0.3,
+  },
+  editTimeBtnTextSel: {
+    color: '#FFFFFF',
+  },
+  editWorkerList: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  editWorkerCard: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: 'rgba(60,60,67,0.08)',
+    minWidth: 82,
+    position: 'relative',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 1 },
+    }),
+  },
+  editWorkerCardSel: {
+    borderColor: '#007AFF',
+    backgroundColor: 'rgba(0,122,255,0.04)',
+    ...Platform.select({
+      ios:     { shadowColor: '#007AFF', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 2 },
+    }),
+  },
+  editWorkerCardName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3C3C43',
+    textAlign: 'center',
+    maxWidth: 80,
+  },
+  editWorkerCardNameSel: {
+    color: '#007AFF',
+  },
+  editWorkerCheckBubble: {
+    position: 'absolute',
+    top: -5,
+    left: -5,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
-  pointDeviceText: {
-    color: colors.text,
-    fontWeight: '800',
-    fontSize: 14,
-    textAlign: 'right',
-    flex: 1,
+  editActions: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    marginTop: 8,
   },
-  pointCardDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 10,
-  },
-  pointMetaRow: {
+  editSaveBtn: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 16,
+    paddingVertical: 17,
+    ...Platform.select({
+      ios:     { shadowColor: '#007AFF', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
+      android: { elevation: 5 },
+    }),
   },
-  pointMetaItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  pointMetaLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.muted,
-  },
-  pointMetaValue: {
-    fontSize: 14,
+  editSaveBtnText: {
+    color: '#FFFFFF',
     fontWeight: '800',
-    color: colors.text,
+    fontSize: 16,
+    letterSpacing: -0.2,
   },
-  pointMetaSep: {
-    width: 1,
-    height: 28,
-    backgroundColor: colors.border,
+  editCancelBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(120,120,128,0.10)',
+    borderRadius: 16,
+    paddingVertical: 17,
   },
-  pointNotes: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'right',
-    lineHeight: 18,
+  editCancelBtnText: {
+    color: '#3C3C43',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

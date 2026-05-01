@@ -119,7 +119,6 @@ type InstallationDevice = {
   installation_job_id: string;
   image_url?: string | null;
   device_type?: string | null;
-  device_name?: string | null;
 };
 
 const SPECIAL_JOB_TYPE_LABELS: Record<string, string> = {
@@ -233,7 +232,7 @@ export function WorkerJobsScreen() {
           .eq('worker_id', user.id),
         supabase
           .from('installation_jobs')
-          .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')
+          .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, device_type')
           .eq('worker_id', user.id),
         supabase
           .from('special_jobs')
@@ -384,7 +383,7 @@ export function WorkerJobsScreen() {
       if (job.kind === 'installation') {
         const { data, error } = await supabase
           .from('installation_devices')
-          .select('id, installation_job_id, image_url, device_type, device_name')
+          .select('id, installation_job_id, image_url, device_type')
           .eq('installation_job_id', job.id);
         if (error) throw error;
         const devs = ((data ?? []) as InstallationDevice[]);
@@ -1214,7 +1213,7 @@ export function WorkerJobsScreen() {
                         }}
                       >
                         <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>
-                          {item.device_name ?? item.device_type ?? 'מכשיר'}
+                          {item.device_type ?? 'מכשיר'}
                         </Text>
                         {!!item.image_url && (
                           <Pressable
@@ -1700,7 +1699,7 @@ export function WorkerJobsScreen() {
                             }}
                             numberOfLines={1}
                           >
-                            {d.device_name ?? d.device_type ?? 'מכשיר'}
+                            {d.device_type ?? 'מכשיר'}
                           </Text>
 
                           {hasImage && (

@@ -60,6 +60,8 @@ export type InstallationJobRow = {
   worker_id: string;
   date: string; // ISO
   status: JobStatus;
+  /** When present in DB: primary / summary device (matches `devices.name` / service point device type). */
+  device_type?: string | null;
   notes?: string | null;
   order_number?: number | null;
   created_at?: string;
@@ -69,7 +71,6 @@ export type InstallationDeviceRow = {
   id: string;
   installation_job_id: string;
   device_type?: string | null;
-  device_name?: string | null;
   image_url?: string | null;
 };
 
