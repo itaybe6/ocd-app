@@ -2,6 +2,7 @@ import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } f
 import {
   Dimensions,
   FlatList,
+  I18nManager,
   Image,
   Linking,
   Platform,
@@ -44,7 +45,6 @@ import {
   X,
 } from 'lucide-react-native';
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
-import { Avatar } from '../../components/ui/Avatar';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { toDate, yyyyMmDd } from '../../lib/time';
@@ -1018,8 +1018,6 @@ export function WorkerScheduleScreen() {
           const kindConf = KIND_CONFIG[item.kind];
           const customer = customerLabel(item);
           const addressLine = customerAddressLine(item);
-          const customerUser = item.customer_id ? customerById.get(item.customer_id) : undefined;
-          const customerAvatarUri = customerUser?.avatar_url ?? null;
           const rowKey = `${item.kind}:${item.id}`;
           const scents = item.kind === 'regular' ? jobScentSummaries[item.id] : undefined;
 
@@ -1051,25 +1049,14 @@ export function WorkerScheduleScreen() {
                 style={st.taskInner}
               >
                 <View style={st.taskBody}>
-                  <View style={st.taskTopRow}>
-                    <View style={st.taskWho}>
-                      <Avatar size={24} uri={customerAvatarUri} name={customer} />
-                      <View style={st.taskWhoTexts}>
-                        <Text style={st.taskCustomer} numberOfLines={1}>
-                          {customer}
-                        </Text>
-                        {addressLine ? (
-                          <View style={st.taskAddressChip}>
-                            <View style={st.taskAddressChipIconWrap}>
-                              <MapPin size={13} color="#0F766E" strokeWidth={2.5} />
-                            </View>
-                            <Text style={st.taskAddressChipText} numberOfLines={2}>
-                              {addressLine}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
+                  <View
+                    style={[
+                      st.taskTagsTopRow,
+                      {
+                        justifyContent: I18nManager.isRTL ? 'flex-end' : 'flex-start',
+                      },
+                    ]}
+                  >
                     <View style={st.taskTopLeft}>
                       <View style={st.taskTimePill}>
                         <Text style={st.taskTimeText}>{formatHm(item.date)}</Text>
@@ -1082,6 +1069,17 @@ export function WorkerScheduleScreen() {
                         <Text style={st.statusChipText}>{isCompleted ? 'הושלם' : 'ממתין'}</Text>
                       </View>
                     </View>
+                  </View>
+
+                  <View style={st.taskNameBlock}>
+                    <Text style={st.taskCustomer} numberOfLines={1}>
+                      {customer}
+                    </Text>
+                    {addressLine ? (
+                      <Text style={st.taskAddressPlain} numberOfLines={2}>
+                        {addressLine}
+                      </Text>
+                    ) : null}
                   </View>
 
                   {!!item.notes && (
@@ -1881,27 +1879,19 @@ const st = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.07)',
     overflow: 'hidden',
   },
-  taskBody: { paddingHorizontal: 16, paddingTop: 15, paddingBottom: 13 },
-  taskTopRow: {
-    flexDirection: 'row-reverse',
+  taskBody: { paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13 },
+  taskTagsTopRow: {
+    width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  taskWho: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 7,
-    flex: 1,
-    marginLeft: 8,
-  },
-  taskWhoTexts: {
-    flex: 1,
-    minWidth: 0,
+  taskTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  taskNameBlock: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: 4,
+    width: '100%',
   },
-  taskTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   taskTimePill: {
     backgroundColor: 'rgba(30,58,138,0.07)',
     borderRadius: 20,
@@ -1919,40 +1909,11 @@ const st = StyleSheet.create({
     textAlign: 'right',
     lineHeight: 22,
   },
-  taskAddressChip: {
+  taskAddressPlain: {
     alignSelf: 'stretch',
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(15,118,110,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.14)',
-    maxWidth: '100%',
-    ...Platform.select({
-      ios: { shadowColor: '#0F766E', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-      android: { elevation: 1 },
-    }),
-  },
-  taskAddressChipIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    backgroundColor: 'rgba(15,118,110,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  taskAddressChipText: {
-    flex: 1,
-    minWidth: 0,
     fontSize: 12,
-    fontWeight: '700',
-    color: '#115E59',
+    fontWeight: '600',
+    color: colors.muted,
     textAlign: 'right',
     lineHeight: 17,
   },
