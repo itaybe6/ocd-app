@@ -276,7 +276,11 @@ export function DailyScheduleScreen() {
             .from('installation_jobs')
             .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, device_type')
         ),
-        baseFilter(supabase.from('special_jobs').select('id, date, status, worker_id, order_number, notes, job_type')),
+        baseFilter(
+          supabase
+            .from('special_jobs')
+            .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, job_type')
+        ),
       ]);
 
       if (regRes.error)  throw regRes.error;

@@ -236,7 +236,9 @@ export function WorkerJobsScreen() {
           .eq('worker_id', user.id),
         supabase
           .from('special_jobs')
-          .select('id, date, status, worker_id, order_number, notes, job_type, battery_type, image_url')
+          .select(
+            'id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, job_type, battery_type, image_url'
+          )
           .eq('worker_id', user.id),
       ]);
 

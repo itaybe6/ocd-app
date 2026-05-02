@@ -177,17 +177,20 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
   const validateCreateCommon = () => {
     if (!createDateYmd.trim()) throw new Error('חסר תאריך (yyyy-MM-dd)');
     if (!createWorkerId) throw new Error('חסר עובד');
-    if (createKind !== 'special') {
-      if (createUseOneTimeCustomer) {
-        if (!createOneTimeCustomer.name.trim()) throw new Error('חסר שם לקוח חד-פעמי');
-      } else {
-        if (!createCustomerId) throw new Error('חסר לקוח');
+    if (createKind === 'special') {
+      if (createUseOneTimeCustomer && !createOneTimeCustomer.name.trim()) {
+        throw new Error('חסר שם לקוח חד-פעמי');
       }
+      return;
+    }
+    if (createUseOneTimeCustomer) {
+      if (!createOneTimeCustomer.name.trim()) throw new Error('חסר שם לקוח חד-פעמי');
+    } else {
+      if (!createCustomerId) throw new Error('חסר לקוח');
     }
   };
 
   const createOneTimeCustomerIfNeeded = async (): Promise<string | null> => {
-    if (createKind === 'special') return null;
     if (!createUseOneTimeCustomer) return null;
     const payload = {
       name: createOneTimeCustomer.name.trim(),
@@ -218,13 +221,10 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
         order_number: null,
       };
 
-      const customerFields =
-        createKind === 'special'
-          ? {}
-          : {
-              customer_id: createUseOneTimeCustomer ? null : createCustomerId,
-              one_time_customer_id: createUseOneTimeCustomer ? oneTimeId : null,
-            };
+      const customerFields = {
+        customer_id: createUseOneTimeCustomer ? null : createCustomerId || null,
+        one_time_customer_id: createUseOneTimeCustomer ? oneTimeId : null,
+      };
 
       if (createKind === 'regular') {
         const selected = createServicePoints.filter((p) => p.selected);
@@ -306,6 +306,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
         const meta = createSpecialTypeMeta;
         const payload: any = {
           ...common,
+          ...customerFields,
           job_type: createSpecialJobType,
           battery_type: meta?.needsBattery ? createBatteryType : null,
         };
@@ -459,9 +460,10 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                 onChange={setCreateWorkerId}
               />
 
-              {createKind === 'special' ? null : (
-                <View style={{ gap: 8 }}>
-                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+              <View style={{ gap: 8 }}>
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>
+                    לקוח{createKind === 'special' ? ' (אופציונלי)' : ''}
+                  </Text>
                   <View
                     style={{
                       flexDirection: 'row-reverse',
@@ -537,9 +539,8 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                     </Pressable>
                   </View>
                 </View>
-              )}
 
-              {createKind === 'special' ? null : createUseOneTimeCustomer ? (
+              {createUseOneTimeCustomer ? (
                 <View style={{ gap: 10 }}>
                   <Input label="שם" value={createOneTimeCustomer.name} onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, name: v }))} />
                   <Input

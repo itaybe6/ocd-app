@@ -25,8 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { svgPathProperties } from 'svg-path-properties';
-import { addDays, format } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { addDays } from 'date-fns';
 import {
   Battery,
   CalendarDays,
@@ -47,7 +46,7 @@ import {
 import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
-import { toDate, yyyyMmDd } from '../../lib/time';
+import { yyyyMmDd } from '../../lib/time';
 import { useAuth } from '../../state/AuthContext';
 import { useLoading } from '../../state/LoadingContext';
 import { getPublicUrl } from '../../lib/storage';
@@ -345,11 +344,6 @@ export function WorkerScheduleScreen() {
     [parsedView],
   );
 
-  const prettyDay = useMemo(() => {
-    const d = toDate(day);
-    return format(d, 'EEEE, dd/MM/yyyy', { locale: he });
-  }, [day]);
-
   const stats = useMemo(() => {
     const total = items.length;
     const completed = items.filter((i) => i.status === 'completed').length;
@@ -412,7 +406,7 @@ export function WorkerScheduleScreen() {
           .lte('date', end),
         supabase
           .from('special_jobs')
-          .select('id, date, status, order_number, notes')
+          .select('id, date, status, customer_id, one_time_customer_id, order_number, notes')
           .eq('worker_id', user.id)
           .gte('date', start)
           .lte('date', end),
@@ -780,7 +774,7 @@ export function WorkerScheduleScreen() {
     return false;
   }, [execJob, regularPoints, installationDevices, special?.image_url, special?.localImageUri]);
 
-  // ── List header (calendar + oil card + filter + stats) ────
+  // ── List header (calendar + oil card) ────
   const listHeader = useMemo(
     () => (
       <View style={{ gap: 11 }}>
@@ -899,7 +893,22 @@ export function WorkerScheduleScreen() {
           </ScrollView>
 
           <View style={st.calPrettyRow}>
-            <Text style={st.calPrettyText}>{prettyDay}</Text>
+            <View style={st.calStatsRow}>
+              <View style={st.calStatItem}>
+                <Text style={st.calStatNumber}>{stats.completed}</Text>
+                <Text style={st.calStatLabel}>הושלמו</Text>
+              </View>
+              <View style={st.calStatDivider} />
+              <View style={st.calStatItem}>
+                <Text style={st.calStatNumber}>{stats.pending}</Text>
+                <Text style={st.calStatLabel}>ממתינות</Text>
+              </View>
+              <View style={st.calStatDivider} />
+              <View style={st.calStatItem}>
+                <Text style={st.calStatNumber}>{stats.total}</Text>
+                <Text style={st.calStatLabel}>סה״כ</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -964,28 +973,6 @@ export function WorkerScheduleScreen() {
           ) : null}
         </View>
 
-        {/* ── Stats Card ────────────────────────────────── */}
-        {items.length > 0 && (
-          <View style={st.statsCard}>
-            <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#34C759' }]} />
-              <Text style={[st.statNumber, { color: '#34C759' }]}>{stats.completed}</Text>
-              <Text style={st.statLabel}>הושלמו</Text>
-            </View>
-            <View style={st.statDivider} />
-            <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#FF9500' }]} />
-              <Text style={[st.statNumber, { color: '#FF9500' }]}>{stats.pending}</Text>
-              <Text style={st.statLabel}>ממתינות</Text>
-            </View>
-            <View style={st.statDivider} />
-            <View style={st.statItem}>
-              <View style={[st.statDot, { backgroundColor: '#C7C7CC' }]} />
-              <Text style={[st.statNumber, { color: colors.text }]}>{stats.total}</Text>
-              <Text style={st.statLabel}>סה״כ</Text>
-            </View>
-          </View>
-        )}
       </View>
     ),
     [
@@ -994,7 +981,6 @@ export function WorkerScheduleScreen() {
       viewDate,
       items.length,
       parsedView,
-      prettyDay,
       stats,
       threeWeeks,
       todayStr,
@@ -1018,8 +1004,51 @@ export function WorkerScheduleScreen() {
           const kindConf = KIND_CONFIG[item.kind];
           const customer = customerLabel(item);
           const addressLine = customerAddressLine(item);
+          const phone = customerPhoneRaw(item);
           const rowKey = `${item.kind}:${item.id}`;
           const scents = item.kind === 'regular' ? jobScentSummaries[item.id] : undefined;
+
+          const taskTagsTop = (
+            <View style={st.taskTagsCluster}>
+              <View style={st.taskMetaRow}>
+                <View style={st.taskTimePill}>
+                  <Text style={st.taskTimeText}>{formatHm(item.date)}</Text>
+                </View>
+                <View style={st.kindChip}>
+                  <Text style={st.kindChipText}>{kindConf.label}</Text>
+                </View>
+                <View style={st.statusChip}>
+                  <View
+                    style={[
+                      st.statusDot,
+                      { backgroundColor: isCompleted ? '#34C759' : '#FF9500' },
+                    ]}
+                  />
+                  <Text style={st.statusChipText}>
+                    {isCompleted ? 'הושלם' : 'ממתין'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          );
+
+          const taskCustomerTop = (
+            <View style={st.taskHeaderCustomer}>
+              <Text style={st.taskCustomer} numberOfLines={1}>
+                {customer}
+              </Text>
+              {addressLine ? (
+                <View style={st.taskAddressRow}>
+                  <View style={st.taskAddressIconWrap}>
+                    <MapPin size={11} color={colors.primary} strokeWidth={2.6} />
+                  </View>
+                  <Text style={st.taskAddressText} numberOfLines={2}>
+                    {addressLine}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          );
 
           return (
             <Pressable
@@ -1049,37 +1078,19 @@ export function WorkerScheduleScreen() {
                 style={st.taskInner}
               >
                 <View style={st.taskBody}>
-                  <View
-                    style={[
-                      st.taskTagsTopRow,
-                      {
-                        justifyContent: I18nManager.isRTL ? 'flex-end' : 'flex-start',
-                      },
-                    ]}
-                  >
-                    <View style={st.taskTopLeft}>
-                      <View style={st.taskTimePill}>
-                        <Text style={st.taskTimeText}>{formatHm(item.date)}</Text>
-                      </View>
-                      <View style={st.kindChip}>
-                        <Text style={st.kindChipText}>{kindConf.label}</Text>
-                      </View>
-                      <View style={st.statusChip}>
-                        <View style={[st.statusDot, { backgroundColor: isCompleted ? '#34C759' : '#FF9500' }]} />
-                        <Text style={st.statusChipText}>{isCompleted ? 'הושלם' : 'ממתין'}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={st.taskNameBlock}>
-                    <Text style={st.taskCustomer} numberOfLines={1}>
-                      {customer}
-                    </Text>
-                    {addressLine ? (
-                      <Text style={st.taskAddressPlain} numberOfLines={2}>
-                        {addressLine}
-                      </Text>
-                    ) : null}
+                  {/* Top row: tags top-left, customer + address top-right (order swaps with I18nManager.isRTL) */}
+                  <View style={st.taskTopRow}>
+                    {I18nManager.isRTL ? (
+                      <>
+                        {taskCustomerTop}
+                        {taskTagsTop}
+                      </>
+                    ) : (
+                      <>
+                        {taskTagsTop}
+                        {taskCustomerTop}
+                      </>
+                    )}
                   </View>
 
                   {!!item.notes && (
@@ -1110,6 +1121,24 @@ export function WorkerScheduleScreen() {
                       </View>
                     </View>
                   )}
+
+                  {/* Footer: phone bottom-left (RTL: flex-end) */}
+                  {phone ? (
+                    <View style={st.taskFooter}>
+                      <Pressable
+                        onPress={() => dialCustomerPhone(phone)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel="חיוג ללקוח"
+                        style={({ pressed }) => [
+                          st.taskPhoneBtn,
+                          pressed && { opacity: 0.86, transform: [{ scale: 0.96 }] },
+                        ]}
+                      >
+                        <Phone size={16} color="#FFFFFF" strokeWidth={2.6} />
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             </Pressable>
@@ -1138,165 +1167,218 @@ export function WorkerScheduleScreen() {
         openedHeight={Math.min(screenHeight * 0.86, screenHeight - 40)}
         openedWidth={Math.min(screenWidth * 0.94, 440)}
       >
-        {!!execJob && (
+        {!!execJob && (() => {
+          const phoneRaw = customerPhoneRaw(execJob);
+          const addressLine = customerAddressLine(execJob);
+          const kindColor = KIND_CONFIG[execJob.kind].color;
+          const kindLabel = KIND_CONFIG[execJob.kind].label;
+          const isCompleted = execJob.status === 'completed';
+          const hasContact = !!phoneRaw || !!addressLine || !!execJob.one_time_customer_id;
+          const hasQuickStats =
+            (execJob.kind === 'regular' && regularPoints.length > 0) ||
+            execJob.kind === 'installation' ||
+            (execJob.kind === 'special' && !!special);
+
+          return (
           <View style={{ flex: 1, flexShrink: 1 }}>
-            {/* Header */}
-            <View style={st.detailsHeader}>
-              <View style={[st.detailsIconBubble, { backgroundColor: KIND_CONFIG[execJob.kind].color }]}>
-                {execJob.kind === 'regular' ? (
-                  <Droplets size={18} color="#fff" strokeWidth={2.5} />
-                ) : execJob.kind === 'installation' ? (
-                  <Package size={18} color="#fff" strokeWidth={2.5} />
-                ) : (
-                  <Sparkles size={18} color="#fff" strokeWidth={2.5} />
-                )}
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <View style={st.detailsTitleRow}>
-                  <Text style={st.detailsTitle} numberOfLines={1}>
+            {/* ── Hero header ─────────────────────────── */}
+            <View style={st.heroCard}>
+              <View style={st.heroTopRow}>
+                <View style={st.heroNameWrap}>
+                  <Text style={st.heroName} numberOfLines={1}>
                     {customerLabel(execJob)}
                   </Text>
-                  {customerPhoneRaw(execJob) ? (
-                    <Pressable
-                      onPress={() => dialCustomerPhone(customerPhoneRaw(execJob)!)}
-                      hitSlop={10}
-                      accessibilityRole="button"
-                      accessibilityLabel="חיוג ללקוח"
-                      style={({ pressed }) => [st.detailsHeaderPhoneHit, pressed && { opacity: 0.86 }]}
-                    >
-                      <View style={st.detailsHeaderPhone} pointerEvents="none">
-                        <Phone size={20} color={colors.primary} strokeWidth={2.3} />
-                      </View>
-                    </Pressable>
-                  ) : null}
-                </View>
-                <View style={st.detailsSubRow}>
-                  <View style={st.detailsTimePill}>
-                    <Clock size={11} color="#1E3A8A" strokeWidth={2.2} />
-                    <Text style={st.detailsTimeText}>{formatHm(execJob.date)}</Text>
-                  </View>
-                  <View style={[st.detailsKindPill, { backgroundColor: `${KIND_CONFIG[execJob.kind].color}15`, borderColor: `${KIND_CONFIG[execJob.kind].color}30` }]}>
-                    <Text style={[st.detailsKindText, { color: KIND_CONFIG[execJob.kind].color }]}>
-                      {KIND_CONFIG[execJob.kind].label}
-                    </Text>
-                  </View>
-                  {execJob.order_number != null && (
-                    <View style={st.detailsOrderPill}>
-                      <Text style={st.detailsOrderText}>#{execJob.order_number}</Text>
+                  <View style={st.heroBadgeRow}>
+                    <View style={st.heroTimePill}>
+                      <Clock size={11} color="#1E3A8A" strokeWidth={2.4} />
+                      <Text style={st.heroTimeText}>{formatHm(execJob.date)}</Text>
                     </View>
+                    <View
+                      style={[
+                        st.heroKindPill,
+                        {
+                          backgroundColor: `${kindColor}15`,
+                          borderColor: `${kindColor}30`,
+                        },
+                      ]}
+                    >
+                      <Text style={[st.heroKindText, { color: kindColor }]}>{kindLabel}</Text>
+                    </View>
+                    <View style={st.heroStatusPill}>
+                      <View
+                        style={[
+                          st.heroStatusDot,
+                          { backgroundColor: isCompleted ? '#16A34A' : '#F59E0B' },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          st.heroStatusText,
+                          { color: isCompleted ? '#16A34A' : '#B45309' },
+                        ]}
+                      >
+                        {isCompleted ? 'הושלם' : 'ממתין'}
+                      </Text>
+                    </View>
+                    {execJob.order_number != null && (
+                      <View style={st.heroOrderPill}>
+                        <Text style={st.heroOrderText}>#{execJob.order_number}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <View style={[st.heroAvatar, { backgroundColor: kindColor }]}>
+                  {execJob.kind === 'regular' ? (
+                    <Droplets size={22} color="#fff" strokeWidth={2.5} />
+                  ) : execJob.kind === 'installation' ? (
+                    <Package size={22} color="#fff" strokeWidth={2.5} />
+                  ) : (
+                    <Sparkles size={22} color="#fff" strokeWidth={2.5} />
                   )}
                 </View>
               </View>
+              {!!execJob.one_time_customer_id && (
+                <View style={st.heroOneTimeBanner}>
+                  <Text style={st.heroOneTimeText}>לקוח חד־פעמי</Text>
+                </View>
+              )}
             </View>
-
-            {(execJob.customer_id || execJob.one_time_customer_id) &&
-            (execJob.one_time_customer_id ||
-              !!customerPhoneRaw(execJob) ||
-              !!customerAddressLine(execJob)) ? (
-              <View style={st.execContactCard}>
-                {!!execJob.one_time_customer_id && (
-                  <View style={st.execOneTimeBadge}>
-                    <Text style={st.execOneTimeBadgeText}>לקוח חד־פעמי</Text>
-                  </View>
-                )}
-                {customerPhoneRaw(execJob) ? (
-                  <View style={st.execPhoneRow}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={st.execContactLabel}>טלפון</Text>
-                      <Text style={st.execContactValue} numberOfLines={1}>
-                        {customerPhoneRaw(execJob)}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => dialCustomerPhone(customerPhoneRaw(execJob)!)}
-                      accessibilityRole="button"
-                      accessibilityLabel="חיוג ללקוח"
-                      style={({ pressed }) => [st.execPhoneDialHit, pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] }]}
-                    >
-                      <View style={st.execPhoneDialBtn} pointerEvents="none">
-                        <Phone size={22} color="#FFFFFF" strokeWidth={2.4} />
-                      </View>
-                    </Pressable>
-                  </View>
-                ) : execJob.one_time_customer_id ? (
-                  <View style={st.execContactBlock}>
-                    <Text style={st.execContactLabel}>טלפון</Text>
-                    <Text style={st.execContactMuted}>לא נרשם במערכת</Text>
-                  </View>
-                ) : null}
-                {customerAddressLine(execJob) ? (
-                  <View style={st.execAddressTag}>
-                    <View style={st.execAddressTagIconWrap}>
-                      <MapPin size={18} color="#0F766E" strokeWidth={2.4} />
-                    </View>
-                    <View style={st.execAddressTagBody}>
-                      <Text style={st.execAddressTagLabel}>כתובת</Text>
-                      <Text style={st.execAddressTagValue}>{customerAddressLine(execJob)}</Text>
-                    </View>
-                  </View>
-                ) : execJob.one_time_customer_id ? (
-                  <View style={[st.execAddressTag, st.execAddressTagMuted]}>
-                    <View style={[st.execAddressTagIconWrap, st.execAddressTagIconWrapMuted]}>
-                      <MapPin size={18} color="#94A3B8" strokeWidth={2.2} />
-                    </View>
-                    <View style={st.execAddressTagBody}>
-                      <Text style={[st.execAddressTagLabel, st.execAddressTagLabelMuted]}>כתובת</Text>
-                      <Text style={st.execContactMuted}>לא נרשמה במערכת</Text>
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            {/* Quick stat strip */}
-            {(execJob.kind === 'regular' && regularPoints.length > 0) ||
-            execJob.kind === 'installation' ||
-            (execJob.kind === 'special' && !!special) ? (
-              <View style={st.quickStatRow}>
-                {execJob.kind === 'regular' && (
-                  <>
-                    <View style={st.quickStat}>
-                      <Layers size={13} color={colors.primary} strokeWidth={2.2} />
-                      <Text style={st.quickStatValue}>{regularPoints.length}</Text>
-                      <Text style={st.quickStatLabel}>נקודות</Text>
-                    </View>
-                    <View style={st.quickStatSep} />
-                    <View style={st.quickStat}>
-                      <Droplets size={13} color={colors.primary} strokeWidth={2.2} />
-                      <Text style={st.quickStatValue}>
-                        {summaries.scent.reduce((s, x) => s + x.v, 0)}
-                      </Text>
-                      <Text style={st.quickStatLabel}>מ״ל</Text>
-                    </View>
-                  </>
-                )}
-                {execJob.kind === 'installation' && (
-                  <View style={st.quickStat}>
-                    <Package size={13} color={INSTALL_ACCENT} strokeWidth={2.2} />
-                    <Text style={st.quickStatValue}>{installationDevices.length}</Text>
-                    <Text style={st.quickStatLabel}>מכשירים</Text>
-                  </View>
-                )}
-                {execJob.kind === 'special' && special && (
-                  <View style={st.quickStat}>
-                    <Battery size={13} color={colors.primary} strokeWidth={2.2} />
-                    <Text style={st.quickStatValue}>{special.battery_type ?? '—'}</Text>
-                    <Text style={st.quickStatLabel}>סוללה</Text>
-                  </View>
-                )}
-              </View>
-            ) : null}
 
             {/* Scrollable content */}
             <ScrollView
               keyboardShouldPersistTaps="handled"
-              style={{ marginTop: 14, flex: 1 }}
+              style={{ marginTop: 12, flex: 1 }}
               contentContainerStyle={{ paddingBottom: 12, gap: 12 }}
               showsVerticalScrollIndicator={false}
             >
+              {/* ── Contact card ─────────────────────── */}
+              {hasContact && (
+                <View style={st.contactCard}>
+                  {phoneRaw ? (
+                    <Pressable
+                      onPress={() => dialCustomerPhone(phoneRaw)}
+                      accessibilityRole="button"
+                      accessibilityLabel="חיוג ללקוח"
+                      style={({ pressed }) => [
+                        st.contactRow,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <View style={st.contactRowInfo}>
+                        <Text style={st.contactLabel}>טלפון</Text>
+                        <Text style={st.contactValue} numberOfLines={1}>
+                          {phoneRaw}
+                        </Text>
+                      </View>
+                      <View style={st.contactCallBtn} pointerEvents="none">
+                        <Phone size={18} color="#FFFFFF" strokeWidth={2.4} />
+                      </View>
+                    </Pressable>
+                  ) : execJob.one_time_customer_id ? (
+                    <View style={st.contactRow}>
+                      <View style={st.contactRowInfo}>
+                        <Text style={st.contactLabel}>טלפון</Text>
+                        <Text style={st.contactMuted}>לא נרשם במערכת</Text>
+                      </View>
+                      <View style={[st.contactCallBtn, st.contactCallBtnMuted]}>
+                        <Phone size={18} color="#94A3B8" strokeWidth={2.2} />
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {((phoneRaw && (addressLine || execJob.one_time_customer_id)) ||
+                    (!phoneRaw && execJob.one_time_customer_id && addressLine)) && (
+                    <View style={st.contactDivider} />
+                  )}
+
+                  {addressLine ? (
+                    <View style={st.contactRow}>
+                      <View style={st.contactRowInfo}>
+                        <Text style={st.contactLabel}>כתובת</Text>
+                        <Text style={st.contactValue}>{addressLine}</Text>
+                      </View>
+                      <View style={[st.contactIcon, st.contactIconAddress]}>
+                        <MapPin size={18} color="#0F766E" strokeWidth={2.4} />
+                      </View>
+                    </View>
+                  ) : execJob.one_time_customer_id ? (
+                    <View style={st.contactRow}>
+                      <View style={st.contactRowInfo}>
+                        <Text style={st.contactLabel}>כתובת</Text>
+                        <Text style={st.contactMuted}>לא נרשמה במערכת</Text>
+                      </View>
+                      <View style={[st.contactIcon, st.contactIconMuted]}>
+                        <MapPin size={18} color="#94A3B8" strokeWidth={2.2} />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+
+              {/* ── Notes card ───────────────────────── */}
+              {!!execJob.notes && (
+                <View style={st.notesCard}>
+                  <View style={st.notesHeader}>
+                    <Text style={st.notesLabel}>הערות למשימה</Text>
+                    <View style={st.notesIconBubble}>
+                      <Text style={st.notesIconText}>!</Text>
+                    </View>
+                  </View>
+                  <Text style={st.notesText}>{execJob.notes}</Text>
+                </View>
+              )}
+
+              {/* ── Quick stat strip ─────────────────── */}
+              {hasQuickStats ? (
+                <View style={st.quickStatRow}>
+                  {execJob.kind === 'regular' && (
+                    <>
+                      <View style={st.quickStat}>
+                        <Layers size={13} color={colors.primary} strokeWidth={2.2} />
+                        <Text style={st.quickStatValue}>{regularPoints.length}</Text>
+                        <Text style={st.quickStatLabel}>נקודות</Text>
+                      </View>
+                      <View style={st.quickStatSep} />
+                      <View style={st.quickStat}>
+                        <Droplets size={13} color={colors.primary} strokeWidth={2.2} />
+                        <Text style={st.quickStatValue}>
+                          {summaries.scent.reduce((s, x) => s + x.v, 0)}
+                        </Text>
+                        <Text style={st.quickStatLabel}>מ״ל</Text>
+                      </View>
+                    </>
+                  )}
+                  {execJob.kind === 'installation' && (
+                    <View style={st.quickStat}>
+                      <Package size={13} color={INSTALL_ACCENT} strokeWidth={2.2} />
+                      <Text style={st.quickStatValue}>{installationDevices.length}</Text>
+                      <Text style={st.quickStatLabel}>מכשירים</Text>
+                    </View>
+                  )}
+                  {execJob.kind === 'special' && special && (
+                    <View style={st.quickStat}>
+                      <Battery size={13} color={colors.primary} strokeWidth={2.2} />
+                      <Text style={st.quickStatValue}>{special.battery_type ?? '—'}</Text>
+                      <Text style={st.quickStatLabel}>סוללה</Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
               {execJob.kind === 'regular' ? (
-                <View style={{ gap: 10 }}>
-                  <Text style={st.sectionTitle}>נקודות שירות</Text>
+                <View style={{ gap: 12 }}>
+                  {regularPoints.length > 0 && (
+                    <View style={st.spSectionHead}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={st.spSectionTitle}>נקודות שירות</Text>
+                        <Text style={st.spSectionSubtitle}>
+                          צלמו כל נקודה לאחר המילוי כדי לסמן את המשימה כהושלמה
+                        </Text>
+                      </View>
+                      <View style={st.spSectionIconWrap}>
+                        <Droplets size={16} color={colors.primary} strokeWidth={2.4} />
+                      </View>
+                    </View>
+                  )}
                   {regularPoints.map((p, idx) => {
                     const current = p.image_url ? getPublicUrl(p.image_url) : null;
                     const previewUri = p.localImageUri ?? current;
@@ -1500,8 +1582,18 @@ export function WorkerScheduleScreen() {
               ) : null}
 
               {execJob.kind === 'special' && special ? (
-                <View style={{ gap: 10 }}>
-                  <Text style={st.sectionTitle}>משימה מיוחדת</Text>
+                <View style={{ gap: 12 }}>
+                  <View style={[st.spSectionHead, { backgroundColor: 'rgba(234,88,12,0.06)', borderColor: 'rgba(234,88,12,0.16)' }]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={st.spSectionTitle}>משימה מיוחדת</Text>
+                      <Text style={st.spSectionSubtitle}>
+                        צלמו את ההוכחה לביצוע המשימה כדי לסמן אותה כהושלמה
+                      </Text>
+                    </View>
+                    <View style={[st.spSectionIconWrap, { backgroundColor: 'rgba(234,88,12,0.12)', borderColor: 'rgba(234,88,12,0.22)' }]}>
+                      <Sparkles size={16} color="#EA580C" strokeWidth={2.4} />
+                    </View>
+                  </View>
                   <View style={st.spCard}>
                     <View style={st.spCardHeader}>
                       <View style={[st.spDeviceIcon, { backgroundColor: 'rgba(234,88,12,0.08)', borderColor: 'rgba(234,88,12,0.18)' }]}>
@@ -1579,13 +1671,6 @@ export function WorkerScheduleScreen() {
                   </View>
                 </View>
               ) : null}
-
-              {!!execJob.notes && (
-                <View style={st.notesCard}>
-                  <Text style={st.notesLabel}>הערות</Text>
-                  <Text style={st.notesText}>{execJob.notes}</Text>
-                </View>
-              )}
             </ScrollView>
 
             <View style={[st.detailsFooter, { paddingBottom: Math.max(12, insets.bottom) }]}>
@@ -1614,7 +1699,8 @@ export function WorkerScheduleScreen() {
               )}
             </View>
           </View>
-        )}
+          );
+        })()}
       </OriginWindow>
     </View>
   );
@@ -1721,13 +1807,38 @@ const st = StyleSheet.create({
   },
   calDayDotVisible: { opacity: 1 },
   calPrettyRow: {
-    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderTopWidth: 1,
     borderTopColor: '#F2F2F7',
   },
-  calPrettyText: { fontSize: 12, fontWeight: '700', color: colors.muted },
+  calStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  calStatItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  calStatNumber: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  calStatLabel: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '500',
+  },
+  calStatDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: '#E5E5EA',
+  },
 
   // ── Oil Card (LIGHT) ───────────────────────────────
   oilCard: {
@@ -1841,29 +1952,6 @@ const st = StyleSheet.create({
     fontSize: 12,
   },
 
-  // ── Stats Card ─────────────────────────────────────
-  statsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 16, shadowOffset: { width: 0, height: 2 } },
-      android: { elevation: 2 },
-    }),
-  },
-  statItem: { flex: 1, alignItems: 'center', gap: 4 },
-  statDot: { width: 7, height: 7, borderRadius: 3.5, marginBottom: 2 },
-  statNumber: { fontSize: 27, fontWeight: '800', lineHeight: 30, color: colors.text },
-  statLabel: { fontSize: 11, color: colors.muted, fontWeight: '500' },
-  statDivider: {
-    width: 1,
-    height: '70%' as any,
-    backgroundColor: '#F0F0F5',
-    alignSelf: 'center',
-  },
-
   // ── Task Card ──────────────────────────────────────
   taskWrap: {
     borderRadius: 20,
@@ -1879,51 +1967,111 @@ const st = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.07)',
     overflow: 'hidden',
   },
-  taskBody: { paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13 },
-  taskTagsTopRow: {
+  taskBody: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
+  taskTopRow: {
     width: '100%',
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  taskTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  taskNameBlock: {
+  taskHeaderCustomer: {
+    flex: 1,
+    minWidth: 0,
     alignItems: 'flex-end',
-    gap: 4,
-    width: '100%',
+    gap: 8,
   },
-  taskTimePill: {
-    backgroundColor: 'rgba(30,58,138,0.07)',
-    borderRadius: 20,
-    paddingHorizontal: 11,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(30,58,138,0.15)',
+  taskTagsCluster: {
+    flexShrink: 0,
+    maxWidth: '52%',
+    alignSelf: 'flex-start',
   },
-  taskTimeText: { fontSize: 11, fontWeight: '700', color: '#1E3A8A', letterSpacing: 0.4 },
   taskCustomer: {
     alignSelf: 'stretch',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: colors.text,
     textAlign: 'right',
-    lineHeight: 22,
+    lineHeight: 23,
+    letterSpacing: -0.2,
   },
-  taskAddressPlain: {
-    alignSelf: 'stretch',
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
+  taskAddressRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 7,
+    alignSelf: 'flex-end',
+    maxWidth: '100%',
+  },
+  taskAddressIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  taskAddressText: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
     textAlign: 'right',
-    lineHeight: 17,
+    lineHeight: 18,
+    letterSpacing: -0.1,
   },
+  taskTimePill: {
+    backgroundColor: '#F5F5F7',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E8E8ED',
+  },
+  taskTimeText: { fontSize: 11, fontWeight: '700', color: '#1E3A8A', letterSpacing: 0.4 },
   taskNotes: {
     fontSize: 12,
     fontWeight: '500',
     color: colors.muted,
     textAlign: 'right',
-    marginTop: 5,
+    marginTop: 8,
     lineHeight: 17,
+  },
+  taskFooter: {
+    marginTop: 12,
+    paddingTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F4F8',
+  },
+  taskPhoneBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOpacity: 0.32,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  taskMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
   },
   taskScentBlock: {
     marginTop: 12,
@@ -1985,8 +2133,8 @@ const st = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderWidth: 1,
-    backgroundColor: 'rgba(30,58,138,0.07)',
-    borderColor: 'rgba(30,58,138,0.15)',
+    backgroundColor: '#F5F5F7',
+    borderColor: '#E8E8ED',
   },
   kindChipText: { fontSize: 11, fontWeight: '700', color: '#1E3A8A' },
   statusChip: {
@@ -1997,8 +2145,8 @@ const st = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    backgroundColor: 'rgba(30,58,138,0.07)',
-    borderColor: 'rgba(30,58,138,0.15)',
+    backgroundColor: '#F5F5F7',
+    borderColor: '#E8E8ED',
   },
   statusDot: { width: 5, height: 5, borderRadius: 3 },
   statusChipText: { fontSize: 10, fontWeight: '700', color: '#1E3A8A' },
@@ -2017,210 +2165,102 @@ const st = StyleSheet.create({
   emptyTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
   emptySubtitle: { color: colors.muted, fontSize: 13, fontWeight: '600', textAlign: 'center' },
 
-  // ── Modal sheet (job details) ──────────────────────
-  detailsHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 4,
-  },
-  detailsIconBubble: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailsTitleRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
-  },
-  detailsTitle: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 18,
-    fontWeight: '900',
-    color: colors.text,
-    textAlign: 'right',
-    letterSpacing: -0.2,
-  },
-  detailsHeaderPhoneHit: {
-    flexShrink: 0,
-  },
-  detailsHeaderPhone: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(37,99,235,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.22)',
-  },
-  execContactCard: {
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
+  // ── Modal: Hero header card ─────────────────────────
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#EEF2F7',
-    gap: 12,
+    gap: 10,
   },
-  execOneTimeBadge: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.28)',
-  },
-  execOneTimeBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: INSTALL_ACCENT,
-  },
-  execContactBlock: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  execContactLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.muted,
-    textAlign: 'right',
-  },
-  execContactValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.text,
-    textAlign: 'right',
-    lineHeight: 21,
-  },
-  execContactMuted: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    textAlign: 'right',
-  },
-  execPhoneRow: {
+  heroTopRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 12,
   },
-  execPhoneDialHit: {
-    flexShrink: 0,
-  },
-  execPhoneDialBtn: {
-    width: 48,
-    height: 48,
+  heroAvatar: {
+    width: 52,
+    height: 52,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    flexShrink: 0,
     ...Platform.select({
-      ios: { shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      ios: { shadowColor: '#000', shadowOpacity: 0.10, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
       android: { elevation: 3 },
     }),
   },
-  execAddressTag: {
-    flexDirection: 'row-reverse',
-    alignItems: 'stretch',
-    gap: 12,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(15,118,110,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.16)',
-    ...Platform.select({
-      ios: { shadowColor: '#0F766E', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
-      android: { elevation: 2 },
-    }),
-  },
-  execAddressTagMuted: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#E2E8F0',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
-      android: { elevation: 0 },
-    }),
-  },
-  execAddressTagIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(15,118,110,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.24)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  execAddressTagIconWrapMuted: {
-    backgroundColor: '#E2E8F0',
-    borderColor: '#CBD5E1',
-  },
-  execAddressTagBody: {
+  heroNameWrap: {
     flex: 1,
     minWidth: 0,
-    justifyContent: 'center',
     alignItems: 'flex-end',
-    gap: 4,
+    gap: 8,
   },
-  execAddressTagLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0F766E',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+  heroName: {
+    fontSize: 19,
+    fontWeight: '900',
+    color: colors.text,
     textAlign: 'right',
+    letterSpacing: -0.3,
+    alignSelf: 'stretch',
   },
-  execAddressTagLabelMuted: {
-    color: '#64748B',
+  heroBadgeRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'flex-start',
+    alignSelf: 'stretch',
   },
-  execAddressTagValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#134E4A',
-    textAlign: 'right',
-    lineHeight: 21,
-  },
-  detailsSubRow: {
+  heroTimePill: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 6,
-    marginTop: 6,
-    flexWrap: 'wrap',
-  },
-  detailsTimePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(30,58,138,0.07)',
+    backgroundColor: 'rgba(30,58,138,0.08)',
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(30,58,138,0.15)',
+    borderColor: 'rgba(30,58,138,0.16)',
   },
-  detailsTimeText: {
+  heroTimeText: {
     fontSize: 11,
     fontWeight: '800',
     color: '#1E3A8A',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
-  detailsKindPill: {
+  heroKindPill: {
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  heroKindText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  heroStatusPill: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
     borderRadius: 20,
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderWidth: 1,
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
   },
-  detailsKindText: {
+  heroStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  heroStatusText: {
     fontSize: 11,
     fontWeight: '800',
   },
-  detailsOrderPill: {
+  heroOrderPill: {
     backgroundColor: '#F2F2F7',
     borderRadius: 20,
     paddingHorizontal: 9,
@@ -2228,13 +2268,110 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  detailsOrderText: {
+  heroOrderText: {
     fontSize: 11,
     fontWeight: '800',
     color: colors.muted,
   },
+  heroOneTimeBanner: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(124,58,237,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.25)',
+  },
+  heroOneTimeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: INSTALL_ACCENT,
+  },
+
+  // ── Modal: Contact card (phone + address) ───────────
+  contactCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EEF2F7',
+    overflow: 'hidden',
+  },
+  contactRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  contactRowInfo: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  contactLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textAlign: 'right',
+    letterSpacing: 0.2,
+  },
+  contactValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'right',
+    lineHeight: 21,
+  },
+  contactMuted: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textAlign: 'right',
+  },
+  contactIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    borderWidth: 1,
+  },
+  contactIconAddress: {
+    backgroundColor: 'rgba(15,118,110,0.10)',
+    borderColor: 'rgba(15,118,110,0.22)',
+  },
+  contactIconMuted: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  contactCallBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    backgroundColor: colors.primary,
+    ...Platform.select({
+      ios: { shadowColor: colors.primary, shadowOpacity: 0.30, shadowRadius: 7, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 3 },
+    }),
+  },
+  contactCallBtnMuted: {
+    backgroundColor: '#F1F5F9',
+    ...Platform.select({
+      ios: { shadowOpacity: 0 },
+      android: { elevation: 0 },
+    }),
+  },
+  contactDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 14,
+  },
   quickStatRow: {
-    marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
@@ -2266,19 +2403,48 @@ const st = StyleSheet.create({
     height: 22,
     backgroundColor: '#E5E7EB',
   },
-  sectionTitle: {
-    color: colors.text,
-    fontWeight: '900',
-    textAlign: 'right',
-    fontSize: 14,
-    marginTop: 4,
-    letterSpacing: -0.1,
-  },
   detailsFooter: {
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F5',
     backgroundColor: colors.card,
+  },
+
+  // ── Section header (inside modal) ──────────────────
+  spSectionHead: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(37,99,235,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.14)',
+  },
+  spSectionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(37,99,235,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spSectionTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  spSectionSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'right',
+    lineHeight: 17,
   },
 
   // ── Service-point card (inside modal) ──────────────
@@ -2623,13 +2789,33 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FDE68A',
     padding: 12,
-    gap: 4,
+    gap: 8,
+  },
+  notesHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notesIconBubble: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F59E0B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notesIconText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 16,
   },
   notesLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: '#92400E',
     textAlign: 'right',
+    letterSpacing: 0.2,
   },
   notesText: {
     fontSize: 13,
