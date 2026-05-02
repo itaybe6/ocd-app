@@ -9,7 +9,7 @@ import { ModalSheet } from '../../components/ModalSheet';
 import { Input } from '../../components/ui/Input';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { JobCard, JobChip } from '../../components/jobs/JobCard';
-import { getPublicUrl } from '../../lib/storage';
+import { jobImageDisplayUri } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
@@ -83,9 +83,8 @@ export function CustomerServicesScreen() {
       const { data, error } = await supabase.from('job_service_points').select('id, job_id, image_url').eq('job_id', job.id);
       if (error) throw error;
       const urls = ((data ?? []) as JobServicePoint[])
-        .map((r) => r.image_url)
-        .filter(Boolean)
-        .map((p) => getPublicUrl(p!));
+        .map((r) => jobImageDisplayUri(r.image_url))
+        .filter((u): u is string => u != null);
       setImages(urls);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'טעינת תמונות נכשלה', text2: e?.message ?? 'Unknown error' });

@@ -6,6 +6,20 @@ export function getPublicUrl(path: string): string {
   return data.publicUrl;
 }
 
+/**
+ * DB `image_url` is normally a storage path under `job-images`.
+ * If a row already stores a full http(s) URL, return it as-is — wrapping that string in
+ * `getPublicUrl()` produces an invalid URL and images fail to load (common after viewing completed jobs).
+ */
+export function jobImageDisplayUri(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const lower = s.toLowerCase();
+  if (lower.startsWith('http://') || lower.startsWith('https://')) return s;
+  return getPublicUrl(s.replace(/^\/+/, ''));
+}
+
 type UploadCompressedImageArgs = {
   localUri: string;
   path: string; // destination path inside bucket

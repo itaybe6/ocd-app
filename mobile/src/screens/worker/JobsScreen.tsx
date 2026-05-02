@@ -22,7 +22,7 @@ import { ModalSheet } from '../../components/ModalSheet';
 import { OriginWindow, ORIGIN_WINDOW_DEFAULT_DURATION_MS, type OriginRect } from '../../components/OriginWindow';
 import { AdminStyleJobRow } from '../../components/jobs/AdminStyleJobRow';
 import { Avatar } from '../../components/ui/Avatar';
-import { getPublicUrl } from '../../lib/storage';
+import { jobImageDisplayUri } from '../../lib/storage';
 import { pickImageFromLibrary } from '../../lib/media';
 import {
   completeUnifiedJob,
@@ -368,15 +368,17 @@ export function WorkerJobsScreen() {
           setExecPoints(enriched.map((r) => ({ ...r, localImageUri: null, uploading: false })));
         }
         const urls = rows
-          .map((r) => r.image_url)
-          .filter(Boolean)
-          .map((p) => getPublicUrl(p!));
+          .map((r) => jobImageDisplayUri(r.image_url))
+          .filter((u): u is string => u != null);
         setImages(urls);
       }
 
       if (job.kind === 'special') {
         const p = (job as any).image_url as string | null | undefined;
-        setImages(p ? [getPublicUrl(p)] : []);
+        {
+          const u = jobImageDisplayUri(p);
+          setImages(u ? [u] : []);
+        }
         if (mode === 'execute') {
           setExecSpecialImageUrl(p ?? null);
         }
@@ -394,9 +396,8 @@ export function WorkerJobsScreen() {
           setExecDevices(devs.map((d) => ({ ...d, localImageUri: null, uploading: false })));
         }
         const urls = devs
-          .map((d) => d.image_url)
-          .filter(Boolean)
-          .map((p) => getPublicUrl(p!));
+          .map((d) => jobImageDisplayUri(d.image_url))
+          .filter((u): u is string => u != null);
         setImages(urls);
       }
     } catch (e: any) {
@@ -451,7 +452,10 @@ export function WorkerJobsScreen() {
         )
       );
       setRegularPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath } : x)));
-      setImages((prev) => Array.from(new Set([...prev, getPublicUrl(storagePath)])));
+      setImages((prev) => {
+        const u = jobImageDisplayUri(storagePath);
+        return u ? Array.from(new Set([...prev, u])) : prev;
+      });
       Toast.show({ type: 'success', text1: 'התמונה הועלתה' });
     } catch (e: any) {
       setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: false } : x)));
@@ -487,7 +491,10 @@ export function WorkerJobsScreen() {
       setInstallationDevices((prev) =>
         prev.map((x) => (x.id === d.id ? { ...x, image_url: storagePath } : x))
       );
-      setImages((prev) => Array.from(new Set([...prev, getPublicUrl(storagePath)])));
+      setImages((prev) => {
+        const u = jobImageDisplayUri(storagePath);
+        return u ? Array.from(new Set([...prev, u])) : prev;
+      });
       Toast.show({ type: 'success', text1: 'התמונה הועלתה' });
     } catch (e: any) {
       setExecDevices((prev) => prev.map((x) => (x.id === d.id ? { ...x, uploading: false } : x)));
@@ -512,7 +519,10 @@ export function WorkerJobsScreen() {
       });
       setExecSpecialImageUrl(storagePath);
       setExecSpecialLocalUri(null);
-      setImages((prev) => Array.from(new Set([...prev, getPublicUrl(storagePath)])));
+      setImages((prev) => {
+        const u = jobImageDisplayUri(storagePath);
+        return u ? Array.from(new Set([...prev, u])) : prev;
+      });
       setItems((prev) =>
         prev.map((j) =>
           j.kind === 'special' && j.id === execJob.id ? ({ ...j, image_url: storagePath } as UnifiedJob) : j
@@ -1166,7 +1176,10 @@ export function WorkerJobsScreen() {
                         </View>
                         {!!item.image_url && (
                           <Pressable
-                            onPress={() => setPreviewImageUrl(getPublicUrl(item.image_url!))}
+                            onPress={() => {
+                              const u = jobImageDisplayUri(item.image_url);
+                              if (u) setPreviewImageUrl(u);
+                            }}
                             hitSlop={10}
                           >
                             {({ pressed }) => (
@@ -1219,7 +1232,10 @@ export function WorkerJobsScreen() {
                         </Text>
                         {!!item.image_url && (
                           <Pressable
-                            onPress={() => setPreviewImageUrl(getPublicUrl(item.image_url!))}
+                            onPress={() => {
+                              const u = jobImageDisplayUri(item.image_url);
+                              if (u) setPreviewImageUrl(u);
+                            }}
                             hitSlop={10}
                           >
                             {({ pressed }) => (
@@ -1449,7 +1465,7 @@ export function WorkerJobsScreen() {
                   </Text>
 
                   {execPoints.map((item) => {
-                    const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
+                    const currentImageUrl = jobImageDisplayUri(item.image_url);
                     const previewUri = item.localImageUri ?? currentImageUrl ?? null;
                     const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
                     const hasImage = !!item.image_url;
@@ -1661,7 +1677,7 @@ export function WorkerJobsScreen() {
                   </Text>
 
                   {execDevices.map((d) => {
-                    const currentImageUrl = d.image_url ? getPublicUrl(d.image_url) : null;
+                    const currentImageUrl = jobImageDisplayUri(d.image_url);
                     const previewUri = d.localImageUri ?? currentImageUrl ?? null;
                     const hasImage = !!d.image_url;
 
@@ -1858,7 +1874,7 @@ export function WorkerJobsScreen() {
                   }}
                 >
                   {(() => {
-                    const currentImageUrl = execSpecialImageUrl ? getPublicUrl(execSpecialImageUrl) : null;
+                    const currentImageUrl = jobImageDisplayUri(execSpecialImageUrl);
                     const previewUri = execSpecialLocalUri ?? currentImageUrl ?? null;
                     const hasImage = !!execSpecialImageUrl;
 

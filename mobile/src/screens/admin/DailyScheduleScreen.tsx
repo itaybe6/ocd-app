@@ -41,7 +41,7 @@ import { SelectSheet } from '../../components/ui/SelectSheet';
 import { Avatar } from '../../components/ui/Avatar';
 import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
 import { pickImageFromLibrary } from '../../lib/media';
-import { getPublicUrl } from '../../lib/storage';
+import { jobImageDisplayUri } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 import { toDate, yyyyMmDd } from '../../lib/time';
@@ -215,11 +215,12 @@ export function DailyScheduleScreen() {
     () => Dimensions.get('window').width - 26,
   );
 
+  // In RTL: page 0 (left) = next week, page 2 (right) = previous week — same as WorkerScheduleScreen.
   const threeWeeks = useMemo(
     () => [
-      Array.from({ length: 7 }, (_, i) => addDays(weekDates[0], i - 7)),
-      weekDates,
       Array.from({ length: 7 }, (_, i) => addDays(weekDates[0], i + 7)),
+      weekDates,
+      Array.from({ length: 7 }, (_, i) => addDays(weekDates[0], i - 7)),
     ],
     [weekDates],
   );
@@ -577,8 +578,14 @@ export function DailyScheduleScreen() {
         {/* ── Calendar Card ─────────────────────────────── */}
         <View style={st.calCard}>
           <View style={st.calMonthRow}>
+            {/* RTL: left button = next month */}
             <Pressable
-              onPress={() => { const d = new Date(`${day}T00:00:00`); d.setDate(1); d.setMonth(d.getMonth() - 1); setDay(yyyyMmDd(d)); }}
+              onPress={() => {
+                const d = new Date(`${day}T00:00:00`);
+                d.setDate(1);
+                d.setMonth(d.getMonth() + 1);
+                setDay(yyyyMmDd(d));
+              }}
               style={({ pressed }) => [st.calNavBtn, pressed && { opacity: 0.5 }]}
               hitSlop={8}
             >
@@ -592,8 +599,14 @@ export function DailyScheduleScreen() {
               <Text style={st.calMonthText}>{calMonthLabel}</Text>
             </Pressable>
 
+            {/* RTL: right button = previous month */}
             <Pressable
-              onPress={() => { const d = new Date(`${day}T00:00:00`); d.setDate(1); d.setMonth(d.getMonth() + 1); setDay(yyyyMmDd(d)); }}
+              onPress={() => {
+                const d = new Date(`${day}T00:00:00`);
+                d.setDate(1);
+                d.setMonth(d.getMonth() - 1);
+                setDay(yyyyMmDd(d));
+              }}
               style={({ pressed }) => [st.calNavBtn, pressed && { opacity: 0.5 }]}
               hitSlop={8}
             >
@@ -625,8 +638,9 @@ export function DailyScheduleScreen() {
               const x = e.nativeEvent.contentOffset.x;
               if (!weekScrollWidth) return;
               const page = Math.round(x / weekScrollWidth);
-              if (page === 0)      setDay(yyyyMmDd(addDays(parsedDay, -7)));
-              else if (page === 2) setDay(yyyyMmDd(addDays(parsedDay, 7)));
+              // RTL: left page (0) = next week, right page (2) = previous week.
+              if (page === 0) setDay(yyyyMmDd(addDays(parsedDay, 7)));
+              else if (page === 2) setDay(yyyyMmDd(addDays(parsedDay, -7)));
             }}
           >
             {threeWeeks.map((week, pageIdx) => (
@@ -1165,7 +1179,7 @@ export function DailyScheduleScreen() {
                 <View style={{ gap: 12 }}>
                   <Text style={st.jbExecSectionLabel}>נקודות שירות ({execPoints.length})</Text>
                   {execPoints.map((item) => {
-                    const currentImageUrl = item.image_url ? getPublicUrl(item.image_url) : null;
+                    const currentImageUrl = jobImageDisplayUri(item.image_url);
                     const previewUri = item.localImageUri ?? currentImageUrl ?? null;
                     const refill = item.custom_refill_amount ?? item.sp?.refill_amount ?? null;
                     const hasImage = !!item.image_url;
@@ -1695,7 +1709,7 @@ const st = StyleSheet.create({
     fontWeight: '800',
   },
   calDowRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     paddingHorizontal: 4,
     paddingBottom: 6,
     paddingTop: 10,
@@ -1713,7 +1727,7 @@ const st = StyleSheet.create({
     letterSpacing: 0.3,
   },
   calWeekPage: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     paddingHorizontal: 4,
     paddingTop: 4,
     paddingBottom: 12,

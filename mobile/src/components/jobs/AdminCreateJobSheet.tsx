@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { CalendarDays, X } from 'lucide-react-native';
@@ -85,14 +85,25 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
   const [createServicePoints, setCreateServicePoints] = useState<CreateSelectedPoint[]>([]);
 
   const [createSpecialJobType, setCreateSpecialJobType] = useState<string>(ADMIN_SPECIAL_JOB_TYPES[0].value);
+  /** משימה מיוחדת: האם לקשר ללקוח (ברירת מחדל לא — משימות פנימיות וכו׳) */
+  const [createSpecialLinkCustomer, setCreateSpecialLinkCustomer] = useState(false);
   const [createBatteryType, setCreateBatteryType] = useState<string>('AA');
   const [createInstallationDevices, setCreateInstallationDevices] = useState<InstallationDeviceDraft[]>([{ device_name: '' }]);
   const [installationCatalogDevices, setInstallationCatalogDevices] = useState<DeviceCatalogRow[]>([]);
   const [installationCatalogLoading, setInstallationCatalogLoading] = useState(false);
 
+  const prevCreateKindRef = useRef<JobKind>(createKind);
+
   useEffect(() => {
     if (visible) setCreateDateYmd(initialDateYmd);
   }, [visible, initialDateYmd]);
+
+  useEffect(() => {
+    if (createKind === 'special' && prevCreateKindRef.current !== 'special') {
+      setCreateSpecialLinkCustomer(false);
+    }
+    prevCreateKindRef.current = createKind;
+  }, [createKind]);
 
   const createWorkerOptions = useMemo(
     () => users.filter((u) => u.role === 'worker').map((u) => ({ value: u.id, label: u.name, avatarUrl: u.avatar_url ?? null })),
@@ -172,14 +183,18 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
   const resetCreateFormMinimal = () => {
     setCreateNotes('');
     setCreateInstallationDevices([{ device_name: '' }]);
+    setCreateSpecialLinkCustomer(false);
   };
 
   const validateCreateCommon = () => {
     if (!createDateYmd.trim()) throw new Error('חסר תאריך (yyyy-MM-dd)');
     if (!createWorkerId) throw new Error('חסר עובד');
     if (createKind === 'special') {
-      if (createUseOneTimeCustomer && !createOneTimeCustomer.name.trim()) {
-        throw new Error('חסר שם לקוח חד-פעמי');
+      if (!createSpecialLinkCustomer) return;
+      if (createUseOneTimeCustomer) {
+        if (!createOneTimeCustomer.name.trim()) throw new Error('חסר שם לקוח חד-פעמי');
+      } else if (!createCustomerId) {
+        throw new Error('חסר לקוח');
       }
       return;
     }
@@ -191,6 +206,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
   };
 
   const createOneTimeCustomerIfNeeded = async (): Promise<string | null> => {
+    if (createKind === 'special' && !createSpecialLinkCustomer) return null;
     if (!createUseOneTimeCustomer) return null;
     const payload = {
       name: createOneTimeCustomer.name.trim(),
@@ -221,10 +237,13 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
         order_number: null,
       };
 
-      const customerFields = {
-        customer_id: createUseOneTimeCustomer ? null : createCustomerId || null,
-        one_time_customer_id: createUseOneTimeCustomer ? oneTimeId : null,
-      };
+      const specialNoCustomer = createKind === 'special' && !createSpecialLinkCustomer;
+      const customerFields = specialNoCustomer
+        ? { customer_id: null as string | null, one_time_customer_id: null as string | null }
+        : {
+            customer_id: createUseOneTimeCustomer ? null : createCustomerId || null,
+            one_time_customer_id: createUseOneTimeCustomer ? oneTimeId : null,
+          };
 
       if (createKind === 'regular') {
         const selected = createServicePoints.filter((p) => p.selected);
@@ -460,10 +479,9 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                 onChange={setCreateWorkerId}
               />
 
-              <View style={{ gap: 8 }}>
-                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>
-                    לקוח{createKind === 'special' ? ' (אופציונלי)' : ''}
-                  </Text>
+              {createKind === 'special' ? (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>קישור ללקוח</Text>
                   <View
                     style={{
                       flexDirection: 'row-reverse',
@@ -475,21 +493,29 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                       gap: 4,
                     }}
                   >
-                    <Pressable onPress={() => setCreateUseOneTimeCustomer(false)} style={{ flex: 1 }}>
+                    <Pressable
+                      onPress={() => {
+                        setCreateSpecialLinkCustomer(false);
+                        setCreateCustomerId('');
+                        setCreateUseOneTimeCustomer(false);
+                        setCreateOneTimeCustomer({ name: '', phone: '', address: '' });
+                      }}
+                      style={{ flex: 1 }}
+                    >
                       {({ pressed }) => (
                         <View
                           style={{
                             borderRadius: 11,
                             paddingVertical: 11,
                             paddingHorizontal: 8,
-                            backgroundColor: !createUseOneTimeCustomer ? colors.card : 'transparent',
-                            borderWidth: !createUseOneTimeCustomer ? 1.5 : 0,
-                            borderColor: !createUseOneTimeCustomer ? colors.primary : 'transparent',
+                            backgroundColor: !createSpecialLinkCustomer ? colors.card : 'transparent',
+                            borderWidth: !createSpecialLinkCustomer ? 1.5 : 0,
+                            borderColor: !createSpecialLinkCustomer ? colors.primary : 'transparent',
                             opacity: pressed ? 0.88 : 1,
-                            ...(Platform.OS === 'ios' && !createUseOneTimeCustomer
+                            ...(Platform.OS === 'ios' && !createSpecialLinkCustomer
                               ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }
                               : {}),
-                            ...(!createUseOneTimeCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
+                            ...(!createSpecialLinkCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
                           }}
                         >
                           <Text
@@ -497,30 +523,30 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                               textAlign: 'center',
                               fontWeight: '900',
                               fontSize: 14,
-                              color: !createUseOneTimeCustomer ? colors.primary : colors.muted,
+                              color: !createSpecialLinkCustomer ? colors.primary : colors.muted,
                             }}
                             numberOfLines={1}
                           >
-                            לקוח קיים
+                            בלי לקוח
                           </Text>
                         </View>
                       )}
                     </Pressable>
-                    <Pressable onPress={() => setCreateUseOneTimeCustomer(true)} style={{ flex: 1 }}>
+                    <Pressable onPress={() => setCreateSpecialLinkCustomer(true)} style={{ flex: 1 }}>
                       {({ pressed }) => (
                         <View
                           style={{
                             borderRadius: 11,
                             paddingVertical: 11,
                             paddingHorizontal: 8,
-                            backgroundColor: createUseOneTimeCustomer ? colors.card : 'transparent',
-                            borderWidth: createUseOneTimeCustomer ? 1.5 : 0,
-                            borderColor: createUseOneTimeCustomer ? colors.primary : 'transparent',
+                            backgroundColor: createSpecialLinkCustomer ? colors.card : 'transparent',
+                            borderWidth: createSpecialLinkCustomer ? 1.5 : 0,
+                            borderColor: createSpecialLinkCustomer ? colors.primary : 'transparent',
                             opacity: pressed ? 0.88 : 1,
-                            ...(Platform.OS === 'ios' && createUseOneTimeCustomer
+                            ...(Platform.OS === 'ios' && createSpecialLinkCustomer
                               ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }
                               : {}),
-                            ...(createUseOneTimeCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
+                            ...(createSpecialLinkCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
                           }}
                         >
                           <Text
@@ -528,43 +554,126 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                               textAlign: 'center',
                               fontWeight: '900',
                               fontSize: 14,
-                              color: createUseOneTimeCustomer ? colors.primary : colors.muted,
+                              color: createSpecialLinkCustomer ? colors.primary : colors.muted,
                             }}
                             numberOfLines={1}
                           >
-                            לקוח חד־פעמי
+                            לקשר ללקוח
                           </Text>
                         </View>
                       )}
                     </Pressable>
                   </View>
                 </View>
+              ) : null}
 
-              {createUseOneTimeCustomer ? (
-                <View style={{ gap: 10 }}>
-                  <Input label="שם" value={createOneTimeCustomer.name} onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, name: v }))} />
-                  <Input
-                    label="טלפון"
-                    value={createOneTimeCustomer.phone ?? ''}
-                    onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, phone: v }))}
-                    keyboardType="phone-pad"
-                  />
-                  <Input
-                    label="כתובת"
-                    value={createOneTimeCustomer.address ?? ''}
-                    onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, address: v }))}
-                  />
-                </View>
-              ) : (
-                <SelectSheet
-                  value={createCustomerId}
-                  placeholder="בחר לקוח מהמערכת…"
-                  options={createCustomerOptions}
-                  onChange={setCreateCustomerId}
-                  searchable
-                  searchPlaceholder="חיפוש לקוח…"
-                />
-              )}
+              {createKind !== 'special' || createSpecialLinkCustomer ? (
+                <>
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ color: colors.muted, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>לקוח</Text>
+                    <View
+                      style={{
+                        flexDirection: 'row-reverse',
+                        backgroundColor: colors.elevated,
+                        borderRadius: 14,
+                        padding: 4,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        gap: 4,
+                      }}
+                    >
+                      <Pressable onPress={() => setCreateUseOneTimeCustomer(false)} style={{ flex: 1 }}>
+                        {({ pressed }) => (
+                          <View
+                            style={{
+                              borderRadius: 11,
+                              paddingVertical: 11,
+                              paddingHorizontal: 8,
+                              backgroundColor: !createUseOneTimeCustomer ? colors.card : 'transparent',
+                              borderWidth: !createUseOneTimeCustomer ? 1.5 : 0,
+                              borderColor: !createUseOneTimeCustomer ? colors.primary : 'transparent',
+                              opacity: pressed ? 0.88 : 1,
+                              ...(Platform.OS === 'ios' && !createUseOneTimeCustomer
+                                ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }
+                                : {}),
+                              ...(!createUseOneTimeCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
+                            }}
+                          >
+                            <Text
+                              style={{
+                                textAlign: 'center',
+                                fontWeight: '900',
+                                fontSize: 14,
+                                color: !createUseOneTimeCustomer ? colors.primary : colors.muted,
+                              }}
+                              numberOfLines={1}
+                            >
+                              לקוח קיים
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                      <Pressable onPress={() => setCreateUseOneTimeCustomer(true)} style={{ flex: 1 }}>
+                        {({ pressed }) => (
+                          <View
+                            style={{
+                              borderRadius: 11,
+                              paddingVertical: 11,
+                              paddingHorizontal: 8,
+                              backgroundColor: createUseOneTimeCustomer ? colors.card : 'transparent',
+                              borderWidth: createUseOneTimeCustomer ? 1.5 : 0,
+                              borderColor: createUseOneTimeCustomer ? colors.primary : 'transparent',
+                              opacity: pressed ? 0.88 : 1,
+                              ...(Platform.OS === 'ios' && createUseOneTimeCustomer
+                                ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }
+                                : {}),
+                              ...(createUseOneTimeCustomer && Platform.OS === 'android' ? { elevation: 1 } : {}),
+                            }}
+                          >
+                            <Text
+                              style={{
+                                textAlign: 'center',
+                                fontWeight: '900',
+                                fontSize: 14,
+                                color: createUseOneTimeCustomer ? colors.primary : colors.muted,
+                              }}
+                              numberOfLines={1}
+                            >
+                              לקוח חד־פעמי
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {createUseOneTimeCustomer ? (
+                    <View style={{ gap: 10 }}>
+                      <Input label="שם" value={createOneTimeCustomer.name} onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, name: v }))} />
+                      <Input
+                        label="טלפון"
+                        value={createOneTimeCustomer.phone ?? ''}
+                        onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, phone: v }))}
+                        keyboardType="phone-pad"
+                      />
+                      <Input
+                        label="כתובת"
+                        value={createOneTimeCustomer.address ?? ''}
+                        onChangeText={(v) => setCreateOneTimeCustomer((p) => ({ ...p, address: v }))}
+                      />
+                    </View>
+                  ) : (
+                    <SelectSheet
+                      value={createCustomerId}
+                      placeholder="בחר לקוח מהמערכת…"
+                      options={createCustomerOptions}
+                      onChange={setCreateCustomerId}
+                      searchable
+                      searchPlaceholder="חיפוש לקוח…"
+                    />
+                  )}
+                </>
+              ) : null}
 
               {createKind !== 'special' && createUseOneTimeCustomer ? null : (
                 <Input
