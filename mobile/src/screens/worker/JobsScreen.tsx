@@ -2046,12 +2046,14 @@ export function WorkerJobsScreen() {
                     justifyContent: 'center',
                     gap: 8,
                     backgroundColor: !isExecCompletable
-                      ? 'rgba(0,122,255,0.35)'
+                      ? '#CBD5E1'
                       : pressed
                         ? 'rgba(0,122,255,0.85)'
                         : '#007AFF',
                     borderRadius: 14,
                     paddingVertical: 16,
+                    borderWidth: 1,
+                    borderColor: !isExecCompletable ? '#94A3B8' : 'rgba(0,0,0,0.08)',
                     shadowColor: '#007AFF',
                     shadowOpacity: !isExecCompletable ? 0 : 0.3,
                     shadowRadius: 10,
@@ -2059,9 +2061,18 @@ export function WorkerJobsScreen() {
                     elevation: !isExecCompletable ? 0 : 4,
                   })}
                 >
-                  <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                  <Play
+                    size={18}
+                    color={isExecCompletable ? '#FFFFFF' : '#1E293B'}
+                    fill={isExecCompletable ? '#FFFFFF' : '#1E293B'}
+                  />
                   <Text
-                    style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 17, letterSpacing: -0.2 }}
+                    style={{
+                      color: isExecCompletable ? '#FFFFFF' : '#1E293B',
+                      fontWeight: '700',
+                      fontSize: 17,
+                      letterSpacing: -0.2,
+                    }}
                   >
                     סיים משימה
                   </Text>

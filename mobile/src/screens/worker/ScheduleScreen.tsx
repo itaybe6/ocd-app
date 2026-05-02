@@ -1180,7 +1180,7 @@ export function WorkerScheduleScreen() {
             (execJob.kind === 'special' && !!special);
 
           return (
-          <View style={{ flex: 1, flexShrink: 1 }}>
+          <View style={{ flex: 1, minHeight: 0 }}>
             {/* ── Hero header ─────────────────────────── */}
             <View style={st.heroCard}>
               <View style={st.heroTopRow}>
@@ -1247,7 +1247,7 @@ export function WorkerScheduleScreen() {
             {/* Scrollable content */}
             <ScrollView
               keyboardShouldPersistTaps="handled"
-              style={{ marginTop: 12, flex: 1 }}
+              style={{ marginTop: 12, flex: 1, minHeight: 0 }}
               contentContainerStyle={{ paddingBottom: 12, gap: 12 }}
               showsVerticalScrollIndicator={false}
             >
@@ -1686,8 +1686,19 @@ export function WorkerScheduleScreen() {
                     pressed && isExecCompletable && { opacity: 0.92, transform: [{ scale: 0.99 }] },
                   ]}
                 >
-                  <Check size={18} color="#FFFFFF" strokeWidth={2.8} />
-                  <Text style={st.executeBtnText}>בצע</Text>
+                  <Check
+                    size={18}
+                    color={isExecCompletable ? '#FFFFFF' : '#1E293B'}
+                    strokeWidth={2.8}
+                  />
+                  <Text
+                    style={[
+                      st.executeBtnText,
+                      !isExecCompletable && st.executeBtnTextDisabled,
+                    ]}
+                  >
+                    בצע
+                  </Text>
                 </Pressable>
               ) : (
                 <View style={st.completedBanner}>
@@ -2404,10 +2415,21 @@ const st = StyleSheet.create({
     backgroundColor: '#E5E7EB',
   },
   detailsFooter: {
+    flexShrink: 0,
     paddingTop: 12,
+    paddingHorizontal: 2,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F5',
-    backgroundColor: colors.card,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: -4 },
+      },
+      android: { elevation: 6 },
+    }),
   },
 
   // ── Section header (inside modal) ──────────────────
@@ -2726,13 +2748,18 @@ const st = StyleSheet.create({
   },
 
   executeBtn: {
+    alignSelf: 'stretch',
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    minHeight: 52,
     borderRadius: 14,
     paddingVertical: 15,
+    paddingHorizontal: 16,
     backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: '#1D4ED8',
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
@@ -2744,7 +2771,8 @@ const st = StyleSheet.create({
     }),
   },
   executeBtnDisabled: {
-    backgroundColor: 'rgba(37,99,235,0.35)',
+    backgroundColor: '#CBD5E1',
+    borderColor: '#94A3B8',
     ...Platform.select({
       ios: { shadowOpacity: 0 },
       android: { elevation: 0 },
@@ -2755,6 +2783,9 @@ const st = StyleSheet.create({
     fontWeight: '900',
     fontSize: 16,
     letterSpacing: 0.4,
+  },
+  executeBtnTextDisabled: {
+    color: '#1E293B',
   },
   completedBanner: {
     flexDirection: 'row-reverse',
