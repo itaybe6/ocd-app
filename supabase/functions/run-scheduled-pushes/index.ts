@@ -10,7 +10,12 @@ type JobRow = {
   target_user_id?: string | null;
 };
 
-type PushTokenRow = { expo_push_token: string };
+type PushTokenRow = { expo_push_token: string; role?: string | null };
+
+function isStaffPushRole(role: string | null | undefined): boolean {
+  const r = (role ?? '').trim().toLowerCase();
+  return r === 'admin' || r === 'worker';
+}
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
@@ -37,12 +42,13 @@ async function readPushTokens(supabaseAdmin: any, targetUserId: string | null | 
   let from = 0;
   while (true) {
     const to = from + pageSize - 1;
-    let q = supabaseAdmin.from('push_tokens').select('expo_push_token');
+    let q = supabaseAdmin.from('push_tokens').select('expo_push_token, role');
     if (target) q = q.eq('user_id', target);
     const { data, error } = await q.range(from, to);
     if (error) throw error;
     const rows = (data ?? []) as PushTokenRow[];
     for (const r of rows) {
+      if (!target && isStaffPushRole(r.role)) continue;
       const t = (r.expo_push_token ?? '').trim();
       if (t) tokens.push(t);
     }

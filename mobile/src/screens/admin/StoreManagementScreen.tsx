@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  I18nManager,
   Modal,
   Pressable,
   SafeAreaView,
@@ -12,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
-import { endOfWeek, startOfWeek } from 'date-fns';
+import { addMonths, endOfWeek, startOfWeek } from 'date-fns';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -28,6 +29,10 @@ LocaleConfig.locales['he'] = {
   today: 'היום',
 };
 LocaleConfig.defaultLocale = 'he';
+
+// Hebrew calendar week: visual order Sat … Sun (ש … א), Sunday rightmost.
+// OS RTL already mirrors `row`; on LTR devices reverse the week row so א׳ stays on the right.
+const CAL_WEEK_ROW_DIR: 'row' | 'row-reverse' = I18nManager.isRTL ? 'row' : 'row-reverse';
 
 function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -305,6 +310,7 @@ export function StoreManagementScreen() {
   };
 
   const selectedDateKey = toDateKey(scheduledAt);
+  const calendarMonthKey = `${scheduledAt.getFullYear()}-${scheduledAt.getMonth()}`;
   const markedDates: Record<string, any> = {
     [selectedDateKey]: {
       selected: true,
@@ -524,7 +530,7 @@ export function StoreManagementScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[m.optionTitle, scheduleMode === 'now' && m.optionTitleActive]}>שלח עכשיו</Text>
-                  <Text style={m.optionSub}>שיגור מיידי לכל המשתמשים הרשומים</Text>
+                  <Text style={m.optionSub}>שיגור ללקוחות עם האפליקציה (לא לעובדים/מנהלים)</Text>
                 </View>
                 {scheduleMode === 'now' && (
                   <View style={m.check}><Text style={m.checkText}>✓</Text></View>
@@ -563,6 +569,7 @@ export function StoreManagementScreen() {
 
                 {/* Calendar */}
                 <Calendar
+                  key={calendarMonthKey}
                   current={selectedDateKey}
                   minDate={todayKey()}
                   markedDates={markedDates}
@@ -574,9 +581,48 @@ export function StoreManagementScreen() {
                     setScheduledAt(n);
                   }}
                   renderArrow={(direction: string) => (
-                    <Text style={m.calArrow}>{direction === 'left' ? '›' : '‹'}</Text>
+                    <Text style={m.calArrow}>{direction === 'left' ? '‹' : '›'}</Text>
                   )}
-                  theme={calTheme}
+                  onPressArrowLeft={() => {
+                    setScheduledAt((prev) => {
+                      const next = addMonths(prev, -1);
+                      const t = new Date(`${todayKey()}T12:00:00`);
+                      const minMonth = t.getFullYear() * 12 + t.getMonth();
+                      const targetMonth = next.getFullYear() * 12 + next.getMonth();
+                      if (targetMonth < minMonth) return prev;
+                      return next;
+                    });
+                  }}
+                  onPressArrowRight={() => {
+                    setScheduledAt((prev) => addMonths(prev, 1));
+                  }}
+                  theme={{
+                    ...calTheme,
+                    'stylesheet.calendar.main': {
+                      week: {
+                        flexDirection: CAL_WEEK_ROW_DIR,
+                        justifyContent: 'flex-start',
+                        paddingHorizontal: 0,
+                      },
+                    },
+                    'stylesheet.calendar.header': {
+                      week: {
+                        flexDirection: CAL_WEEK_ROW_DIR,
+                        justifyContent: 'flex-start',
+                        paddingHorizontal: 0,
+                      },
+                      dayHeader: {
+                        marginTop: 2,
+                        marginBottom: 7,
+                        flex: 1,
+                        minWidth: 0,
+                        textAlign: 'center',
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#64748B',
+                      },
+                    },
+                  }}
                   style={m.calendarStyle}
                 />
 

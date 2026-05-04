@@ -23,6 +23,7 @@ import { OriginWindow, ORIGIN_WINDOW_DEFAULT_DURATION_MS, type OriginRect } from
 import { AdminStyleJobRow } from '../../components/jobs/AdminStyleJobRow';
 import { Avatar } from '../../components/ui/Avatar';
 import { jobImageDisplayUri } from '../../lib/storage';
+import { useResolvedJobImageUri } from '../../lib/useResolvedJobImageUri';
 import { pickImageFromLibrary } from '../../lib/media';
 import {
   completeUnifiedJob,
@@ -169,7 +170,6 @@ function ExecOriginButton({
 
 type Filters = {
   date: string; // yyyy-MM-dd or empty
-  status: '' | JobStatus;
   tag: '' | JobTag;
   q: string;
 };
@@ -182,7 +182,7 @@ export function WorkerJobsScreen() {
   const [customers, setCustomers] = useState<UserLite[]>([]);
   const [items, setItems] = useState<UnifiedJob[]>([]);
 
-  const [filters, setFilters] = useState<Filters>({ date: '', status: '', tag: '', q: '' });
+  const [filters, setFilters] = useState<Filters>({ date: '', tag: '', q: '' });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [selected, setSelected] = useState<UnifiedJob | null>(null);
@@ -210,6 +210,11 @@ export function WorkerJobsScreen() {
   const [execSpecialUploading, setExecSpecialUploading] = useState(false);
   const execCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const execSpecialPreviewUri = useResolvedJobImageUri(
+    execJob?.kind === 'special' ? execSpecialImageUrl : null,
+    execJob?.kind === 'special' ? execSpecialLocalUri : null,
+  );
+
   const customerMap = useMemo(() => new Map(customers.map((u) => [u.id, u.name])), [customers]);
 
   const fetchCustomers = useCallback(async () => {
@@ -229,17 +234,20 @@ export function WorkerJobsScreen() {
         supabase
           .from('jobs')
           .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes')
-          .eq('worker_id', user.id),
+          .eq('worker_id', user.id)
+          .eq('status', 'completed'),
         supabase
           .from('installation_jobs')
           .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, device_type')
-          .eq('worker_id', user.id),
+          .eq('worker_id', user.id)
+          .eq('status', 'completed'),
         supabase
           .from('special_jobs')
           .select(
             'id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, job_type, battery_type, image_url'
           )
-          .eq('worker_id', user.id),
+          .eq('worker_id', user.id)
+          .eq('status', 'completed'),
       ]);
 
       if (regRes.error) throw regRes.error;
@@ -278,9 +286,9 @@ export function WorkerJobsScreen() {
   const filtered = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
     return items.filter((it) => {
+      if (it.status !== 'completed') return false;
       if (filters.tag === 'smell' && it.kind !== 'regular') return false;
       if (filters.tag === 'other' && it.kind === 'regular') return false;
-      if (filters.status && it.status !== filters.status) return false;
       if (filters.date) {
         const key = yyyyMmDd(it.date);
         if (key !== filters.date) return false;
@@ -580,15 +588,12 @@ export function WorkerJobsScreen() {
       : { label: 'ממתין', bg: 'rgba(255,149,0,0.10)', fg: '#C93400' };
 
   const stats = useMemo(() => {
-    const base = filtered;
-    const pending = base.filter((x) => x.status === 'pending').length;
-    const completed = base.filter((x) => x.status === 'completed').length;
-    return { total: base.length, pending, completed };
+    return { total: filtered.length };
   }, [filtered]);
 
   const isFiltersActive = useMemo(() => {
-    return !!(filters.q.trim() || filters.status || filters.tag || filters.date.trim());
-  }, [filters.date, filters.q, filters.status, filters.tag]);
+    return !!(filters.q.trim() || filters.tag || filters.date.trim());
+  }, [filters.date, filters.q, filters.tag]);
 
   const workerName = user?.name?.trim() || 'משימה';
   const workerAvatar = user?.avatar_url ?? null;
@@ -623,9 +628,7 @@ export function WorkerJobsScreen() {
           <View style={{ gap: 20, marginBottom: 12 }}>
             {/* Stats */}
             <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-              <JobsStatCard label="סה״כ" value={stats.total} />
-              <JobsStatCard label="ממתינות" value={stats.pending} />
-              <JobsStatCard label="הושלמו" value={stats.completed} />
+              <JobsStatCard label="משימות שהושלמו" value={stats.total} />
             </View>
 
             {/* Search + Filter button */}
@@ -799,7 +802,7 @@ export function WorkerJobsScreen() {
           >
             <Text style={{ color: ui.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 }}>סינון</Text>
             <Pressable
-              onPress={() => setFilters({ date: '', status: '', tag: '', q: '' })}
+              onPress={() => setFilters({ date: '', tag: '', q: '' })}
               style={({ pressed }) => ({
                 paddingHorizontal: 14,
                 paddingVertical: 7,
@@ -809,43 +812,6 @@ export function WorkerJobsScreen() {
             >
               <Text style={{ color: '#FF3B30', fontWeight: '600', fontSize: 14 }}>נקה הכל</Text>
             </Pressable>
-          </View>
-
-          <Text
-            style={{ color: ui.secondary, fontWeight: '600', fontSize: 13, textAlign: 'right', marginBottom: 10 }}
-          >
-            סטטוס
-          </Text>
-          <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 20 }}>
-            {[
-              { value: '' as const, label: 'הכל', color: '#007AFF', bg: 'rgba(0,122,255,0.10)' },
-              { value: 'pending' as const, label: 'ממתין', color: '#FF9500', bg: 'rgba(255,149,0,0.10)' },
-              { value: 'completed' as const, label: 'הושלם', color: '#34C759', bg: 'rgba(52,199,89,0.10)' },
-            ].map((opt) => {
-              const active = filters.status === opt.value;
-              return (
-                <Pressable
-                  key={opt.value || 'all-status'}
-                  onPress={() => setFilters((p) => ({ ...p, status: opt.value }))}
-                >
-                  {({ pressed }) => (
-                    <View
-                      style={{
-                        paddingHorizontal: 18,
-                        paddingVertical: 10,
-                        borderRadius: 12,
-                        backgroundColor: active ? opt.color : opt.bg,
-                        opacity: pressed ? 0.7 : 1,
-                      }}
-                    >
-                      <Text style={{ color: active ? '#FFFFFF' : opt.color, fontWeight: '600', fontSize: 14 }}>
-                        {opt.label}
-                      </Text>
-                    </View>
-                  )}
-                </Pressable>
-              );
-            })}
           </View>
 
           <Text
@@ -1174,33 +1140,6 @@ export function WorkerJobsScreen() {
                             {item.custom_refill_amount ?? item.sp?.refill_amount ?? '-'}
                           </Text>
                         </View>
-                        {!!item.image_url && (
-                          <Pressable
-                            onPress={() => {
-                              const u = jobImageDisplayUri(item.image_url);
-                              if (u) setPreviewImageUrl(u);
-                            }}
-                            hitSlop={10}
-                          >
-                            {({ pressed }) => (
-                              <View
-                                style={{
-                                  width: 38,
-                                  height: 38,
-                                  borderRadius: 12,
-                                  backgroundColor: pressed ? 'rgba(37,99,235,0.18)' : 'rgba(37,99,235,0.10)',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  marginRight: 8,
-                                  borderWidth: 1,
-                                  borderColor: 'rgba(37,99,235,0.18)',
-                                }}
-                              >
-                                <Eye size={18} color="#2563EB" />
-                              </View>
-                            )}
-                          </Pressable>
-                        )}
                       </View>
                     </Card>
                   )}
@@ -1230,33 +1169,6 @@ export function WorkerJobsScreen() {
                         <Text style={{ color: colors.text, fontWeight: '900', textAlign: 'right', flex: 1 }}>
                           {item.device_type ?? 'מכשיר'}
                         </Text>
-                        {!!item.image_url && (
-                          <Pressable
-                            onPress={() => {
-                              const u = jobImageDisplayUri(item.image_url);
-                              if (u) setPreviewImageUrl(u);
-                            }}
-                            hitSlop={10}
-                          >
-                            {({ pressed }) => (
-                              <View
-                                style={{
-                                  width: 38,
-                                  height: 38,
-                                  borderRadius: 12,
-                                  backgroundColor: pressed ? 'rgba(37,99,235,0.18)' : 'rgba(37,99,235,0.10)',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  marginRight: 8,
-                                  borderWidth: 1,
-                                  borderColor: 'rgba(37,99,235,0.18)',
-                                }}
-                              >
-                                <Eye size={18} color="#2563EB" />
-                              </View>
-                            )}
-                          </Pressable>
-                        )}
                       </View>
                     </Card>
                   )}
@@ -1276,29 +1188,12 @@ export function WorkerJobsScreen() {
                     <Card key={u}>
                       <Pressable onPress={() => setPreviewImageUrl(u)}>
                         {({ pressed }) => (
-                          <View style={{ position: 'relative', opacity: pressed ? 0.95 : 1 }}>
+                          <View style={{ opacity: pressed ? 0.95 : 1 }}>
                             <Image
                               source={{ uri: u }}
                               style={{ width: '100%', height: 190, borderRadius: 14 }}
                               resizeMode="cover"
                             />
-                            <View
-                              style={{
-                                position: 'absolute',
-                                top: 10,
-                                left: 10,
-                                width: 36,
-                                height: 36,
-                                borderRadius: 12,
-                                backgroundColor: 'rgba(255,255,255,0.78)',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderWidth: 1,
-                                borderColor: 'rgba(15,23,42,0.10)',
-                              }}
-                            >
-                              <Eye size={18} color="#0F172A" />
-                            </View>
                           </View>
                         )}
                       </Pressable>
@@ -1874,8 +1769,7 @@ export function WorkerJobsScreen() {
                   }}
                 >
                   {(() => {
-                    const currentImageUrl = jobImageDisplayUri(execSpecialImageUrl);
-                    const previewUri = execSpecialLocalUri ?? currentImageUrl ?? null;
+                    const previewUri = execSpecialPreviewUri;
                     const hasImage = !!execSpecialImageUrl;
 
                     return (

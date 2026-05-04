@@ -320,8 +320,7 @@ export function DashboardScreen() {
 
     const deviceRows = Object.entries(deviceDistribution)
       .map(([device, count]) => ({ device, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      .sort((a, b) => b.count - a.count);
 
     const activeWorkerRows = workers
       .map((w) => ({

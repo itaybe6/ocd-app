@@ -7,7 +7,13 @@ type BroadcastRequest = {
   scheduleAt?: string | null; // ISO
 };
 
-type PushTokenRow = { expo_push_token: string };
+type PushTokenRow = { expo_push_token: string; role?: string | null };
+
+/** Broadcast marketing pushes: skip staff devices (role stored on push_tokens from mobile registration). */
+function isStaffPushRole(role: string | null | undefined): boolean {
+  const r = (role ?? '').trim().toLowerCase();
+  return r === 'admin' || r === 'worker';
+}
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), {
@@ -35,11 +41,12 @@ async function readAllTokens(supabaseAdmin: any): Promise<string[]> {
     const to = from + pageSize - 1;
     const { data, error } = await supabaseAdmin
       .from('push_tokens')
-      .select('expo_push_token')
+      .select('expo_push_token, role')
       .range(from, to);
     if (error) throw error;
     const rows = (data ?? []) as PushTokenRow[];
     for (const r of rows) {
+      if (isStaffPushRole(r.role)) continue;
       const t = (r.expo_push_token ?? '').trim();
       if (t) tokens.push(t);
     }
