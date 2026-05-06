@@ -47,6 +47,7 @@ function FavoriteProductCard({
     <Pressable
       onPress={() => onOpenProduct(favorite.product_handle)}
       style={({ pressed }) => ({
+        flex: 1,
         width: '100%',
         borderRadius: 18,
         ...storeProductCardShadowStyle,
@@ -54,7 +55,15 @@ function FavoriteProductCard({
         transform: [{ scale: pressed ? 0.99 : 1 }],
       })}
     >
-      <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', width: '100%' }}>
+      <View
+        style={{
+          flex: 1,
+          borderRadius: 18,
+          overflow: 'hidden',
+          backgroundColor: '#FFFFFF',
+          width: '100%',
+        }}
+      >
         <View style={{ height: CARD_IMAGE_HEIGHT, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
           {favorite.image_url ? (
             <Image
@@ -82,7 +91,15 @@ function FavoriteProductCard({
           </View>
         </View>
 
-        <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: 12,
+            paddingTop: 10,
+            paddingBottom: 12,
+            justifyContent: 'flex-start',
+          }}
+        >
           <Text style={{ color: '#111827', fontSize: 16, fontWeight: '900', textAlign: 'right' }}>
             {formatFavoritePrice(favorite.price, favorite.currency_code)}
           </Text>
@@ -106,7 +123,9 @@ function FavoriteProductCard({
             >
               {favorite.product_type.trim()}
             </Text>
-          ) : null}
+          ) : (
+            <View style={{ marginTop: 2, height: 14 }} />
+          )}
         </View>
       </View>
     </Pressable>
@@ -129,6 +148,7 @@ export function FavoriteProductsGrid({
           style={{
             width: '100%',
             flexDirection: 'row-reverse',
+            alignItems: 'stretch',
             marginBottom: rowIndex < rows.length - 1 ? ROW_GAP : 0,
             gap: ROW_GAP,
           }}

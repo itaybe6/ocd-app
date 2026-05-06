@@ -8,7 +8,7 @@ export type UserRow = {
   name: string;
   address?: string | null;
   price?: number | null;
-  /** When true, store shows OCD+ member pricing without the join call-to-action. */
+  /** When true, store shows club member pricing without the join call-to-action. */
   ocd_plus_subscriber?: boolean | null;
   avatar_url?: string | null;
   created_at?: string;

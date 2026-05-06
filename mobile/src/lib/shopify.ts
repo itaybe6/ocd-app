@@ -22,6 +22,7 @@ export type ShopifyProductVariant = {
   title: string;
   availableForSale: boolean;
   price: number;
+  compareAtPrice: number | null;
   currencyCode: string;
   imageUrl: string | null;
   imageAltText: string | null;
@@ -36,8 +37,11 @@ export type ShopifyProduct = {
   imageAltText: string | null;
   images: ShopifyImage[];
   price: number;
+  compareAtPrice: number | null;
   currencyCode: string;
   productType: string;
+  /** קולקציית Shopify ראשונה (מסודר ע״י Shopify) — לתווית קטגוריה בכרטיס מוצר */
+  primaryCollectionTitle: string | null;
   variantId: string | null;
   variantTitle: string | null;
   availableForSale: boolean;
@@ -138,6 +142,7 @@ type ShopifyProductVariantNode = {
   title: string;
   availableForSale: boolean;
   price: ShopifyMoneyV2;
+  compareAtPrice: ShopifyMoneyV2 | null;
   image: ShopifyImage | null;
 };
 
@@ -148,6 +153,13 @@ type ShopifyProductNode = {
   handle: string;
   productType: string;
   featuredImage: ShopifyImage | null;
+  collections?: {
+    edges: Array<{
+      node: {
+        title: string;
+      };
+    }>;
+  };
   images?: {
     edges: Array<{
       node: ShopifyImage;
@@ -380,6 +392,13 @@ const PRODUCT_FIELDS = `
   description
   handle
   productType
+  collections(first: 8) {
+    edges {
+      node {
+        title
+      }
+    }
+  }
   featuredImage {
     url
     altText
@@ -399,6 +418,10 @@ const PRODUCT_FIELDS = `
         title
         availableForSale
         price {
+          amount
+          currencyCode
+        }
+        compareAtPrice {
           amount
           currencyCode
         }
@@ -515,10 +538,20 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     title: edge.node.title,
     availableForSale: edge.node.availableForSale,
     price: toNumber(edge.node.price.amount),
+    compareAtPrice: edge.node.compareAtPrice ? toNumber(edge.node.compareAtPrice.amount) : null,
     currencyCode: edge.node.price.currencyCode,
     imageUrl: edge.node.image?.url ?? null,
     imageAltText: edge.node.image?.altText ?? null,
   }));
+
+  const compareAtPrice = variant?.compareAtPrice && toNumber(variant.compareAtPrice.amount) > toNumber(variant.price.amount)
+    ? toNumber(variant.compareAtPrice.amount)
+    : null;
+
+  const primaryCollectionTitle =
+    node.collections?.edges
+      ?.map((e) => e.node?.title?.trim())
+      .find((t): t is string => !!t && t.length > 0) ?? null;
 
   return {
     id: node.id,
@@ -529,8 +562,10 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     imageAltText: node.featuredImage?.altText ?? null,
     images,
     price: toNumber(variant?.price.amount ?? fallbackPrice.amount),
+    compareAtPrice,
     currencyCode: variant?.price.currencyCode ?? fallbackPrice.currencyCode,
     productType: node.productType?.trim() || 'מוצרים',
+    primaryCollectionTitle,
     variantId: variant?.id ?? null,
     variantTitle: variant?.title ?? null,
     availableForSale: variant?.availableForSale ?? false,
@@ -553,6 +588,23 @@ function extractCollectionHandleFromUrl(url: string | null | undefined) {
 
   const match = url.match(/\/collections\/([^/?#]+)/i);
   return match?.[1];
+}
+
+/** חיפוש פריט תפריט לפי handle של קולקציה (רקורסיבי) — לרצועת «חברות נבחרות» לפי API */
+export function findMenuItemByCollectionHandle(
+  menuItems: ShopifyMenuItem[],
+  collectionHandle: string,
+): ShopifyMenuItem | null {
+  const want = collectionHandle.trim().toLowerCase();
+  if (!want) return null;
+  for (const item of menuItems) {
+    if (item.collectionHandle?.trim().toLowerCase() === want) return item;
+    if (item.children?.length) {
+      const nested = findMenuItemByCollectionHandle(item.children, collectionHandle);
+      if (nested) return nested;
+    }
+  }
+  return null;
 }
 
 function normalizeMenuItem(node: ShopifyMenuItemNode): ShopifyMenuItem | null {
@@ -710,13 +762,68 @@ function getNextPageSize(collected: number, limit: number | undefined): number {
 }
 
 /**
- * Fetch products from Shopify. When `limit` is omitted, ALL products are
- * fetched via cursor pagination. Pass a number to cap the result.
+ * מוצרים בקטלוג לפי **הכי נמכר** ב-Shopify (`BEST_SELLING`) — מתאים לטאב «הכי נמכרים» בדף הבית.
+ * כשמועבר `limit`, מוחזרים רק הראשונים (למשל 10). הסדר מתעדכן לפי נתוני המכירות ששופיפיי מחשבים.
+ *
+ * When `limit` is omitted, ALL products are fetched via cursor pagination.
  */
 export async function fetchProducts(limit?: number): Promise<ShopifyProduct[]> {
   const query = `
     query GetProducts($first: Int!, $after: String) {
       products(first: $first, after: $after, sortKey: BEST_SELLING) {
+        edges {
+          node {
+            ${PRODUCT_FIELDS}
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `;
+
+  const out: ShopifyProduct[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const first = getNextPageSize(out.length, limit);
+    if (first <= 0) break;
+
+    const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, {
+      first,
+      after: cursor,
+    });
+    const messages = getGraphQlErrors(payload.errors);
+    if (messages.length) {
+      throw new Error(messages.join(', '));
+    }
+
+    const conn = payload.data?.products;
+    if (!conn) break;
+
+    for (const edge of conn.edges) {
+      out.push(normalizeProduct(edge.node));
+      if (limit !== undefined && out.length >= limit) break;
+    }
+
+    if (limit !== undefined && out.length >= limit) break;
+    if (!conn.pageInfo.hasNextPage || !conn.pageInfo.endCursor) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+
+  return out;
+}
+
+/**
+ * Products שהועלו לאחרונה לקטלוג — לפי תאריך יצירה ב-Shopify (`created_at`), החדשים ראשון.
+ * מתעדכן אוטומטית כשמוסיפים מוצרים בחנות (בכניסה הבאה לטעינת הנתונים).
+ */
+export async function fetchNewestProducts(limit?: number): Promise<ShopifyProduct[]> {
+  const query = `
+    query GetNewestProducts($first: Int!, $after: String) {
+      products(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
         edges {
           node {
             ${PRODUCT_FIELDS}
@@ -876,6 +983,40 @@ export async function fetchCollections(limit?: number): Promise<ShopifyCollectio
   return out;
 }
 
+/** עומק פריטי תפריט בגרף — תתי־קטגוריות עמוקות (למשל «חברות נבחרות») אחרת לא נטענות מה־API */
+const MENU_STOREFRONT_QUERY_DEPTH = 8;
+
+const MENU_ITEM_NODE_FIELDS = `
+  id
+  title
+  url
+  resource {
+    __typename
+    ... on Collection {
+      id
+      title
+      handle
+      description
+      image {
+        url
+        altText
+      }
+    }
+  }
+`;
+
+function menuItemsNestedSelection(remainingDepth: number): string {
+  if (remainingDepth <= 1) {
+    return MENU_ITEM_NODE_FIELDS;
+  }
+  return `
+    ${MENU_ITEM_NODE_FIELDS}
+    items {
+      ${menuItemsNestedSelection(remainingDepth - 1)}
+    }
+  `;
+}
+
 export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<ShopifyMenuItem[]> {
   const query = `
     query GetMenu($handle: String!) {
@@ -883,58 +1024,7 @@ export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<Shop
         id
         title
         items {
-          id
-          title
-          url
-          resource {
-            __typename
-            ... on Collection {
-              id
-              title
-              handle
-              description
-              image {
-                url
-                altText
-              }
-            }
-          }
-          items {
-            id
-            title
-            url
-            resource {
-              __typename
-              ... on Collection {
-                id
-                title
-                handle
-                description
-                image {
-                  url
-                  altText
-                }
-              }
-            }
-            items {
-              id
-              title
-              url
-              resource {
-                __typename
-                ... on Collection {
-                  id
-                  title
-                  handle
-                  description
-                  image {
-                    url
-                    altText
-                  }
-                }
-              }
-            }
-          }
+          ${menuItemsNestedSelection(MENU_STOREFRONT_QUERY_DEPTH)}
         }
       }
     }
@@ -950,15 +1040,137 @@ export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<Shop
   return payload.data?.menu?.items.map((item) => normalizeMenuItem(item)).filter((item): item is ShopifyMenuItem => !!item) ?? [];
 }
 
+type ShopifyCollectionSummaryQueryResponse = {
+  data?: {
+    collection: {
+      title: string;
+      handle: string;
+      description: string;
+      image: ShopifyImage | null;
+    } | null;
+  };
+  errors?: Array<{
+    message: string;
+  }>;
+};
+
+/** פרטי קולקציה מה־Storefront API — לרצועת «חברות נבחרות» כשמזהים לפי handle */
+export async function fetchCollectionSummary(handle: string): Promise<{
+  handle: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+} | null> {
+  const normalized = handle.trim();
+  if (!normalized) return null;
+
+  const query = `
+    query GetCollectionSummary($handle: String!) {
+      collection(handle: $handle) {
+        title
+        handle
+        description
+        image {
+          url
+          altText
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyCollectionSummaryQueryResponse>(query, {
+    handle: normalized,
+  });
+  const messages = getGraphQlErrors(payload.errors);
+  if (messages.length) {
+    throw new Error(messages.join(', '));
+  }
+
+  const node = payload.data?.collection;
+  if (!node?.handle) return null;
+
+  return {
+    handle: node.handle,
+    title: node.title,
+    description: node.description ?? '',
+    imageUrl: node.image?.url ?? null,
+  };
+}
+
+type ShopifyCollectionHasProductsResponse = {
+  data?: {
+    collection?: {
+      products?: {
+        edges: Array<{ node: { id: string } }>;
+      };
+    } | null;
+  };
+  errors?: Array<{ message: string }>;
+};
+
+/** האם בקולקציה יש לפחות מוצר אחד (שאילתה מינימלית) — להסתרת תתי־קטגוריות ריקות */
+export async function fetchCollectionHasProducts(handle: string): Promise<boolean> {
+  const normalized = handle.trim();
+  if (!normalized) return false;
+
+  const query = `
+    query CollectionHasProducts($handle: String!) {
+      collection(handle: $handle) {
+        products(first: 1, sortKey: BEST_SELLING) {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyCollectionHasProductsResponse>(query, {
+    handle: normalized,
+  });
+  const messages = getGraphQlErrors(payload.errors);
+  if (messages.length) {
+    throw new Error(messages.join(', '));
+  }
+
+  const edges = payload.data?.collection?.products?.edges ?? [];
+  return edges.length > 0;
+}
+
+/** מיון מוצרים בקולקציה — ראה `ProductCollectionSortKeys` ב־Storefront API */
+export type CollectionProductsSortKey =
+  | 'BEST_SELLING'
+  | 'COLLECTION_DEFAULT'
+  | 'CREATED'
+  | 'ID'
+  | 'MANUAL'
+  | 'PRICE'
+  | 'TITLE';
+
+export type FetchCollectionProductsOptions = {
+  sortKey?: CollectionProductsSortKey;
+  /** רלוונטי ל־CREATED / PRICE / TITLE וכו׳ */
+  reverse?: boolean;
+};
+
 /**
  * Fetch products inside a single collection. When `limit` is omitted, ALL
  * products in the collection are fetched via cursor pagination.
  */
-export async function fetchCollectionProducts(handle: string, limit?: number): Promise<ShopifyProduct[]> {
+export async function fetchCollectionProducts(
+  handle: string,
+  limit?: number,
+  options?: FetchCollectionProductsOptions,
+): Promise<ShopifyProduct[]> {
+  const sortKey: CollectionProductsSortKey = options?.sortKey ?? 'BEST_SELLING';
+  const reverse = options?.reverse ?? false;
+
   const query = `
-    query GetCollectionProducts($handle: String!, $first: Int!, $after: String) {
+    query GetCollectionProducts($handle: String!, $first: Int!, $after: String, $sortKey: ProductCollectionSortKeys!, $reverse: Boolean!) {
       collection(handle: $handle) {
-        products(first: $first, after: $after, sortKey: BEST_SELLING) {
+        products(first: $first, after: $after, sortKey: $sortKey, reverse: $reverse) {
           edges {
             node {
               ${PRODUCT_FIELDS}
@@ -984,6 +1196,8 @@ export async function fetchCollectionProducts(handle: string, limit?: number): P
       handle,
       first,
       after: cursor,
+      sortKey,
+      reverse,
     });
     const messages = getGraphQlErrors(payload.errors);
     if (messages.length) {

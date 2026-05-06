@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { RootNavigator } from './navigation/RootNavigator';
 import { AuthProvider, useAuth } from './state/AuthContext';
 import { CartProvider } from './state/CartContext';
@@ -48,17 +49,19 @@ function AppShell() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <LoadingProvider>
-        <AuthProvider>
-          <FavoritesProvider>
-            <CartProvider>
-              <AppShell />
-            </CartProvider>
-          </FavoritesProvider>
-        </AuthProvider>
-      </LoadingProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <LoadingProvider>
+          <AuthProvider>
+            <FavoritesProvider>
+              <CartProvider>
+                <AppShell />
+              </CartProvider>
+            </FavoritesProvider>
+          </AuthProvider>
+        </LoadingProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

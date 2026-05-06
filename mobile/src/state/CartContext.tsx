@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import {
   addCartLines,
@@ -46,6 +46,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<ShopifyCart | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+
+  // Optimistic quantity overrides: productId → desired qty (shown instantly)
+  const [optimisticQuantities, setOptimisticQuantities] = useState<Record<string, number>>({});
+  // Refs for debounced API calls (avoid stale closures in timers)
+  const cartRef = useRef<ShopifyCart | null>(null);
+  const pendingUpdatesRef = useRef<Record<string, number>>({});
+  const updateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Keep cartRef current so debounce timers always see the latest cart
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
 
   const persistCartId = useCallback(async (nextCartId: string | null) => {
     if (nextCartId) {
@@ -105,7 +117,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [syncCart]);
 
   const items = cart?.lines ?? [];
-  const itemCount = cart?.totalQuantity ?? items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const itemCount = useMemo(() => {
+    const base = cart?.totalQuantity ?? items.reduce((sum, item) => sum + item.quantity, 0);
+    let delta = 0;
+    for (const [productId, optimisticQty] of Object.entries(optimisticQuantities)) {
+      const realQty = items.find((i) => i.product.id === productId)?.quantity ?? 0;
+      delta += optimisticQty - realQty;
+    }
+    return Math.max(0, base + delta);
+  }, [cart?.totalQuantity, items, optimisticQuantities]);
+
   const subtotal = cart?.cost.subtotalAmount ?? items.reduce((sum, item) => sum + item.cost.totalAmount, 0);
   const currencyCode = getCurrencyCode(cart, items);
 
@@ -154,10 +176,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       const qty = Math.max(1, Math.round(quantity));
 
+      // Optimistic: show qty immediately
+      setOptimisticQuantities((prev) => ({ ...prev, [product.id]: qty }));
+
       try {
         const nextCart = await runCartMutation(async () => {
-          if (cart?.id) {
-            return addCartLines(cart.id, [{ merchandiseId: product.variantId, quantity: qty }]);
+          const currentCart = cartRef.current;
+          if (currentCart?.id) {
+            return addCartLines(currentCart.id, [{ merchandiseId: product.variantId, quantity: qty }]);
           }
 
           return createCart(
@@ -166,8 +192,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           );
         });
 
+        setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[product.id]; return n; });
         await syncCart(nextCart);
       } catch (error: any) {
+        setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[product.id]; return n; });
         Toast.show({
           type: 'error',
           text1: 'ההוספה לעגלה נכשלה',
@@ -175,7 +203,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [cart?.id, runCartMutation, syncCart]
+    [runCartMutation, syncCart]
   );
 
   const removeItem = useCallback(
@@ -198,27 +226,61 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateQuantity = useCallback(
-    async (productId: string, quantity: number) => {
-      const line = findLineByProductId(productId);
-      if (!cart?.id || !line) return;
+    (productId: string, quantity: number): Promise<void> => {
+      // Show new quantity instantly
+      setOptimisticQuantities((prev) => {
+        if (quantity <= 0) {
+          const n = { ...prev };
+          delete n[productId];
+          return n;
+        }
+        return { ...prev, [productId]: quantity };
+      });
 
-      if (quantity <= 0) {
-        await removeItem(productId);
-        return;
+      pendingUpdatesRef.current[productId] = quantity;
+
+      // Debounce: wait 350ms after the last press before hitting the API
+      if (updateTimersRef.current[productId]) {
+        clearTimeout(updateTimersRef.current[productId]);
       }
 
-      try {
-        const nextCart = await runCartMutation(() => updateCartLines(cart.id, [{ id: line.id, quantity }]));
-        await syncCart(nextCart);
-      } catch (error: any) {
-        Toast.show({
-          type: 'error',
-          text1: 'עדכון הכמות נכשל',
-          text2: error?.message ?? 'נסה שוב בעוד רגע',
-        });
-      }
+      updateTimersRef.current[productId] = setTimeout(async () => {
+        delete updateTimersRef.current[productId];
+        const targetQty = pendingUpdatesRef.current[productId];
+        delete pendingUpdatesRef.current[productId];
+        if (targetQty === undefined) return;
+
+        const currentCart = cartRef.current;
+        const currentItems = currentCart?.lines ?? [];
+        const line = currentItems.find((item) => item.product.id === productId) ?? null;
+
+        const clearOptimistic = () =>
+          setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[productId]; return n; });
+
+        try {
+          let nextCart: ShopifyCart | null;
+          if (targetQty <= 0) {
+            if (!currentCart?.id || !line) { clearOptimistic(); return; }
+            nextCart = await removeCartLines(currentCart.id, [line.id]);
+          } else {
+            if (!currentCart?.id || !line) { clearOptimistic(); return; }
+            nextCart = await updateCartLines(currentCart.id, [{ id: line.id, quantity: targetQty }]);
+          }
+          clearOptimistic();
+          await syncCart(nextCart);
+        } catch (error: any) {
+          clearOptimistic();
+          Toast.show({
+            type: 'error',
+            text1: 'עדכון הכמות נכשל',
+            text2: error?.message ?? 'נסה שוב בעוד רגע',
+          });
+        }
+      }, 350);
+
+      return Promise.resolve();
     },
-    [cart?.id, findLineByProductId, removeItem, runCartMutation, syncCart]
+    [syncCart]
   );
 
   const clearCart = useCallback(async () => {
@@ -237,8 +299,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [cart?.id, items, runCartMutation, syncCart]);
 
   const getQuantity = useCallback(
-    (productId: string) => items.find((item) => item.product.id === productId)?.quantity ?? 0,
-    [items]
+    (productId: string) => {
+      if (productId in optimisticQuantities) return optimisticQuantities[productId];
+      return items.find((item) => item.product.id === productId)?.quantity ?? 0;
+    },
+    [items, optimisticQuantities]
   );
 
   const value = useMemo<CartContextValue>(

@@ -17,6 +17,7 @@ import { StoreFavoritesScreen } from '../screens/store/StoreFavoritesScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
+import { OcdPlusMark } from '../components/OcdPlusMark';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 import type { CustomerDrawerParamList } from './CustomerDrawer';
 import type { RootStackParamList } from './types';
@@ -136,6 +137,15 @@ function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamL
       onBack={() => navigation.goBack()}
       onOpenCart={() => navigation.navigate('StoreCart')}
       onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
+      onOpenCategory={(category) =>
+        navigation.navigate('StoreCategory', {
+          categoryId: category.id,
+          categoryTitle: category.title,
+          categoryDescription: category.description,
+          parentTitle: category.parentTitle,
+          subcategories: category.subcategories,
+        })
+      }
       onTabPress={(tabId) => {
         if (tabId === 'home') {
           navigation.goBack();
@@ -169,7 +179,6 @@ function StoreCategoryRoute({
   return (
     <StoreCategoryScreen
       onBack={() => navigation.goBack()}
-      onOpenCart={() => navigation.navigate('StoreCart')}
       onOpenProduct={(product) => navigation.navigate('Product', { handle: product.handle })}
       onOpenCategory={(category) =>
         navigation.navigate('StoreCategory', {
@@ -307,7 +316,11 @@ export function RootNavigator() {
           component={StoreOcdPlusRoute}
           options={{
             headerShown: true,
-            headerTitle: 'OCD+',
+            headerTitle: () => (
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <OcdPlusMark size={30} />
+              </View>
+            ),
             headerTitleStyle: { fontWeight: '900' },
             headerTintColor: colors.text,
             headerStyle: { backgroundColor: colors.card },

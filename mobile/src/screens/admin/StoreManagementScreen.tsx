@@ -19,6 +19,7 @@ import { Input } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
 import { fetchProducts } from '../../lib/shopify';
 import { useLoading } from '../../state/LoadingContext';
+import { OcdPlusMark } from '../../components/OcdPlusMark';
 
 LocaleConfig.locales['he'] = {
   monthNames: ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
@@ -237,7 +238,7 @@ export function StoreManagementScreen() {
       );
     } catch (e: any) {
       setOcdPlusSubscribers([]);
-      Toast.show({ type: 'error', text1: 'טעינת מנויי OCD+ נכשלה', text2: e?.message ?? 'Unknown error' });
+      Toast.show({ type: 'error', text1: 'טעינת רשימת המנויים נכשלה', text2: e?.message ?? 'Unknown error' });
     } finally {
       setOcdPlusListLoading(false);
     }
@@ -384,7 +385,10 @@ export function StoreManagementScreen() {
               </View>
 
               <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                <Text style={s.pushLauncherTitle}>מנויי OCD+</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  <Text style={s.pushLauncherTitle}>מנויי</Text>
+                  <OcdPlusMark size={22} />
+                </View>
                 <Text style={s.pushLauncherSub}>לחץ לצפייה ברשימת המנויים הפעילים</Text>
               </View>
 
@@ -413,7 +417,18 @@ export function StoreManagementScreen() {
             >
               <Text style={m.navBtnText}>✕</Text>
             </Pressable>
-            <Text style={m.headerTitle}>מנויי OCD+</Text>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <Text style={[m.headerTitle, { flex: 0 }]}>מנויי</Text>
+              <OcdPlusMark size={24} />
+            </View>
             <View style={{ minWidth: 44 }} />
           </View>
 
@@ -429,7 +444,11 @@ export function StoreManagementScreen() {
               contentContainerStyle={plusM.listContent}
             >
               {ocdPlusSubscribers.length === 0 ? (
-                <Text style={plusM.emptyText}>אין משתמשים עם מנוי OCD+ פעיל</Text>
+                <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Text style={plusM.emptyText}>אין משתמשים עם מנוי </Text>
+                  <OcdPlusMark size={18} />
+                  <Text style={plusM.emptyText}> פעיל</Text>
+                </View>
               ) : (
                 ocdPlusSubscribers.map((u) => (
                   <View key={u.id} style={plusM.row}>

@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import {
   ActivityIndicator,
+  I18nManager,
   Image,
   type LayoutChangeEvent,
   Modal,
@@ -32,26 +34,39 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import {
+  fetchCollectionHasProducts,
   fetchCollectionImage,
   fetchCollectionProducts,
+  fetchCollectionSummary,
   fetchCollections,
   fetchMenuItems,
+  fetchNewestProducts,
   fetchProducts,
+  findMenuItemByCollectionHandle,
+  type CollectionProductsSortKey,
   type ShopifyCollection,
   type ShopifyMenuItem,
   type ShopifyProduct,
 } from '../../lib/shopify';
 import { FavoriteToggleButton } from '../../components/FavoriteToggleButton';
 import { favoriteInputFromStoreProduct } from '../../lib/favorites';
-import { OcdPlusProductPriceBlock } from '../../components/OcdPlusProductPriceBlock';
+import {
+  OcdPlusProductPriceBlock,
+  OcdPlusFloatingBadge,
+  OcdPlusJoinBannerButton,
+  formatOcdPrice,
+} from '../../components/OcdPlusProductPriceBlock';
+import { OcdPlusSubscribeSheet } from '../../components/OcdPlusSubscribeSheet';
 import { useAuth } from '../../state/AuthContext';
 import { colors } from '../../theme/colors';
+import { STORE_BUNDLE_CARD_BODY_MIN_HEIGHT } from '../../theme/storeProductCardLayout';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 
-type StoreCategory = {
+export type StoreCategory = {
   id: string;
   name: string;
   subtitle?: string;
@@ -92,6 +107,7 @@ export type StoreProduct = {
   collectionTitle: string | null;
   categoryId: string;
   price: number;
+  compareAtPrice: number | null;
   currencyCode: string;
   handle: string;
   description: string;
@@ -123,6 +139,50 @@ type PromoSlide = {
   panelColor: string;
   bottleColors: [string, string];
 };
+
+/**
+ * ─── Bundles section ──────────────────────────────────────────────────────────
+ * Set this to your Shopify collection handle for cleaning bundles/kits.
+ * Find it at: your-store.myshopify.com/collections/<HANDLE>
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const BUNDLES_COLLECTION_HANDLE = 'מבצעי-פסח'; // "מארזי ניקיון משתלמים" on Shopify
+
+/** קולקציית «חברות נבחרות» — נטענת מה־API לפי handle; מוצגת ברצועת סטוריז בנפרד מהבנטו */
+const HOME_SELECTED_BRANDS_COLLECTION_HANDLE =
+  process.env.EXPO_PUBLIC_HOME_SELECTED_BRANDS_COLLECTION_HANDLE?.trim() ?? '';
+
+/** ריווח אופקי לבלוק התוכן מתחת לבאנר — הקרוסלה של חברות נבחרות יוצאת ל-full-bleed עם margin שלילי באותו ערך */
+const STORE_HOME_SCROLL_PADDING_H = 12;
+
+// ─── Home tabs collection handles ─────────────────────────────────────────────
+/** מזהה פנימי לטאב «הכי נמכרים» — הנתונים מגיעים מ־`fetchProducts` (BEST_SELLING), לא מקולקציה */
+const HOME_TAB_RECOMMENDED_HANDLE = 'best-selling';
+const HOME_TAB_SALE_HANDLE        = 'מבצעים';          // "המבצעים שלנו"
+/** מזהה לוגי לטאב «הכי חדשים» (מוצרים נמשכים לפי CREATED_AT ב-shopify, לא קולקציה) */
+const HOME_TAB_NEW_HANDLE         = 'חדשים';
+
+/**
+ * מיון מוצרים בטאב «המבצעים שלנו» בתוך קולקציית `HOME_TAB_SALE_HANDLE`.
+ * בעבר נטען גם הוא עם BEST_SELLING — ואז כשהמובילים בחנות נמצאים במבצע, הרשימה יכלה להיות **זהה** לטאב «הכי נמכרים»
+ * (שמושך BEST_SELLING על כל הקטלוג). COLLECTION_DEFAULT עוקב אחר ברירת המחדל של הקולקציה ב־Shopify Admin.
+ * אם עדיין רוצים סדר אחר — אפשר להחליף ל־MANUAL / PRICE וכו׳ (ראה `CollectionProductsSortKey`).
+ */
+const HOME_TAB_SALE_COLLECTION_SORT: CollectionProductsSortKey = 'COLLECTION_DEFAULT';
+
+/** עד כמה מוצרים מכל קולקציית טאב (Shopify) — חייב להתאים ל־fetch ול־slice בתצוגה */
+const HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT = 10;
+
+/* ─── Banner carousel images ─────────────────────────────────────────────── */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const BANNER_IMAGES = [
+  require('../../../assets/bannernew1.png'),
+  require('../../../assets/newbanner3.png'),
+  require('../../../assets/newbnner8.png'),
+  require('../../../assets/newbanner5.png'),
+  require('../../../assets/newbanner6.png'),
+  require('../../../assets/newbanner7.png'),
+] as const;
 
 const COLLECTIONS: CollectionCard[] = [
   {
@@ -187,29 +247,95 @@ const PROMO_SLIDES: PromoSlide[] = [
 
 const SHOW_PROMO_CAROUSEL = false;
 
-const CATEGORY_STORY_PRODUCT_OVERRIDES: Record<string, string[]> = {
+export const CATEGORY_STORY_PRODUCT_OVERRIDES: Record<string, string[]> = {
   'עיצוב הבית': ['מראה | חצי מעוגלת', 'מראה'],
 };
 
 const FEATURED_BRAND_IMAGE_OVERRIDES: Record<string, number> = {
-  סנו: require('../../../assets/brands/sano.png'),
-  טאצ: require('../../../assets/brands/touch.jpg'),
-  "טאץ'": require('../../../assets/brands/touch.jpg'),
-  TOUCH: require('../../../assets/brands/touch.jpg'),
-  פינל: require('../../../assets/brands/final.jpg'),
-  פייל: require('../../../assets/brands/final.jpg'),
-  FINAL: require('../../../assets/brands/final.jpg'),
-  יעקובי: require('../../../assets/brands/yaakoby-logo.png'),
-  YAAKOBY: require('../../../assets/brands/yaakoby-logo.png'),
-  סאג: require('../../../assets/brands/sag.png'),
-  SAG: require('../../../assets/brands/sag.png'),
-  סוסייטא: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
-  סוסיטסא: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
-  סוסיטסה: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
-  SUCITESA: require('../../../assets/brands/logotipo-sucitesa-color-vertical.png'),
+  סנו: require('../../../assets/brands/newbrands/sano3.png'),
+  SANO: require('../../../assets/brands/newbrands/sano3.png'),
+  טאצ: require('../../../assets/brands/newbrands/touchll.png'),
+  "טאץ'": require('../../../assets/brands/newbrands/touchll.png'),
+  TOUCH: require('../../../assets/brands/newbrands/touchll.png'),
+  פינל: require('../../../assets/brands/newbrands/finallll.png'),
+  פייל: require('../../../assets/brands/newbrands/finallll.png'),
+  FINAL: require('../../../assets/brands/newbrands/finallll.png'),
+  יעקובי: require('../../../assets/brands/newbrands/yakobilll.png'),
+  YAAKOBY: require('../../../assets/brands/newbrands/yakobilll.png'),
+  סאג: require('../../../assets/brands/newbrands/saglll.png'),
+  SAG: require('../../../assets/brands/newbrands/saglll.png'),
+  סוסייטא: require('../../../assets/brands/newbrands/suslll.png'),
+  סוסיטסא: require('../../../assets/brands/newbrands/suslll.png'),
+  סוסיטסה: require('../../../assets/brands/newbrands/suslll.png'),
+  SUCITESA: require('../../../assets/brands/newbrands/suslll.png'),
   'מוצרי TNX': require('../../../assets/brands/TNX.png'),
   TNX: require('../../../assets/brands/TNX.png'),
+  /** Shopify title may use «Tana-Green» (hyphen); matching is normalized below */
+  'מוצרי tana green care': require('../../../assets/brands/newbrands/greencarelll.png'),
+  'tana green care': require('../../../assets/brands/newbrands/greencarelll.png'),
+  'מוצרי פרפיום כביסכל': require('../../../assets/brands/newbrands/kviscallll.png'),
+  'מוצרי פרפיום(כביסכל)': require('../../../assets/brands/newbrands/kviscallll.png'),
+  'מוצרי פרפיום (כביסכל)': require('../../../assets/brands/newbrands/kviscallll.png'),
+  כביסכל: require('../../../assets/brands/newbrands/kviscallll.png'),
 };
+
+const KVISCALL_LOGO = require('../../../assets/brands/newbrands/kviscallll.png');
+
+/** כותרת תצוגה לתתי־קטגוריה/מותג — כשכותרת התפריט ב־Shopify ארוכה או בסוגריים */
+const FEATURED_SUBCATEGORY_DISPLAY_TITLE_OVERRIDES: Record<string, string> = {
+  'מוצרי פרפיום כביסכל': 'כביסכל',
+  'מוצרי פרפיום(כביסכל)': 'כביסכל',
+  'מוצרי פרפיום (כביסכל)': 'כביסכל',
+  כביסכל: 'כביסכל',
+};
+
+const KVISCALL_DISPLAY_TITLE = 'כביסכל';
+
+/** Hyphens / spacing / English casing differ between menu titles and map keys */
+function normalizeFeaturedBrandTitle(title: string): string {
+  return title
+    .trim()
+    .normalize('NFC')
+    .replace(/[\u200c-\u200f\ufeff]/g, '')
+    .replace(/[()\uFF08\uFF09\[\]{}«»]/g, ' ')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+/** שורת תפריט «מוצרי פרפיום (כביסכל)» — גרסאות עם סוגריים/אותיות שונות מעט */
+function matchesKviscallPerfumeMenuTitle(raw: string): boolean {
+  const n = normalizeFeaturedBrandTitle(raw);
+  if (!n.includes('פרפיום')) return false;
+  return /כביס[סש]כל/.test(n);
+}
+
+/** Bundled logos for «חברות נבחרות» — overrides Shopify collection preview URLs. */
+function resolveFeaturedBrandPreviewUri(title: string): string | undefined {
+  const needle = normalizeFeaturedBrandTitle(title);
+  if (!needle) return undefined;
+  for (const [key, bundled] of Object.entries(FEATURED_BRAND_IMAGE_OVERRIDES)) {
+    if (normalizeFeaturedBrandTitle(key) === needle) {
+      const resolved = Image.resolveAssetSource(bundled);
+      return resolved?.uri;
+    }
+  }
+  if (matchesKviscallPerfumeMenuTitle(title)) {
+    const resolved = Image.resolveAssetSource(KVISCALL_LOGO);
+    return resolved?.uri;
+  }
+  return undefined;
+}
+
+function resolveSubcategoryDisplayTitle(title: string): string {
+  const needle = normalizeFeaturedBrandTitle(title);
+  if (!needle) return title.trim();
+  for (const [key, display] of Object.entries(FEATURED_SUBCATEGORY_DISPLAY_TITLE_OVERRIDES)) {
+    if (normalizeFeaturedBrandTitle(key) === needle) return display;
+  }
+  if (matchesKviscallPerfumeMenuTitle(title)) return KVISCALL_DISPLAY_TITLE;
+  return title.trim();
+}
 
 function formatPrice(price: number) {
   return `₪${price.toLocaleString('he-IL')}.00`;
@@ -222,6 +348,15 @@ const storeProductCardShadowStyle = {
   shadowRadius: 16,
   shadowOffset: { width: 0, height: 8 },
   elevation: 8,
+};
+
+/** OCD+ home promo banner — visible lift on #F5F5F5; shadow on outer View (not Pressable) so iOS/Android render reliably. */
+const ocdPlusHomeBannerShadowStyle = {
+  shadowColor: '#0F172A',
+  shadowOpacity: 0.2,
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 10 },
+  elevation: 14,
 };
 
 /** Product grid under category circles on store home. */
@@ -356,12 +491,14 @@ function StoreProductCardQuantityControl({
   }, [addItem, clearCloseTimer, isMutating, openStepper, product]);
 
   const increment = useCallback(() => {
-    if (!product.availableForSale || isMutating) return;
+    if (!product.availableForSale) return;
     if (cartQty === 0) {
-      if (pendingOpen) return;
+      if (pendingOpen || isMutating) return;
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       void handleClosedPress();
       return;
     }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     void updateQuantity(product.id, cartQty + 1);
     scheduleStepperClose();
   }, [
@@ -376,7 +513,6 @@ function StoreProductCardQuantityControl({
   ]);
 
   const decrement = useCallback(() => {
-    if (isMutating) return;
     if (cartQty <= 0) {
       if (pendingOpen) {
         setPendingOpen(false);
@@ -385,6 +521,7 @@ function StoreProductCardQuantityControl({
       }
       return;
     }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (cartQty <= 1) {
       setShowStepper(false);
       clearCloseTimer();
@@ -394,7 +531,6 @@ function StoreProductCardQuantityControl({
   }, [
     cartQty,
     clearCloseTimer,
-    isMutating,
     pendingOpen,
     product.id,
     scheduleStepperClose,
@@ -434,7 +570,7 @@ function StoreProductCardQuantityControl({
             >
               <Pressable
                 onPress={increment}
-                disabled={isMutating || (cartQty === 0 && pendingOpen)}
+                disabled={(cartQty === 0 && (pendingOpen || isMutating))}
                 style={circleBtn}
                 accessibilityRole="button"
                 accessibilityLabel="הוסף כמות"
@@ -444,7 +580,7 @@ function StoreProductCardQuantityControl({
               <Text style={{ color: STORE_CARD_QTY_ACCENT, fontSize: 17, fontWeight: '800' }}>{displayQty}</Text>
               <Pressable
                 onPress={decrement}
-                disabled={isMutating || (cartQty === 0 && !pendingOpen)}
+                disabled={false}
                 style={circleBtn}
                 accessibilityRole="button"
                 accessibilityLabel="הפחת כמות"
@@ -518,15 +654,20 @@ function getProductBadge(index: number) {
 export function toStoreProduct(product: ShopifyProduct, index: number, subtitleOverride?: string, categoryIdOverride?: string): StoreProduct {
   const palette = getProductPalette(index);
   const normalizedProductType = product.productType.trim();
-  const subtitle = subtitleOverride?.trim() || (normalizedProductType && normalizedProductType !== 'מוצרים' ? normalizedProductType : 'כל המוצרים');
+  const collectionLabel = product.primaryCollectionTitle?.trim() ?? '';
+  const subtitle =
+    subtitleOverride?.trim() ||
+    collectionLabel ||
+    (normalizedProductType && normalizedProductType !== 'מוצרים' ? normalizedProductType : 'כל המוצרים');
 
   return {
     id: product.id,
     name: product.title,
     subtitle,
-    collectionTitle: null,
+    collectionTitle: product.primaryCollectionTitle ?? null,
     categoryId: categoryIdOverride || normalizedProductType || 'all',
     price: product.price,
+    compareAtPrice: product.compareAtPrice,
     currencyCode: product.currencyCode,
     handle: product.handle,
     description: product.description,
@@ -935,6 +1076,40 @@ function normalizeCategoryTitle(title: string) {
   return title.replace(/\s+/g, ' ').trim();
 }
 
+/** קטגוריית על «חברות נבחרות» — מוצגת ברצועת סטוריז ולא בגריד הבנטו */
+function isSelectedBrandsCategoryName(name: string): boolean {
+  const n = normalizeCategoryTitle(name);
+  if (n.includes('חברות נבחרות') || n.includes('חברות נבחרים')) return true;
+  if (n.includes('מותגים נבחרים') || n.includes('מותגים נבחרות')) return true;
+  return (
+    (n.includes('חברות') || n.includes('מותגים')) &&
+    (n.includes('נבחרות') || n.includes('נבחרים'))
+  );
+}
+
+/** רק לרשת Bento: מחליף מקומות בין «טואלטיקה» ל־«מארזי ניקיון משתלמים» אם הן סמוכות. */
+function swapToiletriesAndBundlesForBento(categories: StoreCategory[]): StoreCategory[] {
+  return categories;
+}
+
+/** רק לרשת Bento: מערכות בישום ↔ מרככי כביסה וטקסטיל (כרטיס גדול מול ריבוע קטן בשורת 3). */
+function swapFragranceAndFabricForBento(categories: StoreCategory[]): StoreCategory[] {
+  const isFragranceSystems = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return n.includes('בישום');
+  };
+  const isFabricSofteners = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return (n.includes('מרככי') || n.includes('מרכך')) && (n.includes('כביסה') || n.includes('טקסטיל'));
+  };
+  const iFrag = categories.findIndex((c) => isFragranceSystems(c.name));
+  const iFab = categories.findIndex((c) => isFabricSofteners(c.name));
+  if (iFrag < 0 || iFab < 0 || iFrag === iFab) return categories;
+  const out = [...categories];
+  [out[iFrag], out[iFab]] = [out[iFab]!, out[iFrag]!];
+  return out;
+}
+
 function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenuSection[] {
   const sections: SidebarMenuSection[] = [{ id: 'all', title: 'כל המוצרים', categoryId: 'all' }];
 
@@ -987,7 +1162,7 @@ function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenu
   return sections;
 }
 
-function flattenMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[] {
+export function flattenMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[] {
   const orderedCategories: StoreCategory[] = [{ id: 'all', name: 'כל המוצרים' }];
   const seenHandles = new Set<string>(['all']);
 
@@ -1014,7 +1189,7 @@ function flattenMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[] {
   return orderedCategories;
 }
 
-function getTopLevelMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[] {
+export function getTopLevelMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[] {
   return menuItems.flatMap((item) =>
     item.collectionHandle
       ? [
@@ -1029,7 +1204,7 @@ function getTopLevelMenuCategories(menuItems: ShopifyMenuItem[]): StoreCategory[
   );
 }
 
-function getTopLevelCategoryChildrenMap(menuItems: ShopifyMenuItem[]): Record<string, StoreSubcategory[]> {
+export function getTopLevelCategoryChildrenMap(menuItems: ShopifyMenuItem[]): Record<string, StoreSubcategory[]> {
   const toSubcategories = (items: ShopifyMenuItem[], parentTitle?: string): StoreSubcategory[] =>
     items.flatMap((item) => {
       const nestedSubcategories = item.children?.length ? toSubcategories(item.children, item.title) : [];
@@ -1055,7 +1230,58 @@ function getTopLevelCategoryChildrenMap(menuItems: ShopifyMenuItem[]): Record<st
   }, {});
 }
 
-function getCategoryAvatarLabel(name: string) {
+/** תתי־קולקציות תחת פריט תפריט בודד — גם כשההורה תיקייה ללא קולקציה (כמו «חברות נבחרות» באתר) */
+export function getSubcategoriesForMenuItem(item: ShopifyMenuItem): StoreSubcategory[] {
+  if (!item.children?.length) return [];
+
+  if (item.collectionHandle) {
+    const map = getTopLevelCategoryChildrenMap([item]);
+    const fromMap = map[item.collectionHandle];
+    if (fromMap?.length) return fromMap;
+  }
+
+  return flatMapMenuChildrenToSubcategories(item.children, item.title);
+}
+
+function findSelectedBrandsMenuItem(menuItems: ShopifyMenuItem[]): ShopifyMenuItem | null {
+  for (const item of menuItems) {
+    /** באתר: הורה ללא קישור קולקציה — רק תפריט נפתח עם ילדים */
+    if (isSelectedBrandsCategoryName(item.title)) {
+      if (item.collectionHandle || item.children?.length) return item;
+    }
+    if (item.children?.length) {
+      const nested = findSelectedBrandsMenuItem(item.children);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function flatMapMenuChildrenToSubcategories(
+  items: ShopifyMenuItem[],
+  parentTitle?: string,
+): StoreSubcategory[] {
+  return items.flatMap((child) => {
+    const nested = child.children?.length
+      ? flatMapMenuChildrenToSubcategories(child.children, child.title)
+      : [];
+    const row: StoreSubcategory[] =
+      child.collectionHandle != null && child.collectionHandle !== ''
+        ? [
+            {
+              id: child.collectionHandle,
+              title: child.title,
+              description: child.collectionDescription,
+              parentTitle,
+              imageUrl: child.collectionImageUrl ?? null,
+            },
+          ]
+        : [];
+    return [...row, ...nested];
+  });
+}
+
+export function getCategoryAvatarLabel(name: string) {
   const words = normalizeCategoryTitle(name).split(' ').filter(Boolean);
   return words.slice(0, 2).map((word) => word[0]).join('') || name.slice(0, 1);
 }
@@ -1150,6 +1376,7 @@ function StoreSubcategoryCircleStrip({
         <ScrollView
           ref={scrollViewRef}
           horizontal
+          style={{ direction: 'rtl' }}
           showsHorizontalScrollIndicator={false}
           onContentSizeChange={
             scrollToEndOnContentSize
@@ -1161,67 +1388,99 @@ function StoreSubcategoryCircleStrip({
               : undefined
           }
           contentContainerStyle={{
-            flexDirection: 'row-reverse',
+            flexDirection: 'row',
             justifyContent: 'flex-start',
             alignItems: 'flex-start',
-            gap: 20,
-            paddingHorizontal: 4,
+            gap: 3,
+            paddingHorizontal: 0,
             paddingBottom: 2,
           }}
         >
           {displayedItems.map((sub) => {
             const isSelected = selectedId === sub.id;
-            const previewUri = previewUrls[sub.id] ?? sub.imageUrl ?? undefined;
+            const bundledOverrideUri = resolveFeaturedBrandPreviewUri(sub.title);
+            const previewUri = bundledOverrideUri ?? previewUrls[sub.id] ?? sub.imageUrl ?? undefined;
+            const displayTitle = resolveSubcategoryDisplayTitle(sub.title);
             return (
               <Pressable key={sub.id} onPress={() => onSelect(sub.id)}>
-                <View style={{ alignItems: 'center', gap: 4, width: 82 }}>
+                <View style={{ alignItems: 'center', gap: 4, width: 74 }}>
+                  {/* Ring + optional shadow */}
                   <View
                     style={{
                       width: 70,
                       height: 70,
                       borderRadius: 35,
-                      padding: 3,
-                      backgroundColor: isSelected ? '#111827' : '#FFFFFF',
-                      borderWidth: 1,
-                      borderColor: isSelected ? '#111827' : '#E7ECF3',
+                      backgroundColor: '#FFFFFF',
+                      // selected shadow — soft lift instead of black fill
+                      ...(isSelected
+                        ? {
+                            shadowColor: '#334155',
+                            shadowOpacity: 0.28,
+                            shadowRadius: 8,
+                            shadowOffset: { width: 0, height: 3 },
+                            elevation: 6,
+                          }
+                        : {
+                            shadowColor: '#000',
+                            shadowOpacity: 0,
+                            shadowRadius: 0,
+                            shadowOffset: { width: 0, height: 0 },
+                            elevation: 0,
+                          }),
                     }}
                   >
+                    {/* Border ring drawn separately so shadow stays outside */}
                     <View
                       style={{
-                        flex: 1,
-                        borderRadius: 32,
-                        overflow: 'hidden',
-                        backgroundColor: '#F4F6FA',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        width: 70,
+                        height: 70,
+                        borderRadius: 35,
+                        borderWidth: isSelected ? 2 : 1,
+                        borderColor: isSelected ? '#334155' : '#E7ECF3',
+                        padding: 3,
+                        backgroundColor: 'transparent',
                       }}
                     >
-                      {previewUri ? (
-                        <Image
-                          source={{ uri: previewUri }}
-                          resizeMode="cover"
-                          accessibilityLabel={sub.title}
-                          style={{ width: '100%', height: '100%' }}
-                        />
-                      ) : (
-                        <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
-                          {getCategoryAvatarLabel(sub.title)}
-                        </Text>
-                      )}
+                      <View
+                        style={{
+                          flex: 1,
+                          borderRadius: 32,
+                          overflow: 'hidden',
+                          backgroundColor: '#F4F6FA',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {previewUri ? (
+                          <Image
+                            source={{ uri: previewUri }}
+                            resizeMode="cover"
+                            accessibilityLabel={displayTitle}
+                            style={{ width: '100%', height: '100%' }}
+                          />
+                        ) : (
+                          <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
+                            {getCategoryAvatarLabel(displayTitle)}
+                          </Text>
+                        )}
+                      </View>
                     </View>
                   </View>
+
                   <Text
                     numberOfLines={2}
                     style={{
-                      color: isSelected ? '#111827' : '#9CA3AF',
-                      fontWeight: isSelected ? '900' : '600',
+                      color: isSelected ? '#1E293B' : '#9CA3AF',
+                      fontWeight: isSelected ? '800' : '600',
                       fontSize: 12,
                       lineHeight: 15,
                       textAlign: 'center',
+                      maxWidth: 74,
                     }}
                   >
-                    {sub.title}
+                    {displayTitle}
                   </Text>
+
                 </View>
               </Pressable>
             );
@@ -1257,8 +1516,8 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorO
   return <Ionicons name={iconName} size={size} color={color} />;
 }
 
-/** Focused bottom-tab bubble fill — same navy as profile / admin headers */
-export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = colors.adminHeader;
+/** Focused bottom-tab bubble fill — pure black (not admin navy). */
+export const STORE_FLOATING_TAB_ACTIVE_BUBBLE_BG = '#000000';
 
 function AnimatedStoreTabButton({
   focused,
@@ -1544,6 +1803,803 @@ function buildSidebarSections(categories: StoreCategory[]): SidebarMenuSection[]
   return sections;
 }
 
+/* ─── Home banner carousel ───────────────────────────────────────────────── */
+function HomeBannerCarousel({ screenWidth }: { screenWidth: number }) {
+  const SIDE_PAD = 14;
+  const CARD_W = screenWidth - SIDE_PAD * 2;
+  const BANNER_HEIGHT = Math.round(CARD_W * 0.5);
+  const INTERVAL = 3800;
+  const scrollRef = useRef<ScrollView>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const activeIdxRef = useRef(0);
+  const progress = useSharedValue(0);
+
+  const startProgress = useCallback(() => {
+    progress.value = 0;
+    progress.value = withTiming(1, { duration: INTERVAL, easing: Easing.linear });
+  }, [progress]);
+
+  useEffect(() => {
+    startProgress();
+    const timer = setInterval(() => {
+      const next = (activeIdxRef.current + 1) % BANNER_IMAGES.length;
+      activeIdxRef.current = next;
+      setActiveIdx(next);
+      scrollRef.current?.scrollTo({ x: next * screenWidth, animated: true });
+      startProgress();
+    }, INTERVAL);
+    return () => clearInterval(timer);
+  }, [screenWidth, startProgress]);
+
+  const progressBarStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
+
+  return (
+    <View style={{ paddingVertical: 10 }}>
+      <View>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+          onMomentumScrollEnd={(e) => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+            activeIdxRef.current = idx;
+            setActiveIdx(idx);
+            startProgress();
+          }}
+        >
+          {BANNER_IMAGES.map((src, i) => (
+            <View
+              key={i}
+              style={{
+                width: screenWidth,
+                paddingHorizontal: SIDE_PAD,
+              }}
+            >
+              <View
+                style={{
+                  borderRadius: 20,
+                  overflow: 'hidden',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 8,
+                  elevation: 4,
+                }}
+              >
+                <Image
+                  source={src}
+                  style={{ width: CARD_W, height: BANNER_HEIGHT }}
+                  resizeMode="cover"
+                />
+                {/* Progress bar lives inside each card so overflow:hidden clips it to the rounded corners */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    {
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      height: 4,
+                      backgroundColor: '#9CA3AF',
+                    },
+                    progressBarStyle,
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Benefit icons strip */}
+      <View
+        style={{
+          marginTop: 14,
+          marginHorizontal: 14,
+          flexDirection: 'row',
+          backgroundColor: '#FFFFFF',
+          borderRadius: 20,
+          borderWidth: 1,
+          borderColor: '#F0F0F0',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 2,
+          overflow: 'hidden',
+        }}
+      >
+        {[
+          { icon: 'shield-checkmark-outline', label: 'איכות\nמקצועית' },
+          { icon: 'pricetag-outline',          label: 'מחירים\nמשתלמים' },
+          { icon: 'ribbon-outline',            label: 'מוצרים\nמובילים' },
+          { icon: 'car-outline',               label: 'משלוח מהיר\nעד הבית' },
+        ].map((item, index, arr) => (
+          <View
+            key={item.icon}
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 16,
+              paddingHorizontal: 4,
+              borderRightWidth: index < arr.length - 1 ? 1 : 0,
+              borderRightColor: '#F0F0F0',
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: '#F8F8F8',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 8,
+              }}
+            >
+              <Ionicons name={item.icon as any} size={20} color="#555555" />
+            </View>
+            <Text
+              style={{
+                fontSize: 10.5,
+                fontWeight: '600',
+                color: '#555555',
+                textAlign: 'center',
+                lineHeight: 14.5,
+                letterSpacing: 0.1,
+              }}
+            >
+              {item.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** שלושה כפתורים בשורה — סדר ויזואלי (ימין→שמאל): מבצעים · נמכרים · חדשים */
+const HOME_SEGMENT_ITEMS = [
+  { id: 'sale' as const, name: 'המבצעים שלנו' },
+  { id: 'recommended' as const, name: 'הכי נמכרים' },
+  { id: 'new' as const, name: 'הכי חדשים' },
+] as const;
+
+const HOME_HIGHLIGHT_HEADLINES: Record<
+  'recommended' | 'sale' | 'new',
+  { title: string; subtitle: string }
+> = {
+  sale: {
+    title: 'המבצעים שלנו',
+    subtitle: 'הנחות ומחירים מיוחדים — עודכנו עכשיו',
+  },
+  recommended: {
+    title: 'הכי נמכרים',
+    subtitle: 'מה שהכי אוהבים אצלנו כרגע',
+  },
+  new: {
+    title: 'הכי חדשים',
+    subtitle: 'חידושים שהגיעו למדף לאחרונה',
+  },
+};
+
+function HomeHighlightTabsStrip({
+  homeTab,
+  onTabChange,
+}: {
+  homeTab: 'recommended' | 'sale' | 'new';
+  onTabChange: (tab: 'recommended' | 'sale' | 'new') => void;
+}) {
+  const { title, subtitle } = HOME_HIGHLIGHT_HEADLINES[homeTab];
+
+  return (
+    <View style={{ width: '100%', gap: 20 }}>
+      <View style={{ alignItems: 'center', paddingHorizontal: 4 }}>
+        <Text
+          style={{
+            color: '#111827',
+            fontSize: 22,
+            fontWeight: '900',
+            textAlign: 'center',
+            letterSpacing: 0.2,
+          }}
+        >
+          {title}
+        </Text>
+        <Text
+          style={{
+            color: '#9CA3AF',
+            fontSize: 13,
+            fontWeight: '600',
+            textAlign: 'center',
+            marginTop: 6,
+            lineHeight: 19,
+            paddingHorizontal: 8,
+          }}
+        >
+          {subtitle}
+        </Text>
+      </View>
+
+      <View
+        style={{
+          width: '100%',
+          flexDirection: 'row-reverse',
+          direction: 'ltr',
+          gap: 6,
+          alignItems: 'stretch',
+        }}
+      >
+        {HOME_SEGMENT_ITEMS.map((item) => {
+          const isSelected = homeTab === item.id;
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isSelected }}
+              onPress={() => onTabChange(item.id)}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {({ pressed }) => (
+                <View
+                  style={{
+                    minHeight: 36,
+                    flexGrow: 1,
+                    paddingVertical: 7,
+                    paddingHorizontal: 6,
+                    borderRadius: 999,
+                    overflow: 'visible',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: isSelected ? '#000000' : '#FFFFFF',
+                    borderWidth: isSelected ? 0 : 1,
+                    borderColor: isSelected ? 'transparent' : '#E5E7EB',
+                    opacity: pressed ? 0.92 : 1,
+                    ...storeProductCardShadowStyle,
+                    shadowColor: '#0F172A',
+                    shadowOpacity: isSelected ? 0.28 : 0.2,
+                    shadowRadius: isSelected ? 14 : 12,
+                    shadowOffset: { width: 0, height: isSelected ? 5 : 4 },
+                    elevation: isSelected ? 8 : 6,
+                  }}
+                >
+                  <Text
+                    numberOfLines={2}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.78}
+                    style={{
+                      fontSize: 11,
+                      lineHeight: 14,
+                      fontWeight: isSelected ? '700' : '600',
+                      letterSpacing: 0.15,
+                      color: isSelected ? '#FFFFFF' : '#374151',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {item.name}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/** Bento: חוזר 2 → 3 → 2 (בלי שורת full-width).
+ * בשורות עם 2 כרטיסים — אחד צר (~40%) ואחד רחב (~60%); השורה השנייה במחזור משקפת.
+ */
+const BENTO_PATTERN = [2, 3, 2] as const;
+
+/** גובה תמונה לפי גודל הכרטיס */
+const HOME_CATEGORY_IMG_H_PAIR  = 156;
+const HOME_CATEGORY_IMG_H_THIRD = 118;
+/** גובה אזור גרדיאנט שחור בתחתית הכרטיס */
+const HOME_CATEGORY_GRADIENT_MAX_RATIO = 0.6;
+
+/** יחס צר/רחב בשורת 2 (כמו בהדמיה ~40% / ~60%) */
+const BENTO_PAIR_NARROW_RATIO = 0.4;
+
+/**
+ * מחלק מערך לבלוקי Bento לפי [2,3,2,2,3,2…]
+ */
+function buildBentoGroups<T>(
+  items: T[],
+): { cols: 2 | 3; items: T[] }[] {
+  const groups: { cols: 2 | 3; items: T[] }[] = [];
+  let cursor = 0;
+  let patternIndex = 0;
+  while (cursor < items.length) {
+    const cols = BENTO_PATTERN[patternIndex % BENTO_PATTERN.length];
+    const chunk = items.slice(cursor, cursor + cols);
+    groups.push({ cols, items: chunk });
+    cursor += chunk.length;
+    patternIndex++;
+  }
+  return groups;
+}
+
+/** קטגוריות בפריסת Bento — מתחת לבאנר; טאבי המבצעים/הכי נמכרים/חדשים בתחתית הדף */
+function HomeOurCategoriesSection({
+  categories,
+  mergeFromCategories,
+  coverUrlByCategoryId,
+  subcategoriesByCategory,
+  onOpenCategory,
+}: {
+  categories: StoreCategory[];
+  /** רשימת הקטגוריות המלאה מהחנות — לאיחוד imageUrl כשקיים בשורש הקולקציה אך לא בתפריט העליון */
+  mergeFromCategories: StoreCategory[];
+  /** תמונות שהושלמו מ־Shopify כשחסרה תמונה בתפריט / במטא */
+  coverUrlByCategoryId: Record<string, string>;
+  subcategoriesByCategory: Record<string, StoreSubcategory[]>;
+  onOpenCategory?: (category: {
+    id: string;
+    title: string;
+    description?: string;
+    parentTitle?: string;
+    subcategories?: StoreSubcategory[];
+  }) => void;
+}) {
+  const { width: windowWidth } = useWindowDimensions();
+  const colGap = 10;
+  const rowGap = 10;
+  const innerWidth = Math.max(0, windowWidth - 24); // pageHorizontalPadding * 2
+
+  const bentoGroups = useMemo(() => buildBentoGroups(categories), [categories]);
+
+  if (!categories.length) return null;
+
+  const narrowPairW = Math.max(0, Math.floor((innerWidth - colGap) * BENTO_PAIR_NARROW_RATIO));
+  const widePairW = Math.max(0, innerWidth - colGap - narrowPairW);
+
+  const widthEqualThird = Math.floor((innerWidth - colGap * 2) / 3);
+
+  const imgHForCols = (cols: 2 | 3) =>
+    cols === 2 ? HOME_CATEGORY_IMG_H_PAIR : HOME_CATEGORY_IMG_H_THIRD;
+
+  const isToiletriesName = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return n.includes('טואל') || n.includes('טואלי');
+  };
+  const isBundlesName = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return n.includes('מארז') && n.includes('ניקיון');
+  };
+  /** תואם גם ל־swapFragranceAndFabricForBento — כרטיס מרככי כביסה וטקסטיל */
+  const isFabricSoftenersCategory = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return (n.includes('מרככי') || n.includes('מרכך')) && (n.includes('כביסה') || n.includes('טקסטיל'));
+  };
+  /** תואם ל־swapFragranceAndFabricForBento — «מערכות בישום» */
+  const isFragranceSystemsCategory = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return n.includes('בישום');
+  };
+  /** אקססוריז / אקססוארים */
+  const isAccessoriesCategory = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return n.includes('אקססור') || n.includes('אקססואר');
+  };
+  /** עיצוב הבית */
+  const isHomeDesignCategory = (name: string) => {
+    const n = normalizeCategoryTitle(name);
+    return n.includes('עיצוב') && n.includes('בית');
+  };
+
+  /** רוחב כרטיס בשורת 2 — כאשר הזוג מכיל «טואלטיקה» + «מארזי ניקיון משתלמים» מכריחים:
+   *  מארזי ניקיון → wide, טואלטיקה → narrow */
+  const pairCardWidth = (
+    groupIndex: number,
+    itemIndex: number,
+    itemCount: number,
+    groupItems: StoreCategory[],
+  ) => {
+    if (itemCount === 1) return widePairW;
+
+    const hasToiletries = groupItems.some((c) => isToiletriesName(c.name));
+    const hasBundles = groupItems.some((c) => isBundlesName(c.name));
+    if (hasToiletries && hasBundles) {
+      const thisItem = groupItems[itemIndex]!;
+      return isToiletriesName(thisItem.name) ? narrowPairW : widePairW;
+    }
+
+    const slotInCycle = groupIndex % 3;
+    const firstTwoRow = slotInCycle === 0;
+    const secondTwoRow = slotInCycle === 2;
+    if (!firstTwoRow && !secondTwoRow) return widePairW;
+    if (firstTwoRow) {
+      return itemIndex === 0 ? widePairW : narrowPairW;
+    }
+    return itemIndex === 0 ? narrowPairW : widePairW;
+  };
+
+  return (
+    <View style={{ marginBottom: 18 }}>
+      <View style={{ alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%', paddingHorizontal: 8 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: '#E5E7EB' }} />
+          <Text
+            style={{
+              color: '#111827',
+              fontSize: 22,
+              fontWeight: '900',
+              textAlign: 'center',
+              letterSpacing: 0.2,
+            }}
+          >
+            הקטגוריות שלנו
+          </Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: '#E5E7EB' }} />
+        </View>
+        <Text
+          style={{
+            color: '#9CA3AF',
+            fontSize: 13,
+            fontWeight: '600',
+            textAlign: 'center',
+            marginTop: 6,
+            lineHeight: 19,
+            paddingHorizontal: 8,
+          }}
+        >
+          גלו את המגוון המלא לפי נושאים
+        </Text>
+      </View>
+      <View style={{ gap: rowGap }}>
+        {bentoGroups.map((group, groupIndex) => {
+          const imgH = imgHForCols(group.cols);
+
+          const hasToiletriesAndBundlesPair =
+            group.cols === 2 &&
+            group.items.length === 2 &&
+            group.items.some((c) => isToiletriesName(c.name)) &&
+            group.items.some((c) => isBundlesName(c.name));
+          /** החלפת מיקום שמאל/ימין ב־row-reverse — רק לזוג הזה */
+          const rowItems = hasToiletriesAndBundlesPair
+            ? [group.items[1]!, group.items[0]!]
+            : group.items;
+
+          return (
+            <View
+              key={`bento-row-${groupIndex}`}
+              style={{
+                flexDirection: 'row-reverse',
+                justifyContent: 'flex-start',
+                flexWrap: 'nowrap',
+                gap: colGap,
+              }}
+            >
+              {rowItems.map((category, itemIndex) => {
+                const cardW =
+                  group.cols === 3
+                    ? widthEqualThird
+                    : pairCardWidth(groupIndex, itemIndex, rowItems.length, rowItems);
+                const cardTotalH = imgH;
+                const gradientZoneH = Math.min(
+                  Math.round(cardTotalH * HOME_CATEGORY_GRADIENT_MAX_RATIO),
+                  100,
+                );
+
+                const coverUri =
+                  category.imageUrl ??
+                  mergeFromCategories.find((c) => c.id === category.id)?.imageUrl ??
+                  coverUrlByCategoryId[category.id];
+
+                const useLocalFabricCover = isFabricSoftenersCategory(category.name);
+                const useLocalFragranceCover = isFragranceSystemsCategory(category.name);
+                const useLocalAccessoriesCover = isAccessoriesCategory(category.name);
+                const useLocalHomeDesignCover = isHomeDesignCategory(category.name);
+                const useLocalBundlesCover = isBundlesName(category.name);
+
+                return (
+                  <Pressable
+                    key={category.id}
+                    onPress={() =>
+                      onOpenCategory?.({
+                        id: category.id,
+                        title: category.name,
+                        description: category.subtitle,
+                        subcategories: subcategoriesByCategory[category.id],
+                      })
+                    }
+                    style={({ pressed }) => ({
+                      width: cardW,
+                      height: cardTotalH,
+                      opacity: pressed ? 0.88 : 1,
+                    })}
+                  >
+                    <View
+                      style={{
+                        width: cardW,
+                        height: cardTotalH,
+                        borderRadius: 18,
+                        ...storeProductCardShadowStyle,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: cardW,
+                          height: cardTotalH,
+                          borderRadius: 18,
+                          overflow: 'hidden',
+                          backgroundColor: '#F0F2F5',
+                        }}
+                      >
+                        {useLocalFabricCover ? (
+                          <Image
+                            source={require('../../../assets/kvisa1.png')}
+                            style={{ width: cardW, height: cardTotalH }}
+                            resizeMode="cover"
+                            accessibilityLabel={category.name}
+                          />
+                        ) : useLocalFragranceCover ? (
+                          <Image
+                            source={require('../../../assets/bisom.png')}
+                            style={{ width: cardW, height: cardTotalH }}
+                            resizeMode="cover"
+                            accessibilityLabel={category.name}
+                          />
+                        ) : useLocalAccessoriesCover ? (
+                          <Image
+                            source={require('../../../assets/exxsorie.png')}
+                            style={{ width: cardW, height: cardTotalH }}
+                            resizeMode="cover"
+                            accessibilityLabel={category.name}
+                          />
+                        ) : useLocalHomeDesignCover ? (
+                          <Image
+                            source={require('../../../assets/homedesing.png')}
+                            style={{ width: cardW, height: cardTotalH }}
+                            resizeMode="cover"
+                            accessibilityLabel={category.name}
+                          />
+                        ) : useLocalBundlesCover ? (
+                          <Image
+                            source={require('../../../assets/marazim2.png')}
+                            style={{ width: cardW, height: cardTotalH }}
+                            resizeMode="cover"
+                            accessibilityLabel={category.name}
+                          />
+                        ) : coverUri ? (
+                          <Image
+                            source={{ uri: coverUri }}
+                            style={{ width: cardW, height: cardTotalH }}
+                            resizeMode="cover"
+                            accessibilityLabel={category.name}
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: cardW,
+                              height: cardTotalH,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: group.cols === 2 ? 28 : 20,
+                                fontWeight: '900',
+                                color: '#BCC3CE',
+                                writingDirection: 'rtl',
+                              }}
+                            >
+                              {getCategoryAvatarLabel(category.name)}
+                            </Text>
+                          </View>
+                        )}
+
+                        <LinearGradient
+                          pointerEvents="none"
+                          colors={[
+                            'rgba(0,0,0,0)',
+                            'rgba(0,0,0,0.45)',
+                            'rgba(0,0,0,0.78)',
+                          ]}
+                          locations={[0, 0.5, 1]}
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: gradientZoneH,
+                          }}
+                        />
+
+                        <View
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            paddingHorizontal: group.cols === 3 ? 8 : 11,
+                            paddingBottom: 10,
+                            paddingTop: 6,
+                          }}
+                        >
+                          <Text
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                            style={{
+                              color: '#FFFFFF',
+                              fontSize: group.cols === 3 ? 11 : 13,
+                              lineHeight: group.cols === 3 ? 15 : 18,
+                              fontWeight: '800',
+                              textAlign: 'right',
+                              writingDirection: 'rtl',
+                              letterSpacing: 0.2,
+                            }}
+                          >
+                            {category.name}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/** חברות נבחרות — עיגולים אופקיים (סטוריז) מתחת ל«הקטגוריות שלנו» */
+function HomeSelectedBrandsStoryStrip({
+  items,
+  previewUrls,
+  parentTitle,
+  subcategoriesByCategoryId,
+  onOpenCategory,
+  edgeBleed = STORE_HOME_SCROLL_PADDING_H,
+}: {
+  items: StoreSubcategory[];
+  previewUrls: Record<string, string | undefined>;
+  parentTitle: string;
+  subcategoriesByCategoryId: Record<string, StoreSubcategory[]>;
+  /** יושם כ־marginHorizontal שלילי על הקרוסלה כדי שתגיע עד קצה המסך (שווה ל־padding האופקי של העטיפה) */
+  edgeBleed?: number;
+  onOpenCategory?: (category: {
+    id: string;
+    title: string;
+    description?: string;
+    parentTitle?: string;
+    subcategories?: StoreSubcategory[];
+  }) => void;
+}) {
+  if (!items.length) return null;
+
+  return (
+    <View style={{ marginBottom: 8 }}>
+      <View style={{ alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 }}>
+        <Text
+          style={{
+            color: '#111827',
+            fontSize: 22,
+            fontWeight: '900',
+            textAlign: 'center',
+            letterSpacing: 0.2,
+          }}
+        >
+          חברות נבחרות
+        </Text>
+        <Text
+          style={{
+            color: '#9CA3AF',
+            fontSize: 13,
+            fontWeight: '600',
+            textAlign: 'center',
+            marginTop: 6,
+            lineHeight: 19,
+            paddingHorizontal: 8,
+          }}
+        >
+          לחצו על מותג כדי לצפות במוצרים
+        </Text>
+      </View>
+      <View style={{ marginHorizontal: edgeBleed ? -edgeBleed : 0 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          /** RTL: גלילה וסדר מימין לשמאל (גם כשהמערכת ב־LTR) */
+          style={{ direction: 'rtl' }}
+          contentContainerStyle={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 2,
+            paddingHorizontal: 0,
+            paddingBottom: 4,
+          }}
+        >
+        {items.map((sub) => {
+          const bundledOverrideUri = resolveFeaturedBrandPreviewUri(sub.title);
+          const previewUri = bundledOverrideUri ?? previewUrls[sub.id] ?? sub.imageUrl ?? undefined;
+          const displayTitle = resolveSubcategoryDisplayTitle(sub.title);
+          return (
+            <Pressable
+              key={sub.id}
+              onPress={() =>
+                onOpenCategory?.({
+                  id: sub.id,
+                  title: displayTitle,
+                  description: sub.description,
+                  parentTitle,
+                  subcategories: subcategoriesByCategoryId[sub.id] ?? [],
+                })
+              }
+              style={({ pressed }) => ({ opacity: pressed ? 0.88 : 1 })}
+            >
+              <View style={{ alignItems: 'center', gap: 6, width: 86 }}>
+                <View
+                  style={{
+                    width: 82,
+                    height: 82,
+                    borderRadius: 41,
+                    padding: 3,
+                    backgroundColor: '#FFFFFF',
+                    borderWidth: 2,
+                    borderColor: '#E8ECF2',
+                  }}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      borderRadius: 38,
+                      overflow: 'hidden',
+                      backgroundColor: '#F4F6FA',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {previewUri ? (
+                      <Image
+                        source={{ uri: previewUri }}
+                        resizeMode="cover"
+                        accessibilityLabel={displayTitle}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    ) : (
+                      <Text style={{ color: '#6B7280', fontSize: 19, fontWeight: '800' }}>
+                        {getCategoryAvatarLabel(displayTitle)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    color: '#374151',
+                    fontWeight: '700',
+                    fontSize: 12,
+                    lineHeight: 15,
+                    textAlign: 'center',
+                    writingDirection: 'rtl',
+                    maxWidth: 86,
+                  }}
+                >
+                  {displayTitle}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
 export function StoreHomeScreen({
   onProfilePress,
   onFavoritesPress,
@@ -1577,23 +2633,44 @@ export function StoreHomeScreen({
 }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { width: windowWidth } = useWindowDimensions();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([{ id: 'all', name: 'כל המוצרים' }]);
   const [menuItems, setMenuItems] = useState<ShopifyMenuItem[]>([]);
-  const [categoryStoryImages, setCategoryStoryImages] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [bundleProducts, setBundleProducts] = useState<StoreProduct[]>([]);
+  const [bundlesLoading, setBundlesLoading] = useState(false);
+  const [homeTab, setHomeTab] = useState<'recommended' | 'sale' | 'new'>('recommended');
+  const [homeTabProducts, setHomeTabProducts] = useState<Record<'recommended' | 'sale' | 'new', StoreProduct[]>>({
+    recommended: [],
+    sale: [],
+    new: [],
+  });
+  const [homeTabLoading, setHomeTabLoading] = useState(false);
+  /** כיסויי תמונה לקטגוריות (השלמה מ־API כשאין image בתפריט) */
+  const [homeCategoryCoverUrls, setHomeCategoryCoverUrls] = useState<Record<string, string>>({});
   const [selectedHomeSubcategoryId, setSelectedHomeSubcategoryId] = useState<string>(STORE_CATEGORY_ALL_SUBS_ID);
   const [homeSubcategoryPreviewUrls, setHomeSubcategoryPreviewUrls] = useState<Record<string, string | undefined>>({});
+  /** תתי־קטגוריות עם מוצר בלבד (null = בודקים מול Shopify) */
+  const [filteredHomeDirectSubcategories, setFilteredHomeDirectSubcategories] = useState<StoreSubcategory[] | null>(null);
+  const [brandsStripPreviewUrls, setBrandsStripPreviewUrls] = useState<Record<string, string | undefined>>({});
+  /** כשמוגדר handle קבוע והפריט לא נמצא בתפריט — כותרת/תמונה מ־`collection` ב־Storefront */
+  const [selectedBrandsApiFallback, setSelectedBrandsApiFallback] = useState<{
+    handle: string;
+    title: string;
+    description: string;
+    imageUrl: string | null;
+  } | null>(null);
   const [query, setQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [ocdPlusSubscribeSheetOpen, setOcdPlusSubscribeSheetOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const categoryTabsRef = useRef<ScrollView | null>(null);
   const homeSubcategoryTabsRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
   const [activePrimaryTab, setActivePrimaryTab] = useState<StoreMainTabId>('home');
@@ -1664,6 +2741,62 @@ export function StoreHomeScreen({
     };
   }, []);
 
+  // ─── Load bundles collection ───────────────────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    setBundlesLoading(true);
+    fetchCollectionProducts(BUNDLES_COLLECTION_HANDLE, 10)
+      .then((products) => {
+        if (!active) return;
+        setBundleProducts(products.map((p, i) => toStoreProduct(p, i, 'מארז ניקיון', BUNDLES_COLLECTION_HANDLE)));
+      })
+      .catch(() => {
+        if (!active) return;
+        setBundleProducts([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setBundlesLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  // ─── Load home tabs collections ────────────────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    setHomeTabLoading(true);
+    Promise.allSettled([
+      fetchProducts(HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT),
+      fetchCollectionProducts(HOME_TAB_SALE_HANDLE, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT, {
+        sortKey: HOME_TAB_SALE_COLLECTION_SORT,
+      }),
+      fetchNewestProducts(HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT),
+    ]).then(([rec, sale, newArr]) => {
+      if (!active) return;
+      setHomeTabProducts({
+        recommended: rec.status === 'fulfilled'
+          ? rec.value.map((p, i) => toStoreProduct(p, i, '', HOME_TAB_RECOMMENDED_HANDLE))
+          : [],
+        sale: sale.status === 'fulfilled'
+          ? sale.value.map((p, i) => toStoreProduct(p, i, '', HOME_TAB_SALE_HANDLE))
+          : [],
+        new: newArr.status === 'fulfilled'
+          ? newArr.value.map((p, i) => toStoreProduct(p, i, '', HOME_TAB_NEW_HANDLE))
+          : [],
+      });
+    }).finally(() => {
+      if (!active) return;
+      setHomeTabLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  // When no dedicated bundle collection is configured, fall back to the first 8 products.
+  const displayBundleProducts = useMemo(
+    () => (bundleProducts.length > 0 ? bundleProducts : allProducts.slice(0, 8)),
+    [bundleProducts, allProducts],
+  );
+
   const selectCategoryFromMenu = (categoryId: string) => {
     setSelectedCategory(categoryId);
     setMenuOpen(false);
@@ -1678,10 +2811,197 @@ export function StoreHomeScreen({
     [categories, menuItems]
   );
   const topLevelCategoryChildrenMap = useMemo(() => getTopLevelCategoryChildrenMap(menuItems), [menuItems]);
+
+  /** ברירת מחדל לפי שם בתפריט; אם הוגדר `EXPO_PUBLIC_HOME_SELECTED_BRANDS_COLLECTION_HANDLE` — רק לפי handle מה־API */
+  const selectedBrandsMenuItem = useMemo((): ShopifyMenuItem | null => {
+    if (!menuItems.length) return null;
+    if (HOME_SELECTED_BRANDS_COLLECTION_HANDLE) {
+      return findMenuItemByCollectionHandle(menuItems, HOME_SELECTED_BRANDS_COLLECTION_HANDLE);
+    }
+    return findSelectedBrandsMenuItem(menuItems);
+  }, [menuItems]);
+
+  useEffect(() => {
+    if (!HOME_SELECTED_BRANDS_COLLECTION_HANDLE) {
+      setSelectedBrandsApiFallback(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      if (menuItems.length > 0) {
+        const pinned = findMenuItemByCollectionHandle(
+          menuItems,
+          HOME_SELECTED_BRANDS_COLLECTION_HANDLE,
+        );
+        if (pinned) {
+          if (!cancelled) setSelectedBrandsApiFallback(null);
+          return;
+        }
+      }
+      try {
+        const summary = await fetchCollectionSummary(HOME_SELECTED_BRANDS_COLLECTION_HANDLE);
+        if (!cancelled) setSelectedBrandsApiFallback(summary);
+      } catch {
+        if (!cancelled) setSelectedBrandsApiFallback(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [menuItems]);
+
+  const selectedBrandsParentCategory = useMemo((): StoreCategory | null => {
+    const mi = selectedBrandsMenuItem;
+    if (mi?.collectionHandle) {
+      return {
+        id: mi.collectionHandle,
+        name: mi.title,
+        subtitle: mi.collectionDescription,
+        imageUrl: mi.collectionImageUrl ?? null,
+      };
+    }
+    /** הורה ללא קולקציה — מזהה סינתטי לסינון בנטו (לא מתנגש עם handle אמיתי) */
+    if (mi?.children?.length) {
+      return {
+        id: `menu:${mi.id}`,
+        name: mi.title,
+        subtitle: mi.collectionDescription,
+        imageUrl: mi.collectionImageUrl ?? null,
+      };
+    }
+    const fb = selectedBrandsApiFallback;
+    if (fb) {
+      return {
+        id: fb.handle,
+        name: fb.title,
+        subtitle: fb.description,
+        imageUrl: fb.imageUrl,
+      };
+    }
+    return null;
+  }, [selectedBrandsMenuItem, selectedBrandsApiFallback]);
+
+  /** סדר מותאם לרשת הקטגוריות בלבד — ללא «חברות נבחרות» אם היא מופיעה ברמת העל של הבנטו */
+  const topLevelCategoriesBento = useMemo(
+    () =>
+      swapFragranceAndFabricForBento(swapToiletriesAndBundlesForBento(topLevelCategories)).filter(
+        (c) => !selectedBrandsParentCategory || c.id !== selectedBrandsParentCategory.id,
+      ),
+    [topLevelCategories, selectedBrandsParentCategory],
+  );
+
+  const brandsStripItems = useMemo((): StoreSubcategory[] => {
+    const mi = selectedBrandsMenuItem;
+    if (!mi) {
+      const fb = selectedBrandsApiFallback;
+      if (fb && HOME_SELECTED_BRANDS_COLLECTION_HANDLE) {
+        return [{ id: fb.handle, title: fb.title, imageUrl: fb.imageUrl }];
+      }
+      return [];
+    }
+
+    if (mi.children?.length) {
+      const children = getSubcategoriesForMenuItem(mi);
+      if (children.length > 0) return children;
+    }
+
+    if (mi.collectionHandle) {
+      return [
+        {
+          id: mi.collectionHandle,
+          title: mi.title,
+          imageUrl: mi.collectionImageUrl ?? null,
+        },
+      ];
+    }
+
+    const fb = selectedBrandsApiFallback;
+    if (fb && HOME_SELECTED_BRANDS_COLLECTION_HANDLE) {
+      return [{ id: fb.handle, title: fb.title, imageUrl: fb.imageUrl }];
+    }
+    return [];
+  }, [selectedBrandsMenuItem, selectedBrandsApiFallback]);
+
+  const brandsStripListKey = useMemo(() => brandsStripItems.map((s) => s.id).join('\0'), [brandsStripItems]);
+
+  const topLevelCategoryListKey = useMemo(
+    () => topLevelCategories.map((c) => `${c.id}\0${c.imageUrl ?? ''}`).join('|'),
+    [topLevelCategories],
+  );
+
+  useEffect(() => {
+    if (!topLevelCategories.length) {
+      setHomeCategoryCoverUrls({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      await Promise.all(
+        topLevelCategories.map(async (cat) => {
+          const fromFlat = categories.find((c) => c.id === cat.id)?.imageUrl;
+          const resolved = cat.imageUrl ?? fromFlat;
+          if (resolved) {
+            next[cat.id] = resolved;
+            return;
+          }
+          try {
+            const url = await fetchCollectionImage(cat.id);
+            if (url) next[cat.id] = url;
+          } catch {
+            /* ignore */
+          }
+        }),
+      );
+      if (!cancelled) setHomeCategoryCoverUrls(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [topLevelCategoryListKey, topLevelCategories, categories]);
   const selectedCategoryDirectSubcategories = useMemo(
     () => topLevelCategoryChildrenMap[selectedCategory] ?? [],
     [selectedCategory, topLevelCategoryChildrenMap],
   );
+  const homeRawSubcategoryListKey = useMemo(
+    () => `${selectedCategory}\0${selectedCategoryDirectSubcategories.map((s) => s.id).join('\0')}`,
+    [selectedCategory, selectedCategoryDirectSubcategories],
+  );
+  const effectiveHomeDirectSubcategories = useMemo((): StoreSubcategory[] => {
+    if (selectedCategory === 'all') return [];
+    if (!selectedCategoryDirectSubcategories.length) return [];
+    if (filteredHomeDirectSubcategories === null) return [];
+    return filteredHomeDirectSubcategories;
+  }, [selectedCategory, selectedCategoryDirectSubcategories, filteredHomeDirectSubcategories]);
+
+  useLayoutEffect(() => {
+    if (selectedCategory === 'all' || !selectedCategoryDirectSubcategories.length) {
+      setFilteredHomeDirectSubcategories([]);
+    } else {
+      setFilteredHomeDirectSubcategories(null);
+    }
+  }, [selectedCategory, homeRawSubcategoryListKey, selectedCategoryDirectSubcategories]);
+
+  useEffect(() => {
+    if (selectedCategory === 'all' || !selectedCategoryDirectSubcategories.length) {
+      setFilteredHomeDirectSubcategories([]);
+      return;
+    }
+    let cancelled = false;
+    const subs = selectedCategoryDirectSubcategories;
+    void (async () => {
+      try {
+        const flags = await Promise.all(subs.map((s) => fetchCollectionHasProducts(s.id)));
+        if (!cancelled) setFilteredHomeDirectSubcategories(subs.filter((_, i) => flags[i]));
+      } catch {
+        if (!cancelled) setFilteredHomeDirectSubcategories(subs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory, homeRawSubcategoryListKey]);
+
   const selectedCategoryInfo = useMemo(
     () => categories.find((category) => category.id === selectedCategory) ?? topLevelCategories.find((category) => category.id === selectedCategory),
     [categories, selectedCategory, topLevelCategories]
@@ -1691,7 +3011,7 @@ export function StoreHomeScreen({
     [selectedCategoryInfo]
   );
   const homeSubcategoriesStripItems = useMemo((): StoreSubcategory[] => {
-    if (selectedCategory === 'all' || !selectedCategoryDirectSubcategories.length) return [];
+    if (selectedCategory === 'all' || !effectiveHomeDirectSubcategories.length) return [];
     return [
       {
         id: STORE_CATEGORY_ALL_SUBS_ID,
@@ -1699,25 +3019,26 @@ export function StoreHomeScreen({
         parentTitle: selectedCategoryName,
         imageUrl: null,
       },
-      ...selectedCategoryDirectSubcategories,
+      ...effectiveHomeDirectSubcategories,
     ];
-  }, [selectedCategory, selectedCategoryDirectSubcategories, selectedCategoryName]);
+  }, [selectedCategory, effectiveHomeDirectSubcategories, selectedCategoryName]);
   const homeSubcategoryListKey = useMemo(
     () =>
-      `${selectedCategory}\0${STORE_CATEGORY_ALL_SUBS_ID}\0${selectedCategoryDirectSubcategories.map((s) => s.id).join('\0')}`,
-    [selectedCategory, selectedCategoryDirectSubcategories],
+      `${selectedCategory}\0${STORE_CATEGORY_ALL_SUBS_ID}\0${effectiveHomeDirectSubcategories.map((s) => s.id).join('\0')}`,
+    [selectedCategory, effectiveHomeDirectSubcategories],
   );
-  const categoryPreviewProducts = useMemo(
-    () => (selectedCategory === 'all' ? [] : visibleProducts.slice(0, STORE_HOME_CATEGORY_PREVIEW_LIMIT)),
-    [selectedCategory, visibleProducts]
-  );
+  const homeHighlightProducts = useMemo(() => {
+    const list = homeTabProducts[homeTab];
+    if (list.length > 0) return list.slice(0, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT);
+    return allProducts.slice(0, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT);
+  }, [homeTab, homeTabProducts, allProducts]);
 
   useEffect(() => {
     setSelectedHomeSubcategoryId(STORE_CATEGORY_ALL_SUBS_ID);
   }, [selectedCategory]);
 
   useEffect(() => {
-    if (selectedCategory === 'all' || !selectedCategoryDirectSubcategories.length) {
+    if (selectedCategory === 'all' || !effectiveHomeDirectSubcategories.length) {
       setHomeSubcategoryPreviewUrls({});
       return;
     }
@@ -1727,7 +3048,7 @@ export function StoreHomeScreen({
     void (async () => {
       const next: Record<string, string | undefined> = {};
       await Promise.all(
-        selectedCategoryDirectSubcategories.map(async (sub) => {
+        effectiveHomeDirectSubcategories.map(async (sub) => {
           if (sub.imageUrl) {
             next[sub.id] = sub.imageUrl;
             return;
@@ -1740,9 +3061,13 @@ export function StoreHomeScreen({
           }
         }),
       );
+      for (const sub of effectiveHomeDirectSubcategories) {
+        const overrideUri = resolveFeaturedBrandPreviewUri(sub.title);
+        if (overrideUri) next[sub.id] = overrideUri;
+      }
       if (!cancelled) {
         let allPreview: string | undefined;
-        for (const sub of selectedCategoryDirectSubcategories) {
+        for (const sub of effectiveHomeDirectSubcategories) {
           const u = next[sub.id];
           if (u) { allPreview = u; break; }
         }
@@ -1752,7 +3077,53 @@ export function StoreHomeScreen({
     })();
 
     return () => { cancelled = true; };
-  }, [homeSubcategoryListKey, selectedCategory, selectedCategoryDirectSubcategories]);
+  }, [homeSubcategoryListKey, selectedCategory, effectiveHomeDirectSubcategories]);
+
+  useEffect(() => {
+    if (!effectiveHomeDirectSubcategories.length) return;
+    if (
+      selectedHomeSubcategoryId !== STORE_CATEGORY_ALL_SUBS_ID &&
+      !effectiveHomeDirectSubcategories.some((s) => s.id === selectedHomeSubcategoryId)
+    ) {
+      setSelectedHomeSubcategoryId(STORE_CATEGORY_ALL_SUBS_ID);
+    }
+  }, [effectiveHomeDirectSubcategories, selectedHomeSubcategoryId]);
+
+  useEffect(() => {
+    if (!brandsStripItems.length) {
+      setBrandsStripPreviewUrls({});
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const next: Record<string, string | undefined> = {};
+      await Promise.all(
+        brandsStripItems.map(async (sub) => {
+          if (sub.imageUrl) {
+            next[sub.id] = sub.imageUrl ?? undefined;
+            return;
+          }
+          try {
+            const img = await fetchCollectionImage(sub.id);
+            next[sub.id] = img ?? undefined;
+          } catch {
+            next[sub.id] = undefined;
+          }
+        }),
+      );
+      for (const sub of brandsStripItems) {
+        const overrideUri = resolveFeaturedBrandPreviewUri(sub.title);
+        if (overrideUri) next[sub.id] = overrideUri;
+      }
+      if (!cancelled) setBrandsStripPreviewUrls(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandsStripListKey, brandsStripItems]);
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections((current) => ({
@@ -1760,13 +3131,6 @@ export function StoreHomeScreen({
       [sectionId]: !current[sectionId],
     }));
   };
-
-  useEffect(() => {
-    if (selectedCategory !== 'all') return;
-    if (!topLevelCategories.length) return;
-
-    setSelectedCategory(topLevelCategories[0].id);
-  }, [selectedCategory, topLevelCategories]);
 
   useEffect(() => {
     if (!initialTabRequestId || lastHandledInitialTabRequestIdRef.current === initialTabRequestId) {
@@ -1791,65 +3155,6 @@ export function StoreHomeScreen({
   useEffect(() => {
     let isMounted = true;
 
-    const loadCategoryStoryImages = async () => {
-      if (!topLevelCategories.length) return;
-
-      try {
-        const imageEntries = await Promise.all(
-          topLevelCategories.map(async (category) => {
-            try {
-              const categoryProducts = await fetchCollectionProducts(category.id, 8);
-              const productsWithImages = categoryProducts.filter((product) => !!product.imageUrl);
-              const preferredTitleFragments = CATEGORY_STORY_PRODUCT_OVERRIDES[category.name] ?? [];
-
-              if (!productsWithImages.length) {
-                return [category.id, category.imageUrl ?? ''] as const;
-              }
-
-              const preferredProduct = preferredTitleFragments.length
-                ? productsWithImages.find((product) =>
-                    preferredTitleFragments.some((fragment) => product.title.includes(fragment))
-                  )
-                : undefined;
-
-              if (preferredProduct?.imageUrl) {
-                return [category.id, preferredProduct.imageUrl] as const;
-              }
-
-              const randomProduct = productsWithImages[Math.floor(Math.random() * productsWithImages.length)];
-              return [category.id, randomProduct.imageUrl ?? category.imageUrl ?? ''] as const;
-            } catch {
-              return [category.id, category.imageUrl ?? ''] as const;
-            }
-          })
-        );
-
-        if (!isMounted) return;
-
-        setCategoryStoryImages(
-          imageEntries.reduce<Record<string, string>>((acc, [categoryId, imageUrl]) => {
-            if (imageUrl) {
-              acc[categoryId] = imageUrl;
-            }
-            return acc;
-          }, {})
-        );
-      } catch {
-        if (!isMounted) return;
-        setCategoryStoryImages({});
-      }
-    };
-
-    loadCategoryStoryImages();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [topLevelCategories]);
-
-  useEffect(() => {
-    let isMounted = true;
-
     const loadCategoryProducts = async () => {
       const normalizedQuery = query.trim().toLowerCase();
 
@@ -1870,39 +3175,11 @@ export function StoreHomeScreen({
         setCategoryLoading(true);
         setError(null);
 
-        const subs = topLevelCategoryChildrenMap[selectedCategory] ?? [];
-        let mappedProducts: StoreProduct[];
-
-        if (subs.length) {
-          if (selectedHomeSubcategoryId === STORE_CATEGORY_ALL_SUBS_ID) {
-            const handles = [selectedCategory, ...subs.map((s) => s.id)];
-            const buckets = await Promise.all(handles.map((h) => fetchCollectionProducts(h)));
-            if (!isMounted) return;
-            const byId = new Map<string, ShopifyProduct>();
-            for (const bucket of buckets) {
-              for (const p of bucket) {
-                if (!byId.has(p.id)) byId.set(p.id, p);
-              }
-            }
-            const merged = Array.from(byId.values());
-            mappedProducts = merged.map((product, index) =>
-              toStoreProduct(product, index, selectedCategoryName, selectedCategory),
-            );
-          } else {
-            const collectionProducts = await fetchCollectionProducts(selectedHomeSubcategoryId);
-            if (!isMounted) return;
-            const subTitle = subs.find((s) => s.id === selectedHomeSubcategoryId)?.title ?? selectedCategoryName;
-            mappedProducts = collectionProducts.map((product, index) =>
-              toStoreProduct(product, index, subTitle, selectedHomeSubcategoryId),
-            );
-          }
-        } else {
-          const collectionProducts = await fetchCollectionProducts(selectedCategory);
-          if (!isMounted) return;
-          mappedProducts = collectionProducts.map((product, index) =>
-            toStoreProduct(product, index, selectedCategoryName, selectedCategory),
-          );
-        }
+        const collectionProducts = await fetchCollectionProducts(selectedCategory, STORE_HOME_CATEGORY_PREVIEW_LIMIT);
+        if (!isMounted) return;
+        const mappedProducts: StoreProduct[] = collectionProducts.map((product, index) =>
+          toStoreProduct(product, index, selectedCategoryName, selectedCategory),
+        );
 
         if (!isMounted) return;
 
@@ -1952,7 +3229,7 @@ export function StoreHomeScreen({
       setMenuOpen(false);
       setActivePrimaryTab('home');
       searchInputRef.current?.blur();
-      setSelectedCategory(topLevelCategories[0]?.id ?? 'all');
+      setSelectedCategory('all');
       return;
     }
 
@@ -2051,6 +3328,19 @@ export function StoreHomeScreen({
                       <Pressable
                         onPress={() => {
                           if (isDirectItem && section.categoryId) {
+                            if (section.categoryId !== 'all' && onOpenCategory) {
+                              setMenuOpen(false);
+                              const cat =
+                                categories.find((c) => c.id === section.categoryId) ??
+                                topLevelCategories.find((c) => c.id === section.categoryId);
+                              onOpenCategory({
+                                id: section.categoryId,
+                                title: cat?.name ?? section.title,
+                                description: cat?.subtitle,
+                                subcategories: topLevelCategoryChildrenMap[section.categoryId],
+                              });
+                              return;
+                            }
                             selectCategoryFromMenu(section.categoryId);
                             return;
                           }
@@ -2157,77 +3447,15 @@ export function StoreHomeScreen({
           </Pressable>
         </Modal>
 
-        {/* Hero fixed outside main vertical ScrollView — avoids iOS bounce gap between status bar and header */}
-        <View style={{ backgroundColor: '#F5F5F5' }}>
-          <View
-            style={{
-              backgroundColor: colors.adminHeader,
-              paddingTop: insets.top,
-              borderBottomLeftRadius: 28,
-              borderBottomRightRadius: 28,
-              overflow: 'hidden',
-            }}
-          >
-            <View
-              style={{
-                position: 'relative',
-                paddingTop: 20,
-                paddingBottom: 26,
-                minHeight: 96,
-                justifyContent: 'center',
-              }}
-            >
-              <View
-                style={{
-                  position: 'absolute',
-                  right: 24,
-                  width: '50%',
-                  top: 0,
-                  bottom: 0,
-                  justifyContent: 'center',
-                  alignItems: 'stretch',
-                }}
-              >
-                <Text
-                  style={{
-                    width: '100%',
-                    fontSize: 13,
-                    color: 'rgba(255,255,255,0.55)',
-                    textAlign: 'right',
-                    letterSpacing: 0.2,
-                  }}
-                >
-                  {homeHeaderGreeting},
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    width: '100%',
-                    fontSize: 22,
-                    fontWeight: '700',
-                    color: '#FFFFFF',
-                    textAlign: 'right',
-                    letterSpacing: -0.3,
-                  }}
-                >
-                  {user?.name ?? 'גלו את המבחר'}
-                </Text>
-              </View>
-              <View
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-                pointerEvents="none"
-              >
-                <StoreOcdLogoMark fill="#FFFFFF" height={72} />
-              </View>
-            </View>
+        {/* Logo bar */}
+        <View style={{ backgroundColor: '#F5F5F5', paddingTop: insets.top }}>
+          <View style={{ justifyContent: 'center', alignItems: 'center', paddingVertical: 10 }}>
+            <Image
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              source={require('../../../assets/logopng/OCDLOGO-04.png')}
+              style={{ width: 150, height: 56 }}
+              resizeMode="contain"
+            />
           </View>
         </View>
 
@@ -2243,268 +3471,75 @@ export function StoreHomeScreen({
             ? { contentInsetAdjustmentBehavior: 'never' as const }
             : {})}
         >
+          {/* Search bar — above banner carousel */}
+          <View
+            style={{
+              paddingHorizontal: STORE_HOME_SCROLL_PADDING_H,
+              paddingTop: 8,
+              paddingBottom: 10,
+              backgroundColor: '#F5F5F5',
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: '#E8ECF2',
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
+              <TextInput
+                ref={searchInputRef}
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  if (text.trim()) {
+                    setActivePrimaryTab('search');
+                  }
+                }}
+                placeholder="מה אתם רוצים לחפש?"
+                placeholderTextColor="#B7BDC8"
+                style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
+              />
+            </View>
+          </View>
+
+          {/* Banner carousel */}
+          <HomeBannerCarousel screenWidth={windowWidth} />
+
           <View
             style={{
               flexGrow: 1,
               gap: 6,
-              paddingHorizontal: 12,
+              paddingHorizontal: STORE_HOME_SCROLL_PADDING_H,
               paddingTop: 12,
               backgroundColor: '#F5F5F5',
             }}
           >
-            <ScrollView
-              ref={categoryTabsRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              onContentSizeChange={() => {
-                requestAnimationFrame(() => {
-                  categoryTabsRef.current?.scrollToEnd({ animated: false });
-                });
-              }}
-              contentContainerStyle={{
-                flexDirection: 'row-reverse',
-                justifyContent: 'flex-start',
-                alignItems: 'flex-start',
-                gap: 20,
-                paddingHorizontal: 4,
-                paddingBottom: 0,
-              }}
-            >
-              {topLevelCategories.map((category) => {
-                const isSelected = selectedCategory === category.id;
-                const storyImageUrl = categoryStoryImages[category.id] || category.imageUrl;
+            {!loading && topLevelCategories.length > 0 ? (
+              <HomeOurCategoriesSection
+                categories={topLevelCategoriesBento}
+                mergeFromCategories={categories}
+                coverUrlByCategoryId={homeCategoryCoverUrls}
+                subcategoriesByCategory={topLevelCategoryChildrenMap}
+                onOpenCategory={onOpenCategory}
+              />
+            ) : null}
 
-                return (
-                  <Pressable key={category.id} onPress={() => setSelectedCategory(category.id)}>
-                    <View style={{ alignItems: 'center', gap: 4, width: 82 }}>
-                      <View
-                        style={{
-                          width: 70,
-                          height: 70,
-                          borderRadius: 35,
-                          padding: 3,
-                          backgroundColor: isSelected ? '#111827' : '#FFFFFF',
-                          borderWidth: 1,
-                          borderColor: isSelected ? '#111827' : '#E7ECF3',
-                        }}
-                      >
-                        <View
-                          style={{
-                            flex: 1,
-                            borderRadius: 32,
-                            overflow: 'hidden',
-                            backgroundColor: '#F4F6FA',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {storyImageUrl ? (
-                            <Image
-                              source={{ uri: storyImageUrl }}
-                              resizeMode="cover"
-                              accessibilityLabel={category.name}
-                              style={{ width: '100%', height: '100%' }}
-                            />
-                          ) : (
-                            <Text style={{ color: '#6B7280', fontSize: 18, fontWeight: '800' }}>
-                              {getCategoryAvatarLabel(category.name)}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                      <Text
-                        numberOfLines={2}
-                        style={{
-                          color: isSelected ? '#111827' : '#9CA3AF',
-                          fontWeight: isSelected ? '900' : '600',
-                          fontSize: 12,
-                          lineHeight: 15,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {category.name}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <StoreSubcategoryCircleStrip
-              items={homeSubcategoriesStripItems}
-              selectedId={selectedHomeSubcategoryId}
-              onSelect={setSelectedHomeSubcategoryId}
-              previewUrls={homeSubcategoryPreviewUrls}
-              scrollViewRef={homeSubcategoryTabsRef}
-              scrollToEndOnContentSize
-            />
-
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                marginTop: -2,
-                marginBottom: 16,
-              }}
-            >
-              <Pressable
-                onPress={() => setMenuOpen(true)}
-                accessibilityRole="button"
-                accessibilityLabel="קטגוריות"
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: '#FFFFFF',
-                  borderWidth: 1,
-                  borderColor: '#E8ECF2',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="menu-outline" size={22} color="#111827" />
-              </Pressable>
-
-              <View
-                style={{
-                  flex: 1,
-                  backgroundColor: '#F7F8FB',
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: '#EEF0F3',
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  flexDirection: 'row-reverse',
-                  alignItems: 'center',
-                }}
-              >
-                <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
-                <TextInput
-                  ref={searchInputRef}
-                  value={query}
-                  onChangeText={(text) => {
-                    setQuery(text);
-                    if (text.trim()) {
-                      setActivePrimaryTab('search');
-                    }
-                  }}
-                  placeholder="מה אתם רוצים לחפש?"
-                  placeholderTextColor="#B7BDC8"
-                  style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13 }}
-                />
-              </View>
-            </View>
-
-            {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
-
-            {selectedCategory !== 'all' && !categoryLoading && !!categoryPreviewProducts.length && (
-              <View style={{ gap: 14 }}>
-                <View
-                  style={{
-                    flexDirection: 'row-reverse',
-                    flexWrap: 'wrap',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                  }}
-                >
-                  {categoryPreviewProducts.map((product) => (
-                    <View
-                      key={`preview-${product.id}`}
-                      style={{
-                        width: '48%',
-                        borderRadius: 18,
-                        ...storeProductCardShadowStyle,
-                      }}
-                    >
-                      <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                        <Pressable onPress={() => onProductPress?.(product.handle)}>
-                          {/* Image area */}
-                          <View
-                            style={{
-                              height: 160,
-                              backgroundColor: '#F4F6FA',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            <ProductImage product={product} height={160} bottomRadius={0} />
-
-                            <StoreProductCardQuantityControl product={product} closedSize={44} />
-
-                            {/* Badge — top-right */}
-                            {!!product.badge && (
-                              <View
-                                style={{
-                                  position: 'absolute',
-                                  top: 10,
-                                  right: 10,
-                                  backgroundColor: '#111827',
-                                  borderRadius: 999,
-                                  paddingHorizontal: 8,
-                                  paddingVertical: 4,
-                                  zIndex: 1,
-                                }}
-                              >
-                                <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                                  {product.badge}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        </Pressable>
-
-                        <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }}>
-                          <OcdPlusProductPriceBlock
-                            regularPrice={product.price}
-                            isOcdPlusSubscriber={isOcdPlusSubscriber}
-                            onSubscribePress={onOcdPlusSubscribePress}
-                            titleSize={16}
-                          />
-                        </View>
-
-                        <Pressable onPress={() => onProductPress?.(product.handle)}>
-                          <View style={{ paddingHorizontal: 12, paddingTop: 0, paddingBottom: 12 }}>
-                            <Text
-                              numberOfLines={2}
-                              style={{
-                                color: '#111827',
-                                fontSize: 13,
-                                lineHeight: 18,
-                                fontWeight: '700',
-                                textAlign: 'right',
-                              }}
-                            >
-                              {product.name}
-                            </Text>
-                            {!!product.subtitle && (
-                              <Text
-                                numberOfLines={1}
-                                style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
-                              >
-                                {product.subtitle}
-                              </Text>
-                            )}
-                          </View>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {selectedCategory !== 'all' && !loading && !categoryLoading && !categoryPreviewProducts.length && (
-              <View
-                style={{
-                  backgroundColor: '#F8F8F8',
-                  borderRadius: 16,
-                  padding: 16,
-                  alignItems: 'flex-end',
-                }}
-              >
-                <Text style={{ color: '#111827', fontWeight: '800' }}>לא נמצאו מוצרים בקטגוריה הזו</Text>
-              </View>
-            )}
+            {!loading && brandsStripItems.length > 0 && selectedBrandsParentCategory ? (
+              <HomeSelectedBrandsStoryStrip
+                items={brandsStripItems}
+                previewUrls={brandsStripPreviewUrls}
+                parentTitle={selectedBrandsParentCategory.name}
+                subcategoriesByCategoryId={topLevelCategoryChildrenMap}
+                onOpenCategory={onOpenCategory}
+              />
+            ) : null}
 
             {(loading || categoryLoading) && (
               <View
@@ -2727,6 +3762,456 @@ export function StoreHomeScreen({
               </>
             )}
 
+            {/* ─── OCD+ promotional banner ── */}
+            {!loading && (() => {
+              /* Match parent column padding (12); cardW must use content width or layout overflows horizontally. */
+              const contentHorizontalPad = 12;
+              const bannerRadius = 20;
+              const cardW = windowWidth - contentHorizontalPad * 2;
+              const cardH = Math.round(cardW * (948 / 1659));
+              return (
+                <View
+                  style={{
+                    paddingTop: 8,
+                    paddingBottom: 16,
+                    alignItems: 'center',
+                  }}
+                >
+                  {!isOcdPlusSubscriber && (
+                    <View style={{ width: '100%', alignItems: 'center', marginBottom: 12, paddingHorizontal: 8 }}>
+                      <Text
+                        style={{
+                          color: '#111827',
+                          fontSize: 22,
+                          fontWeight: '900',
+                          textAlign: 'center',
+                          letterSpacing: 0.2,
+                        }}
+                      >
+                        עדיין אין לך OCD+?
+                      </Text>
+                      <Text
+                        style={{
+                          color: '#9CA3AF',
+                          fontSize: 13,
+                          fontWeight: '600',
+                          textAlign: 'center',
+                          marginTop: 6,
+                          lineHeight: 19,
+                          paddingHorizontal: 4,
+                        }}
+                      >
+                        מצטרפים היום ומקבלים הנחות על כל המוצרים שלנו
+                      </Text>
+                    </View>
+                  )}
+                  {/* Relative box: floating CTA sits half on image / half below — same idea as OcdPlusFloatingBadge on cards */}
+                  <View
+                    style={{
+                      width: cardW,
+                      position: 'relative',
+                      marginBottom: isOcdPlusSubscriber ? 0 : 28,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: cardW,
+                        borderRadius: bannerRadius,
+                        backgroundColor: '#FFFFFF',
+                        ...ocdPlusHomeBannerShadowStyle,
+                      }}
+                    >
+                      <Pressable
+                        onPress={() => {
+                          if (!isOcdPlusSubscriber) setOcdPlusSubscribeSheetOpen(true);
+                        }}
+                        style={({ pressed }) => ({
+                          borderRadius: bannerRadius,
+                          overflow: 'hidden',
+                          opacity: pressed ? 0.88 : 1,
+                        })}
+                      >
+                        <Image
+                          source={require('../../../assets/ocdplusbannernew.png')}
+                          style={{
+                            width: cardW,
+                            height: cardH,
+                            borderRadius: bannerRadius,
+                          }}
+                          resizeMode="stretch"
+                        />
+                      </Pressable>
+                    </View>
+                    <View
+                      pointerEvents="box-none"
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        alignItems: 'center',
+                        zIndex: 10,
+                        transform: [{ translateY: '50%' }],
+                      }}
+                    >
+                      <OcdPlusJoinBannerButton
+                        isSubscriber={isOcdPlusSubscriber}
+                        onPress={() => setOcdPlusSubscribeSheetOpen(true)}
+                      />
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* ─── Bundles section — visible on all home tab regardless of categories ── */}
+            {!loading && (bundlesLoading || displayBundleProducts.length > 0) && (
+              <View style={{ marginTop: 32 }}>
+                <Text
+                  style={{
+                    color: '#111827',
+                    fontSize: 22,
+                    fontWeight: '900',
+                    textAlign: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  מארזי ניקיון משתלמים
+                </Text>
+                <Text
+                  style={{
+                    color: '#9CA3AF',
+                    fontSize: 13,
+                    fontWeight: '500',
+                    textAlign: 'center',
+                    marginBottom: 20,
+                  }}
+                >
+                  הכנו לכם מארזי ניקיון שווים במיוחד
+                </Text>
+
+                {bundlesLoading ? (
+                  <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                    <ActivityIndicator color="#111827" />
+                  </View>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginHorizontal: -12 }}
+                    contentContainerStyle={{
+                      flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+                      gap: 12,
+                      paddingHorizontal: 12,
+                      paddingBottom: 40,
+                    }}
+                  >
+                    {displayBundleProducts.map((product) => (
+                      <View
+                        key={`bundle-${product.id}`}
+                        style={{
+                          width: 160,
+                          borderRadius: 18,
+                          marginBottom: 6,
+                          ...storeProductCardShadowStyle,
+                        }}
+                      >
+                        <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                          <Pressable onPress={() => onProductPress?.(product.handle)}>
+                            <View style={{ height: 148, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
+                              <ProductImage product={product} height={148} bottomRadius={0} />
+                              <StoreProductCardQuantityControl product={product} closedSize={38} />
+
+                              <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                                <FavoriteToggleButton
+                                  active={isFavorite(product.id)}
+                                  loading={isFavoritePending(product.id)}
+                                  onPress={(event) => {
+                                    event?.stopPropagation();
+                                    void toggleFavorite(favoriteInputFromStoreProduct(product));
+                                  }}
+                                  size={32}
+                                />
+                              </View>
+
+                              {!!product.badge && (
+                                <View
+                                  style={{
+                                    position: 'absolute',
+                                    top: 48,
+                                    right: 10,
+                                    backgroundColor: '#111827',
+                                    borderRadius: 999,
+                                    paddingHorizontal: 7,
+                                    paddingVertical: 3,
+                                    zIndex: 1,
+                                  }}
+                                >
+                                  <Text style={{ color: '#FFFFFF', fontSize: 8, fontWeight: '800' }}>
+                                    {product.badge}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </Pressable>
+                          <Pressable onPress={() => onProductPress?.(product.handle)}>
+                            <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: 24 }}>
+                              <View style={{ minHeight: STORE_BUNDLE_CARD_BODY_MIN_HEIGHT }}>
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <Text style={{ color: '#111827', fontSize: 14, fontWeight: '900', textAlign: 'right' }}>
+                                    {formatOcdPrice(product.price)}
+                                  </Text>
+                                  {!!product.compareAtPrice && (
+                                    <Text style={{ color: '#9CA3AF', fontSize: 11, fontWeight: '600', textDecorationLine: 'line-through' }}>
+                                      {formatOcdPrice(product.compareAtPrice)}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text
+                                  numberOfLines={2}
+                                  style={{
+                                    color: '#111827',
+                                    fontSize: 12,
+                                    lineHeight: 17,
+                                    fontWeight: '700',
+                                    textAlign: 'right',
+                                    marginTop: 3,
+                                  }}
+                                >
+                                  {product.name}
+                                </Text>
+                                {!!product.subtitle ? (
+                                  <Text
+                                    numberOfLines={1}
+                                    style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                                  >
+                                    {product.subtitle}
+                                  </Text>
+                                ) : (
+                                  <View style={{ marginTop: 2, height: 14 }} />
+                                )}
+                              </View>
+                            </View>
+                          </Pressable>
+                        </View>
+                        <View
+                          style={{
+                            position: 'absolute',
+                            bottom: -14,
+                            left: 0,
+                            right: 0,
+                            alignItems: 'center',
+                            zIndex: 10,
+                          }}
+                        >
+                          <OcdPlusFloatingBadge
+                            regularPrice={product.price}
+                            isSubscriber={isOcdPlusSubscriber}
+                            onPress={onOcdPlusSubscribePress}
+                          />
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
+            {/* טאבי המבצעים / הכי נמכרים / חדשים + גריד מוצרים — מתחת למארזי ניקיון, בתחתית התוכן */}
+            <View style={{ marginTop: 28 }}>
+              <HomeHighlightTabsStrip homeTab={homeTab} onTabChange={setHomeTab} />
+
+              {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
+
+              {homeTabLoading ? (
+                <View
+                  style={{
+                    backgroundColor: '#F8F8F8',
+                    borderRadius: 16,
+                    padding: 18,
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    marginTop: 12,
+                  }}
+                >
+                  <ActivityIndicator color="#111827" />
+                  <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים...</Text>
+                </View>
+              ) : !!homeHighlightProducts.length ? (
+                <View style={{ gap: 14, marginTop: 12 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row-reverse',
+                      flexWrap: 'wrap',
+                      alignItems: 'stretch',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    {homeHighlightProducts.map((product) => (
+                      <View
+                        key={`home-highlight-${homeTab}-${product.id}`}
+                        style={{
+                          width: '48%',
+                          alignSelf: 'stretch',
+                          marginBottom: 18,
+                          borderRadius: 18,
+                          ...storeProductCardShadowStyle,
+                        }}
+                      >
+                        <View
+                          style={{
+                            flex: 1,
+                            borderRadius: 18,
+                            overflow: 'hidden',
+                            backgroundColor: '#FFFFFF',
+                          }}
+                        >
+                          <Pressable onPress={() => onProductPress?.(product.handle)}>
+                            {/* Image area */}
+                            <View
+                              style={{
+                                height: 160,
+                                backgroundColor: '#F4F6FA',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <ProductImage product={product} height={160} bottomRadius={0} />
+
+                              <StoreProductCardQuantityControl product={product} closedSize={44} />
+
+                              {/* Favorite — כמו בעמוד קטגוריה */}
+                              <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                                <FavoriteToggleButton
+                                  active={isFavorite(product.id)}
+                                  loading={isFavoritePending(product.id)}
+                                  onPress={(event) => {
+                                    event?.stopPropagation();
+                                    void toggleFavorite(favoriteInputFromStoreProduct(product));
+                                  }}
+                                  size={32}
+                                />
+                              </View>
+
+                              {/* Badge — מתחת ללב */}
+                              {!!product.badge && (
+                                <View
+                                  style={{
+                                    position: 'absolute',
+                                    top: 48,
+                                    right: 10,
+                                    backgroundColor: '#111827',
+                                    borderRadius: 999,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 4,
+                                    zIndex: 1,
+                                  }}
+                                >
+                                  <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                                    {product.badge}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </Pressable>
+
+                          <View style={{ flex: 1, minHeight: 0 }}>
+                            <Pressable
+                              onPress={() => onProductPress?.(product.handle)}
+                              style={{ flex: 1 }}
+                            >
+                              <View
+                                style={{
+                                  flex: 1,
+                                  paddingHorizontal: 12,
+                                  paddingTop: 10,
+                                  paddingBottom: 26,
+                                  justifyContent: 'flex-start',
+                                }}
+                              >
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <Text
+                                    style={{
+                                      color: '#111827',
+                                      fontSize: 16,
+                                      fontWeight: '900',
+                                      textAlign: 'right',
+                                    }}
+                                  >
+                                    {formatOcdPrice(product.price)}
+                                  </Text>
+                                  {!!product.compareAtPrice && (
+                                    <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', textDecorationLine: 'line-through' }}>
+                                      {formatOcdPrice(product.compareAtPrice)}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text
+                                  numberOfLines={2}
+                                  style={{
+                                    color: '#111827',
+                                    fontSize: 13,
+                                    lineHeight: 18,
+                                    fontWeight: '700',
+                                    textAlign: 'right',
+                                    marginTop: 4,
+                                  }}
+                                >
+                                  {product.name}
+                                </Text>
+                                {!!product.subtitle ? (
+                                  <Text
+                                    numberOfLines={1}
+                                    style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                                  >
+                                    {product.subtitle}
+                                  </Text>
+                                ) : (
+                                  <View style={{ marginTop: 2, height: 14 }} />
+                                )}
+                              </View>
+                            </Pressable>
+                          </View>
+                        </View>
+
+                        {/* ── Floating OCD+ badge ── */}
+                        <View
+                          style={{
+                            position: 'absolute',
+                            bottom: -16,
+                            left: 0,
+                            right: 0,
+                            alignItems: 'center',
+                            zIndex: 10,
+                          }}
+                        >
+                          <OcdPlusFloatingBadge
+                            regularPrice={product.price}
+                            isSubscriber={isOcdPlusSubscriber}
+                            onPress={onOcdPlusSubscribePress}
+                          />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : !loading ? (
+                <View
+                  style={{
+                    backgroundColor: '#F8F8F8',
+                    borderRadius: 16,
+                    padding: 16,
+                    alignItems: 'flex-end',
+                    marginTop: 12,
+                  }}
+                >
+                  <Text style={{ color: '#111827', fontWeight: '800' }}>לא נמצאו מוצרים להצגה כאן כרגע</Text>
+                </View>
+              ) : null}
+            </View>
+
             {selectedCategory === 'all' && !loading && !categoryLoading && !visibleProducts.length && (
               <View
                 style={{
@@ -2742,6 +4227,11 @@ export function StoreHomeScreen({
           </View>
         </ScrollView>
         <StoreFloatingTabBar activeTab={activeBottomTab} onTabPress={handleBottomTabPress} />
+        <OcdPlusSubscribeSheet
+          visible={ocdPlusSubscribeSheetOpen}
+          onClose={() => setOcdPlusSubscribeSheetOpen(false)}
+          isSubscriber={isOcdPlusSubscriber}
+        />
       </View>
     </View>
   );
@@ -2790,19 +4280,9 @@ export function StoreCategoryScreen({
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
   const [subcategoryPreviewUrls, setSubcategoryPreviewUrls] = useState<Record<string, string | undefined>>({});
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>(STORE_CATEGORY_ALL_SUBS_ID);
-
-  const subcategoriesWithAll = useMemo((): StoreSubcategory[] => {
-    if (!subcategories?.length) return [];
-    return [
-      {
-        id: STORE_CATEGORY_ALL_SUBS_ID,
-        title: 'הכל',
-        parentTitle: categoryTitle,
-        imageUrl: null,
-      },
-      ...subcategories,
-    ];
-  }, [subcategories, categoryTitle]);
+  const [subcategoryStripOpen, setSubcategoryStripOpen] = useState(true);
+  /** תתי־קטגוריות עם מוצר בלבד; null = בודקים מול Shopify */
+  const [visibleSubcategories, setVisibleSubcategories] = useState<StoreSubcategory[] | null>(null);
 
   const subcategoryListKey = useMemo(
     () =>
@@ -2810,12 +4290,53 @@ export function StoreCategoryScreen({
     [subcategories],
   );
 
-  useEffect(() => {
+  const subcategoriesWithAll = useMemo((): StoreSubcategory[] => {
+    const rows = visibleSubcategories ?? [];
+    if (!rows.length) return [];
+    return [
+      {
+        id: STORE_CATEGORY_ALL_SUBS_ID,
+        title: 'הכל',
+        parentTitle: categoryTitle,
+        imageUrl: null,
+      },
+      ...rows,
+    ];
+  }, [visibleSubcategories, categoryTitle]);
+
+  useLayoutEffect(() => {
     setSelectedSubcategoryId(STORE_CATEGORY_ALL_SUBS_ID);
+    setSubcategoryStripOpen(true);
+    setVisibleSubcategories(null);
   }, [categoryId]);
 
   useEffect(() => {
     if (!subcategories?.length) {
+      setVisibleSubcategories([]);
+      return;
+    }
+    let cancelled = false;
+    setVisibleSubcategories(null);
+    const subs = subcategories;
+    void (async () => {
+      try {
+        const flags = await Promise.all(subs.map((s) => fetchCollectionHasProducts(s.id)));
+        if (!cancelled) setVisibleSubcategories(subs.filter((_, i) => flags[i]));
+      } catch {
+        if (!cancelled) setVisibleSubcategories(subs);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId, subcategoryListKey]);
+
+  useEffect(() => {
+    if (visibleSubcategories === null) {
+      setSubcategoryPreviewUrls({});
+      return;
+    }
+    if (!visibleSubcategories.length) {
       setSubcategoryPreviewUrls({});
       return;
     }
@@ -2825,7 +4346,7 @@ export function StoreCategoryScreen({
     void (async () => {
       const next: Record<string, string | undefined> = {};
       await Promise.all(
-        subcategories.map(async (sub) => {
+        visibleSubcategories.map(async (sub) => {
           if (sub.imageUrl) {
             next[sub.id] = sub.imageUrl;
             return;
@@ -2838,9 +4359,13 @@ export function StoreCategoryScreen({
           }
         }),
       );
+      for (const sub of visibleSubcategories) {
+        const overrideUri = resolveFeaturedBrandPreviewUri(sub.title);
+        if (overrideUri) next[sub.id] = overrideUri;
+      }
       if (!cancelled) {
         let allPreview: string | undefined;
-        for (const sub of subcategories) {
+        for (const sub of visibleSubcategories) {
           const u = next[sub.id];
           if (u) { allPreview = u; break; }
         }
@@ -2850,12 +4375,27 @@ export function StoreCategoryScreen({
     })();
 
     return () => { cancelled = true; };
-  }, [subcategoryListKey, subcategories]);
+  }, [subcategoryListKey, visibleSubcategories]);
+
+  useEffect(() => {
+    if (visibleSubcategories === null) return;
+    if (
+      selectedSubcategoryId !== STORE_CATEGORY_ALL_SUBS_ID &&
+      !visibleSubcategories.some((s) => s.id === selectedSubcategoryId)
+    ) {
+      setSelectedSubcategoryId(STORE_CATEGORY_ALL_SUBS_ID);
+    }
+  }, [visibleSubcategories, selectedSubcategoryId]);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadProducts = async () => {
+      if (visibleSubcategories === null && subcategories?.length) {
+        setLoading(true);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
@@ -2867,8 +4407,16 @@ export function StoreCategoryScreen({
           return;
         }
 
+        const subs = visibleSubcategories ?? [];
+        if (!subs.length) {
+          const collectionProducts = await fetchCollectionProducts(categoryId);
+          if (!isMounted) return;
+          setProducts(collectionProducts.map((product, index) => toStoreProduct(product, index, categoryTitle, categoryId)));
+          return;
+        }
+
         if (selectedSubcategoryId === STORE_CATEGORY_ALL_SUBS_ID) {
-          const handles = [categoryId, ...subcategories.map((s) => s.id)];
+          const handles = [categoryId, ...subs.map((s) => s.id)];
           const buckets = await Promise.all(handles.map((h) => fetchCollectionProducts(h)));
           if (!isMounted) return;
           const byId = new Map<string, ShopifyProduct>();
@@ -2903,7 +4451,7 @@ export function StoreCategoryScreen({
     return () => {
       isMounted = false;
     };
-  }, [categoryId, categoryTitle, selectedSubcategoryId, subcategories, subcategoryListKey]);
+  }, [categoryId, categoryTitle, selectedSubcategoryId, subcategories, subcategoryListKey, visibleSubcategories]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredProducts = useMemo(() => {
@@ -3064,8 +4612,8 @@ export function StoreCategoryScreen({
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
+      <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
         <Animated.View
           pointerEvents={categoryStickyInteractive ? 'box-none' : 'none'}
           style={[
@@ -3089,7 +4637,7 @@ export function StoreCategoryScreen({
         </Animated.View>
 
         <Animated.ScrollView
-          style={{ flex: 1 }}
+          style={{ flex: 1, backgroundColor: '#F5F5F5' }}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: insets.top + 4,
@@ -3102,36 +4650,78 @@ export function StoreCategoryScreen({
           <View style={{ gap: 16 }}>
             {renderCategoryHeaderRow()}
 
-            <StoreSubcategoryCircleStrip
-              items={subcategoriesWithAll}
-              selectedId={selectedSubcategoryId}
-              onSelect={setSelectedSubcategoryId}
-              previewUrls={subcategoryPreviewUrls}
-            />
-
             <View style={{ gap: 12 }}>
               <View
                 style={{
-                  backgroundColor: '#F1F5F9',
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: '#E2E8F0',
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
                   flexDirection: 'row-reverse',
                   alignItems: 'center',
+                  gap: 10,
                 }}
               >
-                <Ionicons name="search-outline" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
-                <TextInput
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="חיפוש בתוך תת הקטגוריה"
-                  placeholderTextColor="#B7BDC8"
-                  style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13, backgroundColor: 'transparent' }}
-                />
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 22,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    gap: 8,
+                    minHeight: 48,
+                  }}
+                >
+                  <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="חיפוש בתוך תת הקטגוריה"
+                    placeholderTextColor="#B7BDC8"
+                    style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13, backgroundColor: 'transparent' }}
+                  />
+                </View>
+                {subcategoriesWithAll.length > 0 ? (
+                  <Pressable
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSubcategoryStripOpen((open) => !open);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={subcategoryStripOpen ? 'הסתר תתי קטגוריה' : 'הצג תתי קטגוריה'}
+                    hitSlop={6}
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#F3F4F6',
+                      borderWidth: 1,
+                      borderColor: subcategoryStripOpen ? '#D1D5DB' : '#E8ECF2',
+                    }}
+                  >
+                    <Ionicons
+                      name="funnel-outline"
+                      size={22}
+                      color="#111827"
+                    />
+                  </Pressable>
+                ) : null}
               </View>
             </View>
+
+            {subcategoryStripOpen && subcategoriesWithAll.length > 0 ? (
+              <View style={{ marginHorizontal: -16 }}>
+                <StoreSubcategoryCircleStrip
+                  items={subcategoriesWithAll}
+                  selectedId={selectedSubcategoryId}
+                  onSelect={setSelectedSubcategoryId}
+                  previewUrls={subcategoryPreviewUrls}
+                />
+              </View>
+            ) : null}
 
           {loading && (
             <View
@@ -3169,6 +4759,7 @@ export function StoreCategoryScreen({
               style={{
                 flexDirection: 'row-reverse',
                 flexWrap: 'wrap',
+                alignItems: 'stretch',
                 justifyContent: 'space-between',
                 gap: 12,
               }}
@@ -3178,11 +4769,20 @@ export function StoreCategoryScreen({
                   key={`category-${product.id}`}
                   style={{
                     width: '48%',
+                    alignSelf: 'stretch',
+                    marginBottom: 18,
                     borderRadius: 18,
                     ...storeProductCardShadowStyle,
                   }}
                 >
-                  <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      borderRadius: 18,
+                      overflow: 'hidden',
+                      backgroundColor: '#FFFFFF',
+                    }}
+                  >
                     <Pressable onPress={() => onOpenProduct?.(product)}>
                       {/* Image area */}
                       <View style={{ height: 160, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
@@ -3225,39 +4825,78 @@ export function StoreCategoryScreen({
                       </View>
                     </Pressable>
 
-                    <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }}>
-                      <OcdPlusProductPriceBlock
-                        regularPrice={product.price}
-                        isOcdPlusSubscriber={isOcdPlusSubscriber}
-                        onSubscribePress={onOcdPlusSubscribePress}
-                        titleSize={16}
-                      />
-                    </View>
-
-                    <Pressable onPress={() => onOpenProduct?.(product)}>
-                      <View style={{ paddingHorizontal: 12, paddingTop: 0, paddingBottom: 12 }}>
-                        <Text
-                          numberOfLines={2}
+                    <View style={{ flex: 1, minHeight: 0 }}>
+                      <Pressable onPress={() => onOpenProduct?.(product)} style={{ flex: 1 }}>
+                        <View
                           style={{
-                            color: '#111827',
-                            fontSize: 13,
-                            lineHeight: 18,
-                            fontWeight: '700',
-                            textAlign: 'right',
+                            flex: 1,
+                            paddingHorizontal: 12,
+                            paddingTop: 10,
+                            paddingBottom: 26,
+                            justifyContent: 'flex-start',
                           }}
                         >
-                          {product.name}
-                        </Text>
-                        {!!product.subtitle && (
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Text
+                              style={{
+                                color: '#111827',
+                                fontSize: 16,
+                                fontWeight: '900',
+                                textAlign: 'right',
+                              }}
+                            >
+                              {formatOcdPrice(product.price)}
+                            </Text>
+                            {!!product.compareAtPrice && (
+                              <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', textDecorationLine: 'line-through' }}>
+                                {formatOcdPrice(product.compareAtPrice)}
+                              </Text>
+                            )}
+                          </View>
                           <Text
-                            numberOfLines={1}
-                            style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                            numberOfLines={2}
+                            style={{
+                              color: '#111827',
+                              fontSize: 13,
+                              lineHeight: 18,
+                              fontWeight: '700',
+                              textAlign: 'right',
+                              marginTop: 4,
+                            }}
                           >
-                            {product.subtitle}
+                            {product.name}
                           </Text>
-                        )}
-                      </View>
-                    </Pressable>
+                          {!!product.subtitle ? (
+                            <Text
+                              numberOfLines={1}
+                              style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                            >
+                              {product.subtitle}
+                            </Text>
+                          ) : (
+                            <View style={{ marginTop: 2, height: 14 }} />
+                          )}
+                        </View>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {/* ── Floating OCD+ badge ── */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: -16,
+                      left: 0,
+                      right: 0,
+                      alignItems: 'center',
+                      zIndex: 10,
+                    }}
+                  >
+                    <OcdPlusFloatingBadge
+                      regularPrice={product.price}
+                      isSubscriber={isOcdPlusSubscriber}
+                      onPress={onOcdPlusSubscribePress}
+                    />
                   </View>
                 </View>
               ))}

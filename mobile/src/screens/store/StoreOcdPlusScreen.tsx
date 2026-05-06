@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
@@ -9,67 +8,14 @@ import { useAuth } from '../../state/AuthContext';
 import type { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from './StoreHomeScreen';
+import { OcdPlusMark } from '../../components/OcdPlusMark';
+import { OCD_PLUS_BENEFITS, OcdPlusBenefitRow } from '../../components/ocdPlusBenefits';
 
 const OCD_PLUS_SUBSCRIBE_URL = process.env.EXPO_PUBLIC_OCD_PLUS_SUBSCRIBE_URL?.trim() ?? '';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'> & {
   onBottomTabPress: (tabId: StoreBottomTabId) => void;
 };
-
-const BENEFITS: { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; body: string }[] = [
-  {
-    icon: 'pricetag-outline',
-    title: '13% הנחה על המחיר',
-    body: 'מחיר מועדון OCD+ על מוצרים בחנות — חיסכון אמיתי בכל קנייה.',
-  },
-  {
-    icon: 'flash-outline',
-    title: 'הטבות לפני כולם',
-    body: 'מבצעים, השקות וקולקציות מוגבלות — קודם מגיעים למנויים.',
-  },
-  {
-    icon: 'shield-checkmark-outline',
-    title: 'שקט נפשי',
-    body: 'מנוי שקוף, בלי הפתעות: ביטול או שינוי לפי תנאי השירות שלכם.',
-  },
-  {
-    icon: 'heart-outline',
-    title: 'חוויית לקוח מועדפת',
-    body: 'תמיכה מהירה ושירות שמבין את הצורך בסדר, בניקיון ובבית.',
-  },
-];
-
-function BenefitRow({ icon, title, body, isLast }: (typeof BENEFITS)[number] & { isLast?: boolean }) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row-reverse',
-        alignItems: 'flex-start',
-        gap: 14,
-        paddingVertical: 14,
-        borderBottomWidth: isLast ? 0 : 1,
-        borderBottomColor: colors.border,
-      }}
-    >
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 14,
-          backgroundColor: '#EEF2FF',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Ionicons name={icon} size={22} color={colors.primary} />
-      </View>
-      <View style={{ flex: 1, alignItems: 'flex-end' }}>
-        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>{title}</Text>
-        <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 22, textAlign: 'right', marginTop: 4 }}>{body}</Text>
-      </View>
-    </View>
-  );
-}
 
 export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
   const insets = useSafeAreaInsets();
@@ -127,16 +73,26 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                   borderRadius: 999,
                 }}
               >
-                <Ionicons name="sparkles" size={20} color={colors.primary} />
-                <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>מועדון OCD+</Text>
+                <OcdPlusMark size={22} />
+                <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>מועדון</Text>
               </View>
               <Text style={{ color: colors.text, fontSize: 28, fontWeight: '900', textAlign: 'right', marginTop: 16, lineHeight: 36 }}>
                 המנוי המדהים ששווה מאוד לרכוש
               </Text>
-              <Text style={{ color: colors.muted, fontSize: 16, lineHeight: 26, textAlign: 'right', marginTop: 12 }}>
-                OCD+ הוא המועדון שלנו ללקוחות שרוצים יותר: הנחה קבועה על המחיר, הטבות בלעדיות וחוויה נקייה ומסודרת
-                — בדיוק בשביל מי שאוהב סדר בבית ובחיים.
-              </Text>
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  flexWrap: 'wrap',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  marginTop: 12,
+                }}
+              >
+                <OcdPlusMark size={26} />
+                <Text style={{ flex: 1, minWidth: '60%', color: colors.muted, fontSize: 16, lineHeight: 26, textAlign: 'right' }}>
+                  הוא המועדון שלנו ללקוחות שרוצים יותר: הנחה קבועה על המחיר, הטבות בלעדיות וחוויה נקייה ומסודרת — בדיוק בשביל מי שאוהב סדר בבית ובחיים.
+                </Text>
+              </View>
             </View>
 
             {isSubscriber ? (
@@ -151,7 +107,10 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                   gap: 12,
                 }}
               >
-                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>אתם כבר חברי OCD+</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, alignSelf: 'stretch', justifyContent: 'flex-end' }}>
+                  <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900', textAlign: 'right' }}>אתם כבר חברי</Text>
+                  <OcdPlusMark size={28} />
+                </View>
                 <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 24, textAlign: 'right' }}>
                   תודה שאתם איתנו. תהנו מההנחות וההטבות — ואם משהו חסר, אנחנו כאן.
                 </Text>
@@ -182,8 +141,8 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                     borderColor: colors.border,
                   }}
                 >
-                  {BENEFITS.map((b, index) => (
-                    <BenefitRow key={b.title} {...b} isLast={index === BENEFITS.length - 1} />
+                  {OCD_PLUS_BENEFITS.map((b, index) => (
+                    <OcdPlusBenefitRow key={b.title} {...b} isLast={index === OCD_PLUS_BENEFITS.length - 1} />
                   ))}
                 </View>
 
