@@ -48,7 +48,7 @@ export const ADMIN_SPECIAL_JOB_TYPES: { value: string; label: string; needsBatte
   { value: 'other', label: 'אחר' },
 ];
 
-const BATTERY_TYPES = [
+export const BATTERY_TYPES = [
   { value: 'AA', label: 'AA' },
   { value: 'DC', label: 'DC' },
 ];

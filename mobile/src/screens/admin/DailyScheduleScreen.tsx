@@ -29,10 +29,12 @@ import {
   Play,
   Plus,
   Search,
+  Sparkles,
   Trash2,
+  X,
 } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';
-import { AdminCreateJobSheet, ADMIN_SPECIAL_JOB_TYPES } from '../../components/jobs/AdminCreateJobSheet';
+import { AdminCreateJobSheet, ADMIN_SPECIAL_JOB_TYPES, BATTERY_TYPES } from '../../components/jobs/AdminCreateJobSheet';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalSheet } from '../../components/ModalSheet';
@@ -40,6 +42,7 @@ import { OriginWindow, type OriginRect } from '../../components/OriginWindow';
 import { SelectSheet } from '../../components/ui/SelectSheet';
 import { Avatar } from '../../components/ui/Avatar';
 import { completeUnifiedJob, uploadJobServicePointImage } from '../../lib/execution';
+import { flushScheduledPushJobs } from '../../lib/pushAdmin';
 import { pickImageFromLibrary } from '../../lib/media';
 import { jobImageDisplayUri } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
@@ -69,6 +72,7 @@ type Unified = {
   device_type?: string | null;
   /** special_jobs */
   job_type?: string | null;
+  battery_type?: string | null;
 };
 
 type UserLite = { id: string; name: string; role: 'admin' | 'worker' | 'customer'; avatar_url?: string | null };
@@ -132,6 +136,9 @@ export function DailyScheduleScreen() {
   const [edit, setEdit] = useState<Unified | null>(null);
   const [newTime, setNewTime] = useState('09:00');
   const [newWorkerId, setNewWorkerId] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editSpecialJobType, setEditSpecialJobType] = useState<string>(ADMIN_SPECIAL_JOB_TYPES[0]?.value ?? 'batteries');
+  const [editBatteryType, setEditBatteryType] = useState<string>('AA');
 
   /** חלון ביצוע משימה — מבנה ועיצוב כמו ב-JobsScreen */
   const [executeJob, setExecuteJob] = useState<Unified | null>(null);
@@ -150,6 +157,11 @@ export function DailyScheduleScreen() {
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
   const userAvatarMap = useMemo(() => new Map(users.map((u) => [u.id, u.avatar_url ?? null])), [users]);
   const oneTimeMap = useMemo(() => new Map(oneTimeCustomers.map((c) => [c.id, c.name])), [oneTimeCustomers]);
+
+  const editSpecialMeta = useMemo(
+    () => ADMIN_SPECIAL_JOB_TYPES.find((t) => t.value === editSpecialJobType) ?? null,
+    [editSpecialJobType],
+  );
 
   const ui = useMemo(
     () => ({
@@ -280,7 +292,7 @@ export function DailyScheduleScreen() {
         baseFilter(
           supabase
             .from('special_jobs')
-            .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, job_type')
+            .select('id, date, status, worker_id, customer_id, one_time_customer_id, order_number, notes, job_type, battery_type')
         ),
       ]);
 
@@ -427,41 +439,51 @@ export function DailyScheduleScreen() {
   }, [executeJob]);
 
   const pickExecImage = async (jobServicePointId: string) => {
-    const uri = await pickImageFromLibrary();
+    const uri = await pickImageFromLibrary({ quality: 0.88 });
     if (!uri) return;
     setExecPoints((prev) => prev.map((p) => (p.id === jobServicePointId ? { ...p, localImageUri: uri } : p)));
   };
 
-  const uploadExecPoint = async (
-    p: JobServicePoint & { localImageUri?: string | null; uploading?: boolean },
-  ) => {
-    if (!executeJob || executeJob.kind !== 'regular') return;
-    if (!p.localImageUri) {
-      Toast.show({ type: 'error', text1: 'בחר תמונה קודם' });
-      return;
-    }
-    try {
-      setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: true } : x)));
-      const storagePath = await uploadJobServicePointImage({
-        jobId: executeJob.id,
-        jobServicePointId: p.id,
-        servicePointId: p.service_point_id,
-        localUri: p.localImageUri,
-      });
-      setExecPoints((prev) =>
-        prev.map((x) => (x.id === p.id ? { ...x, image_url: storagePath, uploading: false, localImageUri: null } : x)),
-      );
-      Toast.show({ type: 'success', text1: 'התמונה הועלתה' });
-    } catch (e: any) {
-      setExecPoints((prev) => prev.map((x) => (x.id === p.id ? { ...x, uploading: false } : x)));
-      Toast.show({ type: 'error', text1: 'העלאה נכשלה', text2: e?.message ?? 'Unknown error' });
-    }
+  const removeExecImage = (jobServicePointId: string) => {
+    setExecPoints((prev) =>
+      prev.map((p) =>
+        p.id === jobServicePointId ? { ...p, localImageUri: null, image_url: null } : p,
+      ),
+    );
   };
+
+  const isExecCompletable = useMemo(() => {
+    if (!executeJob) return false;
+    if (executeJob.status !== 'pending') return false;
+    if (executeJob.kind !== 'regular') return true;
+    if (!execPoints.length) return true;
+    return execPoints.every((p) => !!p.image_url || !!p.localImageUri);
+  }, [executeJob, execPoints]);
 
   const markExecuteCompleted = async () => {
     if (!executeJob || executeJob.status !== 'pending') return;
     try {
       setIsLoading(true);
+
+      // Upload everything the user picked locally before flipping the job to completed.
+      if (executeJob.kind === 'regular') {
+        const snapshot = [...execPoints];
+        for (const p of snapshot) {
+          if (!p.localImageUri) continue;
+          const storagePath = await uploadJobServicePointImage({
+            jobId: executeJob.id,
+            jobServicePointId: p.id,
+            servicePointId: p.service_point_id,
+            localUri: p.localImageUri,
+          });
+          setExecPoints((prev) =>
+            prev.map((x) =>
+              x.id === p.id ? { ...x, image_url: storagePath, localImageUri: null } : x,
+            ),
+          );
+        }
+      }
+
       await completeUnifiedJob(executeJob.kind, executeJob.id);
       setItems((prev) =>
         prev.map((x) => (x.kind === executeJob.kind && x.id === executeJob.id ? { ...x, status: 'completed' } : x)),
@@ -511,17 +533,38 @@ export function DailyScheduleScreen() {
       const updatedIso = updateIsoTime(edit.date, newTime.trim());
       const patch: Record<string, any> = { date: updatedIso };
       if (newWorkerId && newWorkerId !== edit.worker_id) patch.worker_id = newWorkerId;
+      const notesTrim = editNotes.trim();
+      patch.notes = notesTrim.length ? notesTrim : null;
+      if (edit.kind === 'special') {
+        patch.job_type = editSpecialJobType;
+        patch.battery_type = editSpecialMeta?.needsBattery ? editBatteryType : null;
+      }
       const { error } = await supabase.from(table).update(patch).eq('id', edit.id);
       if (error) throw error;
       setItems((prev) =>
-        prev.map((x) =>
-          x.kind === edit.kind && x.id === edit.id
-            ? { ...x, date: updatedIso, worker_id: newWorkerId || edit.worker_id }
-            : x,
-        ),
+        prev.map((x) => {
+          if (x.kind !== edit.kind || x.id !== edit.id) return x;
+          const base = {
+            ...x,
+            date: updatedIso,
+            worker_id: newWorkerId || edit.worker_id,
+            notes: notesTrim.length ? notesTrim : null,
+          };
+          if (edit.kind !== 'special') return base;
+          return {
+            ...base,
+            job_type: editSpecialJobType,
+            battery_type: editSpecialMeta?.needsBattery ? editBatteryType : null,
+          };
+        }),
       );
       setEdit(null);
       Toast.show({ type: 'success', text1: 'המשימה עודכנה' });
+      try {
+        await flushScheduledPushJobs();
+      } catch {
+        /* תור push — מעובד גם ע״י cron */
+      }
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'עדכון נכשל', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -896,6 +939,15 @@ export function DailyScheduleScreen() {
                       setEdit(item);
                       setNewTime(formatHm(item.date));
                       setNewWorkerId(item.worker_id);
+                      setEditNotes(item.notes ?? '');
+                      if (item.kind === 'special') {
+                        setEditSpecialJobType(
+                          item.job_type && ADMIN_SPECIAL_JOB_TYPES.some((t) => t.value === item.job_type)
+                            ? item.job_type!
+                            : ADMIN_SPECIAL_JOB_TYPES[0]!.value,
+                        );
+                        setEditBatteryType(item.battery_type === 'DC' ? 'DC' : 'AA');
+                      }
                     }}
                     accessibilityLabel="עריכה"
                   >
@@ -985,6 +1037,57 @@ export function DailyScheduleScreen() {
                   <Text style={st.editCurrentTimeText}>{formatHm(edit.date)}</Text>
                 </View>
               </View>
+            </View>
+
+            {/* ── סוג משימה (מיוחדת / התקנה) ── */}
+            {edit.kind === 'special' ? (
+              <View style={st.editSection}>
+                <View style={st.editSectionTitleRow}>
+                  <Sparkles size={16} color={KIND_CONFIG.special.color} strokeWidth={2.2} />
+                  <Text style={st.editSectionTitle}>סוג משימה מיוחדת</Text>
+                </View>
+                <View style={{ gap: 12 }}>
+                  <SelectSheet
+                    label="סוג הפעולה"
+                    value={editSpecialJobType}
+                    options={ADMIN_SPECIAL_JOB_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                    onChange={setEditSpecialJobType}
+                  />
+                  {editSpecialMeta?.needsBattery ? (
+                    <SelectSheet label="סוג סוללה" value={editBatteryType} options={BATTERY_TYPES} onChange={setEditBatteryType} />
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {edit.kind === 'installation' && !!edit.device_type ? (
+              <View style={st.editSection}>
+                <View style={st.editSectionTitleRow}>
+                  <Layers size={16} color={KIND_CONFIG.installation.color} strokeWidth={2.2} />
+                  <Text style={st.editSectionTitle}>מכשיר / סוג התקנה</Text>
+                </View>
+                <View style={st.editKindDetailCard}>
+                  <Text style={st.editKindDetailValue}>{edit.device_type}</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {/* ── הערות — עריכה ── */}
+            <View style={st.editSection}>
+              <View style={st.editSectionTitleRow}>
+                <Pencil size={16} color="#007AFF" strokeWidth={2.2} />
+                <Text style={st.editSectionTitle}>הערות למשימה</Text>
+              </View>
+              <Input
+                label={undefined}
+                value={editNotes}
+                onChangeText={setEditNotes}
+                placeholder="הוסיפו הערות לעובד…"
+                multiline
+                textAlignVertical="top"
+                numberOfLines={5}
+                style={{ minHeight: 110, paddingTop: 12 }}
+              />
             </View>
 
             {/* ── Section: עריכת שעה ── */}
@@ -1213,12 +1316,31 @@ export function DailyScheduleScreen() {
                               style={st.jbExecPointImage}
                               resizeMode="cover"
                             />
+                            {canEdit && (
+                              <Pressable
+                                onPress={() => removeExecImage(item.id)}
+                                hitSlop={10}
+                                style={({ pressed }) => [
+                                  st.jbExecPointRemoveBtn,
+                                  pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityLabel="מחק תמונה"
+                              >
+                                <X size={14} color="#fff" strokeWidth={3} />
+                              </Pressable>
+                            )}
                           </View>
                         ) : (
-                          <View style={st.jbExecPointPlaceholder}>
-                            <Eye size={20} color="#C7C7CC" />
-                            <Text style={st.jbExecPointPlaceholderText}>טרם הועלתה תמונה</Text>
-                          </View>
+                          <Pressable
+                            onPress={canEdit ? () => pickExecImage(item.id) : undefined}
+                            disabled={!canEdit}
+                          >
+                            <View style={st.jbExecPointPlaceholder}>
+                              <Eye size={20} color="#C7C7CC" />
+                              <Text style={st.jbExecPointPlaceholderText}>טרם הועלתה תמונה</Text>
+                            </View>
+                          </Pressable>
                         )}
 
                         {canEdit && (
@@ -1227,24 +1349,8 @@ export function DailyScheduleScreen() {
                               {({ pressed }) => (
                                 <View style={[st.jbExecPickBtn, pressed && { opacity: 0.92 }]}>
                                   <Eye size={15} color="#3C3C43" />
-                                  <Text style={st.jbExecPickBtnText}>בחר תמונה</Text>
-                                </View>
-                              )}
-                            </Pressable>
-                            <Pressable
-                              onPress={() => uploadExecPoint(item)}
-                              disabled={!!item.uploading}
-                              style={{ flex: 1, opacity: item.uploading ? 0.6 : 1 }}
-                            >
-                              {({ pressed }) => (
-                                <View
-                                  style={[
-                                    st.jbExecUploadBtn,
-                                    pressed && !item.uploading && { opacity: 0.92 },
-                                  ]}
-                                >
-                                  <Text style={st.jbExecUploadBtnText}>
-                                    {item.uploading ? 'מעלה…' : 'העלה'}
+                                  <Text style={st.jbExecPickBtnText}>
+                                    {previewUri ? 'החלף תמונה' : 'בחר תמונה'}
                                   </Text>
                                 </View>
                               )}
@@ -1274,9 +1380,19 @@ export function DailyScheduleScreen() {
                   <Text style={st.jbExecDoneLabel}>המשימה הושלמה</Text>
                 </View>
               ) : (
-                <Pressable onPress={markExecuteCompleted}>
+                <Pressable
+                  onPress={markExecuteCompleted}
+                  disabled={!isExecCompletable}
+                  accessibilityLabel="סיים משימה"
+                >
                   {({ pressed }) => (
-                    <View style={[st.jbExecCompleteBtn, pressed && { opacity: 0.92 }]}>
+                    <View
+                      style={[
+                        st.jbExecCompleteBtn,
+                        !isExecCompletable && { opacity: 0.5 },
+                        pressed && isExecCompletable && { opacity: 0.92 },
+                      ]}
+                    >
                       <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
                       <Text style={st.jbExecCompleteBtnText}>סיים משימה</Text>
                     </View>
@@ -2241,6 +2357,7 @@ const st = StyleSheet.create({
     fontWeight: '700',
   },
   jbExecPointImageWrap: {
+    position: 'relative',
     marginHorizontal: 14,
     marginBottom: 12,
   },
@@ -2249,6 +2366,23 @@ const st = StyleSheet.create({
     height: 180,
     borderRadius: 12,
     backgroundColor: 'rgba(120,120,128,0.08)',
+  },
+  jbExecPointRemoveBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(17,24,39,0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 4 },
+    }),
   },
   jbExecPointPlaceholder: {
     marginHorizontal: 14,
@@ -2605,5 +2739,36 @@ const st = StyleSheet.create({
     color: '#3C3C43',
     fontWeight: '700',
     fontSize: 15,
+  },
+
+  editKindDetailCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(60,60,67,0.08)',
+    padding: 14,
+    gap: 4,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+      android: { elevation: 1 },
+    }),
+  },
+  editKindDetailLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8E8E93',
+    textAlign: 'right',
+  },
+  editKindDetailValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    textAlign: 'right',
+    lineHeight: 22,
+  },
+  editKindDetailDivider: {
+    height: 1,
+    backgroundColor: 'rgba(60,60,67,0.08)',
+    marginVertical: 10,
   },
 });

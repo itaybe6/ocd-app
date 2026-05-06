@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { WorkerDrawerParamList } from '../../navigation/WorkerDrawer';
 import Animated, {
   useAnimatedProps,
   useSharedValue,
@@ -48,7 +49,9 @@ import { yyyyMmDd } from '../../lib/time';
 import { useAuth } from '../../state/AuthContext';
 import { useLoading } from '../../state/LoadingContext';
 import { jobImageDisplayUri } from '../../lib/storage';
+import { useResolvedJobImageUri } from '../../lib/useResolvedJobImageUri';
 import { pickImageFromLibrary } from '../../lib/media';
+import { ADMIN_SPECIAL_JOB_TYPES, BATTERY_TYPES } from '../../components/jobs/AdminCreateJobSheet';
 import {
   completeUnifiedJob,
   uploadInstallationDeviceImage,
@@ -77,6 +80,10 @@ type Unified = {
   one_time_customer_id?: string | null;
   order_number?: number | null;
   notes?: string | null;
+  /** special_jobs only */
+  job_type?: string | null;
+  battery_type?: string | null;
+  image_url?: string | null;
 };
 
 type UserLite = {
@@ -144,6 +151,27 @@ function devicesAtPointsLabel(n: number): string {
   if (n <= 0) return '—';
   if (n === 1) return 'מכשיר אחד';
   return `${n} מכשירים`;
+}
+
+/** DB codes → Hebrew (matches admin + legacy `special_jobs.job_type`). */
+const LEGACY_SPECIAL_JOB_TYPE_HE: Record<string, string> = {
+  scent_spread: 'פיזור ריח',
+  plants: 'צמחים',
+  repairs: 'תיקונים',
+};
+
+function specialJobTypeLabelHe(code: string | null | undefined): string {
+  const c = String(code ?? '').trim();
+  if (!c) return 'משימה מיוחדת';
+  const fromAdmin = ADMIN_SPECIAL_JOB_TYPES.find((t) => t.value === c)?.label;
+  if (fromAdmin) return fromAdmin;
+  return LEGACY_SPECIAL_JOB_TYPE_HE[c] ?? c;
+}
+
+function batteryTypeLabelHe(code: string | null | undefined): string | null {
+  if (code == null || String(code).trim() === '') return null;
+  const c = String(code).trim();
+  return BATTERY_TYPES.find((b) => b.value === c)?.label ?? c;
 }
 
 // ── Animated donut ───────────────────────────────────────────
@@ -264,6 +292,9 @@ export function WorkerScheduleScreen() {
   const { user } = useAuth();
   const { setIsLoading } = useLoading();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const route = useRoute<RouteProp<WorkerDrawerParamList, 'Schedule'>>();
+  const pendingOpenJobRef = useRef<{ id: string; kind: Kind } | null>(null);
 
   const [day, setDay] = useState(yyyyMmDd(new Date()));
   // Calendar view date — drives the displayed week/month only; doesn't trigger task fetching.
@@ -383,12 +414,13 @@ export function WorkerScheduleScreen() {
     if (!error) setOneTimeCustomers((data ?? []) as any);
   }, []);
 
-  const fetchDay = useCallback(async () => {
+  const fetchDay = useCallback(async (dayOverride?: string) => {
     if (!user?.id) return;
+    const activeDay = dayOverride ?? day;
     try {
       setLoading(true);
-      const start = new Date(`${day}T00:00:00`).toISOString();
-      const end = new Date(`${day}T23:59:59`).toISOString();
+      const start = new Date(`${activeDay}T00:00:00`).toISOString();
+      const end = new Date(`${activeDay}T23:59:59`).toISOString();
 
       const [regRes, instRes, specRes] = await Promise.all([
         supabase
@@ -405,7 +437,7 @@ export function WorkerScheduleScreen() {
           .lte('date', end),
         supabase
           .from('special_jobs')
-          .select('id, date, status, customer_id, one_time_customer_id, order_number, notes')
+          .select('id, date, status, customer_id, one_time_customer_id, order_number, notes, job_type, battery_type, image_url')
           .eq('worker_id', user.id)
           .gte('date', start)
           .lte('date', end),
@@ -522,8 +554,22 @@ export function WorkerScheduleScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchDay();
-    }, [fetchDay]),
+      const params = route.params;
+      if (params?.openJobId && params?.openJobKind && params?.openJobDayYmd) {
+        pendingOpenJobRef.current = { id: params.openJobId, kind: params.openJobKind as Kind };
+        const ymd = params.openJobDayYmd;
+        setDay(ymd);
+        setViewDate(ymd);
+        navigation.setParams({
+          openJobId: undefined,
+          openJobKind: undefined,
+          openJobDayYmd: undefined,
+        } as any);
+        void fetchDay(ymd);
+        return;
+      }
+      void fetchDay();
+    }, [fetchDay, route.params, navigation]),
   );
 
   const customerLabel = useCallback(
@@ -660,8 +706,28 @@ export function WorkerScheduleScreen() {
     }
   }, []);
 
+  /** פתיחת משימה מהודעה / ניווט עם פרמטרים */
+  useEffect(() => {
+    const p = pendingOpenJobRef.current;
+    if (!p || loading) return;
+    const found = items.find((x) => x.kind === p.kind && x.id === p.id);
+    if (found) {
+      pendingOpenJobRef.current = null;
+      requestAnimationFrame(() => {
+        void openExecute(found);
+      });
+      return;
+    }
+    pendingOpenJobRef.current = null;
+    Toast.show({
+      type: 'info',
+      text1: 'המשימה לא נמצאה',
+      text2: 'ייתכן שהוסרה, הועברה לעובד אחר, או שאינה משויכת אליך',
+    });
+  }, [items, loading, openExecute]);
+
   const pick = async (onPicked: (uri: string) => void) => {
-    const uri = await pickImageFromLibrary();
+    const uri = await pickImageFromLibrary({ quality: 0.88 });
     if (uri) onPicked(uri);
   };
 
@@ -729,10 +795,16 @@ export function WorkerScheduleScreen() {
       }
 
       await completeUnifiedJob(execJob.kind, execJob.id);
+      const completedSpecialPath =
+        execJob.kind === 'special' ? special?.image_url ?? null : null;
       setItems((prev) =>
-        prev.map((x) =>
-          x.kind === execJob.kind && x.id === execJob.id ? { ...x, status: 'completed' } : x,
-        ),
+        prev.map((x) => {
+          if (x.kind !== execJob.kind || x.id !== execJob.id) return x;
+          if (execJob.kind === 'special' && completedSpecialPath) {
+            return { ...x, status: 'completed', image_url: completedSpecialPath };
+          }
+          return { ...x, status: 'completed' };
+        }),
       );
       Toast.show({ type: 'success', text1: 'המשימה הושלמה' });
       closeExec();
@@ -743,6 +815,11 @@ export function WorkerScheduleScreen() {
       setIsLoading(false);
     }
   };
+
+  const specialPreviewUri = useResolvedJobImageUri(
+    execJob?.kind === 'special' ? special?.image_url : undefined,
+    execJob?.kind === 'special' ? special?.localImageUri : undefined,
+  );
 
   const isExecCompletable = useMemo(() => {
     if (!execJob) return false;
@@ -1080,6 +1157,11 @@ export function WorkerScheduleScreen() {
                     )}
                   </View>
 
+                  {item.kind === 'special' && item.job_type ? (
+                    <Text style={st.taskSpecialTypeLine} numberOfLines={2}>
+                      {specialJobTypeLabelHe(item.job_type)}
+                    </Text>
+                  ) : null}
                   {!!item.notes && (
                     <Text style={st.taskNotes} numberOfLines={2}>
                       {item.notes}
@@ -1263,7 +1345,7 @@ export function WorkerScheduleScreen() {
                   ) : execJob.one_time_customer_id ? (
                     <Text style={st.jbExecNotes}>כתובת: לא נרשמה במערכת</Text>
                   ) : null}
-                  {!!execJob.notes && (
+                  {!!execJob.notes && execJob.kind !== 'special' && (
                     <Text style={st.jbExecNotes} numberOfLines={6}>
                       {execJob.notes}
                     </Text>
@@ -1494,16 +1576,29 @@ export function WorkerScheduleScreen() {
                       <Text style={st.jbExecSectionLabel}>משימה מיוחדת</Text>
                       <View style={st.jbExecPointCard}>
                         <View style={st.jbExecPointCardHeader}>
-                          <View style={{ flex: 1, gap: 4 }}>
-                            <Text style={st.jbExecPointTitle} numberOfLines={1}>
-                              {special.job_type ?? 'משימה מיוחדת'}
+                          <View style={{ flex: 1, gap: 8 }}>
+                            <Text style={st.jbExecPointTitle} numberOfLines={3}>
+                              {specialJobTypeLabelHe(special.job_type)}
                             </Text>
-                            {special.battery_type ? (
-                              <View style={st.jbExecPointSubRow}>
-                                <Battery size={12} color="#8E8E93" />
-                                <Text style={st.jbExecPointSubText}>סוללה: {special.battery_type}</Text>
-                              </View>
-                            ) : null}
+                            <View style={{ gap: 8 }}>
+                              {batteryTypeLabelHe(special.battery_type) ? (
+                                <View style={st.jbExecSpecialDetailRow}>
+                                  <Battery size={14} color="#8E8E93" />
+                                  <View style={{ flex: 1, gap: 2 }}>
+                                    <Text style={st.jbExecSpecialDetailLabel}>סוללה נדרשת</Text>
+                                    <Text style={st.jbExecSpecialDetailValue}>
+                                      {batteryTypeLabelHe(special.battery_type)}
+                                    </Text>
+                                  </View>
+                                </View>
+                              ) : null}
+                              {!!execJob.notes?.trim() && (
+                                <View style={{ gap: 4 }}>
+                                  <Text style={st.jbExecSpecialDetailLabel}>הנחיות ופרטים</Text>
+                                  <Text style={st.jbExecSpecialInstructionsText}>{execJob.notes.trim()}</Text>
+                                </View>
+                              )}
+                            </View>
                           </View>
                           {!!special.image_url && !special.localImageUri && (
                             <View style={st.jbExecPointDoneDot}>
@@ -1512,7 +1607,7 @@ export function WorkerScheduleScreen() {
                           )}
                         </View>
                         {(() => {
-                          const previewUri = special.localImageUri ?? jobImageDisplayUri(special.image_url);
+                          const previewUri = specialPreviewUri;
                           const canEdit = execJob.status === 'pending';
                           return previewUri ? (
                             <View style={st.jbExecPointImageWrap}>
@@ -1939,6 +2034,14 @@ const st = StyleSheet.create({
     marginTop: 8,
     lineHeight: 17,
   },
+  taskSpecialTypeLine: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: KIND_CONFIG.special.color,
+    textAlign: 'right',
+    marginTop: 8,
+    lineHeight: 18,
+  },
   taskFooter: {
     marginTop: 12,
     paddingTop: 12,
@@ -2261,6 +2364,31 @@ const st = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     textAlign: 'right',
+  },
+  jbExecSpecialDetailRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingTop: 2,
+  },
+  jbExecSpecialDetailLabel: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  jbExecSpecialDetailValue: {
+    color: '#1C1C1E',
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  jbExecSpecialInstructionsText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'right',
+    lineHeight: 21,
   },
   jbExecPointDoneDot: {
     width: 28,
