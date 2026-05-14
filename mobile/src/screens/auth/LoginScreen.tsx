@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -25,12 +25,17 @@ type LoginScreenProps = {
   onBackToStore: () => void;
 };
 
+type Mode = 'login' | 'signup';
+type Step = 'collect' | 'code';
+
+const RESEND_SECONDS = 30;
+
 function SegmentedToggle({
   mode,
   onChangeMode,
 }: {
-  mode: 'login' | 'signup';
-  onChangeMode: (m: 'login' | 'signup') => void;
+  mode: Mode;
+  onChangeMode: (m: Mode) => void;
 }) {
   const [pillWidth, setPillWidth] = useState(0);
   const slide = useSharedValue(mode === 'login' ? 1 : 0);
@@ -78,7 +83,6 @@ function SegmentedToggle({
         overflow: 'hidden',
       }}
     >
-      {/* sliding pill indicator */}
       <Animated.View
         pointerEvents="none"
         style={[
@@ -100,7 +104,6 @@ function SegmentedToggle({
         ]}
       />
 
-      {/* left tab: הרשמה ללקוח */}
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ selected: mode === 'signup' }}
@@ -112,7 +115,6 @@ function SegmentedToggle({
         </Animated.Text>
       </Pressable>
 
-      {/* right tab: התחברות */}
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ selected: mode === 'login' }}
@@ -128,14 +130,21 @@ function SegmentedToggle({
 }
 
 export function LoginScreen({ onBackToStore }: LoginScreenProps) {
-  const { signInWithPassword, signUpCustomer } = useAuth();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const { sendLoginOtp, verifyLoginOtp, sendRegisterOtp, verifyRegisterOtp } = useAuth();
+  const [mode, setMode] = useState<Mode>('login');
+  const [step, setStep] = useState<Step>('collect');
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [code, setCode] = useState('');
+
+  /** Phone normalized + confirmed by the function (used when verifying / resending). */
+  const [verifiedPhone, setVerifiedPhone] = useState('');
+
   const [submitting, setSubmitting] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const inLogo = useSharedValue(0);
   const inCard = useSharedValue(0);
@@ -151,6 +160,27 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
     floatB.value = withRepeat(withTiming(1, { duration: 5200, easing: Easing.inOut(Easing.quad) }), -1, true);
     floatC.value = withRepeat(withTiming(1, { duration: 6400, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [inCard, inLogo, floatA, floatB, floatC]);
+
+  useEffect(
+    () => () => {
+      if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+    },
+    []
+  );
+
+  const startResendTimer = useCallback(() => {
+    setResendIn(RESEND_SECONDS);
+    if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+    resendTimerRef.current = setInterval(() => {
+      setResendIn((s) => {
+        if (s <= 1) {
+          if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }, []);
 
   const logoStyle = useAnimatedStyle(() => {
     const s = interpolate(inLogo.value, [0, 1], [0.92, 1]);
@@ -220,30 +250,86 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
     };
   });
 
-  const onSubmit = async () => {
+  const resetToCollect = useCallback(() => {
+    setStep('collect');
+    setCode('');
+    setVerifiedPhone('');
+    setResendIn(0);
+    if (resendTimerRef.current) clearInterval(resendTimerRef.current);
+  }, []);
+
+  const handleChangeMode = useCallback(
+    (m: Mode) => {
+      if (m === mode) return;
+      setMode(m);
+      resetToCollect();
+    },
+    [mode, resetToCollect]
+  );
+
+  const onSendCode = useCallback(async () => {
     try {
       setSubmitting(true);
-      if (mode === 'login') {
-        await signInWithPassword({ phone, password });
+      const phoneTrim = phone.trim();
+      if (phoneTrim.length < 9) {
+        Toast.show({ type: 'error', text1: 'נא להזין מספר טלפון תקין' });
         return;
       }
 
-      if (!name.trim()) {
+      if (mode === 'signup' && !name.trim()) {
         Toast.show({ type: 'error', text1: 'נא להזין שם מלא' });
         return;
       }
 
-      if (password.length < 4) {
-        Toast.show({ type: 'error', text1: 'הסיסמה חייבת להכיל לפחות 4 תווים' });
+      const res = mode === 'login' ? await sendLoginOtp({ phone: phoneTrim }) : await sendRegisterOtp({ phone: phoneTrim });
+      setVerifiedPhone(res.phone);
+      setStep('code');
+      startResendTimer();
+      Toast.show({ type: 'success', text1: 'נשלח קוד אימות', text2: 'הקוד יגיע ב-SMS תוך מספר שניות' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'שגיאה בשליחת הקוד', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [mode, name, phone, sendLoginOtp, sendRegisterOtp, startResendTimer]);
+
+  const onResendCode = useCallback(async () => {
+    if (resendIn > 0) return;
+    try {
+      setSubmitting(true);
+      const res =
+        mode === 'login'
+          ? await sendLoginOtp({ phone: verifiedPhone || phone.trim() })
+          : await sendRegisterOtp({ phone: verifiedPhone || phone.trim() });
+      setVerifiedPhone(res.phone);
+      setCode('');
+      startResendTimer();
+      Toast.show({ type: 'success', text1: 'נשלח קוד חדש' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'שגיאה בשליחת קוד חדש', text2: e?.message ?? 'Unknown error' });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [mode, phone, resendIn, sendLoginOtp, sendRegisterOtp, startResendTimer, verifiedPhone]);
+
+  const onVerifyCode = useCallback(async () => {
+    try {
+      setSubmitting(true);
+      const codeTrim = code.trim();
+      if (codeTrim.length < 4) {
+        Toast.show({ type: 'error', text1: 'נא להזין קוד אימות תקין' });
         return;
       }
-
-      if (password !== confirmPassword) {
-        Toast.show({ type: 'error', text1: 'אימות הסיסמה אינו תואם' });
-        return;
+      if (mode === 'login') {
+        await verifyLoginOtp({ phone: verifiedPhone || phone.trim(), code: codeTrim });
+      } else {
+        await verifyRegisterOtp({
+          phone: verifiedPhone || phone.trim(),
+          code: codeTrim,
+          name: name.trim(),
+          address: address.trim() || null,
+        });
       }
-
-      await signUpCustomer({ name, phone, address, password });
     } catch (e: any) {
       Toast.show({
         type: 'error',
@@ -253,13 +339,24 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [address, code, mode, name, phone, verifiedPhone, verifyLoginOtp, verifyRegisterOtp]);
 
-  const canSubmit = useMemo(() => {
+  const canSendCode = useMemo(() => {
     if (submitting) return false;
-    if (mode === 'login') return phone.trim().length >= 3 && password.length >= 1;
-    return name.trim().length >= 2 && phone.trim().length >= 3 && password.length >= 4 && confirmPassword.length >= 4;
-  }, [confirmPassword, mode, name, password, phone, submitting]);
+    if (phone.trim().length < 9) return false;
+    if (mode === 'signup' && name.trim().length < 2) return false;
+    return true;
+  }, [mode, name, phone, submitting]);
+
+  const canVerify = useMemo(() => {
+    if (submitting) return false;
+    return code.trim().length >= 4;
+  }, [code, submitting]);
+
+  const sendCodeLabel =
+    mode === 'login' ? (submitting ? 'שולח קוד…' : 'שלח קוד אימות') : submitting ? 'שולח קוד…' : 'שלח קוד והמשך להרשמה';
+
+  const verifyLabel = submitting ? 'מאמת…' : mode === 'login' ? 'אמת והתחבר' : 'אמת והרשם';
 
   return (
     <Screen>
@@ -299,7 +396,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                 מערכת ניהול משימות
               </Text>
               <Text style={{ color: colors.muted, marginTop: 6, fontWeight: '700', textAlign: 'center' }}>
-                התחברות מהירה ובטוחה לניהול
+                התחברות מהירה ובטוחה ב-SMS
               </Text>
             </Animated.View>
 
@@ -315,127 +412,161 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                 }}
               >
                 <View style={{ gap: 12 }}>
-                  <SegmentedToggle mode={mode} onChangeMode={setMode} />
+                  <SegmentedToggle mode={mode} onChangeMode={handleChangeMode} />
 
-                  {mode === 'signup' && (
-                    <Input
-                      label="שם מלא"
-                      value={name}
-                      onChangeText={setName}
-                      placeholder="ישראל ישראלי"
-                      textContentType="name"
-                      autoComplete="name"
-                    />
-                  )}
+                  {step === 'collect' && (
+                    <>
+                      {mode === 'signup' && (
+                        <Input
+                          label="שם מלא"
+                          value={name}
+                          onChangeText={setName}
+                          placeholder="ישראל ישראלי"
+                          textContentType="name"
+                          autoComplete="name"
+                        />
+                      )}
 
-                  <Input
-                    label="טלפון"
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                    placeholder="050..."
-                    textContentType="telephoneNumber"
-                    autoComplete="tel"
-                  />
-                  {mode === 'signup' && (
-                    <Input
-                      label="כתובת"
-                      value={address}
-                      onChangeText={setAddress}
-                      placeholder="רחוב, עיר"
-                      textContentType="fullStreetAddress"
-                      autoComplete="street-address"
-                    />
-                  )}
-                  <Input
-                    label="סיסמה"
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••"
-                    secureTextEntry
-                    textContentType="password"
-                    autoComplete="password"
-                  />
-                  {mode === 'signup' && (
-                    <Input
-                      label="אימות סיסמה"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      placeholder="••••••"
-                      secureTextEntry
-                      textContentType="password"
-                      autoComplete="password"
-                    />
-                  )}
+                      <Input
+                        label="טלפון"
+                        value={phone}
+                        onChangeText={setPhone}
+                        keyboardType="phone-pad"
+                        placeholder="050..."
+                        textContentType="telephoneNumber"
+                        autoComplete="tel"
+                      />
 
-                  <Button
-                    title={
-                      submitting ? (mode === 'login' ? 'מתחבר…' : 'נרשם…') : mode === 'login' ? 'התחבר' : 'צור חשבון לקוח'
-                    }
-                    onPress={onSubmit}
-                    disabled={!canSubmit}
-                    style={{
-                      shadowColor: colors.primary,
-                      shadowOpacity: 0.18,
-                      shadowRadius: 18,
-                      shadowOffset: { width: 0, height: 10 },
-                      elevation: 2,
-                    }}
-                  />
+                      {mode === 'signup' && (
+                        <Input
+                          label="כתובת"
+                          value={address}
+                          onChangeText={setAddress}
+                          placeholder="רחוב, עיר"
+                          textContentType="fullStreetAddress"
+                          autoComplete="street-address"
+                        />
+                      )}
 
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Button title="חזרה לחנות" variant="secondary" onPress={onBackToStore} />
-                    </View>
-                    {mode === 'login' && (
-                      <View style={{ flex: 1 }}>
-                        <Pressable
-                          onPress={() =>
-                            Toast.show({
-                              type: 'info',
-                              text1: 'טיפ',
-                              text2: 'אם שכחת סיסמה — פנה למנהל מערכת לאיפוס.',
-                            })
-                          }
-                          style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
-                        >
-                          <View
-                            style={{
-                              borderRadius: 18,
-                              paddingVertical: 14,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              backgroundColor: '#EEF4FF',
-                              borderWidth: 1,
-                              borderColor: '#C7D8FF',
-                            }}
-                          >
-                            <Text style={{ color: colors.primary, fontWeight: '900' }}>שכחתי סיסמה</Text>
+                      <Button
+                        title={sendCodeLabel}
+                        onPress={onSendCode}
+                        disabled={!canSendCode}
+                        style={{
+                          shadowColor: colors.primary,
+                          shadowOpacity: 0.18,
+                          shadowRadius: 18,
+                          shadowOffset: { width: 0, height: 10 },
+                          elevation: 2,
+                        }}
+                      />
+
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button title="חזרה לחנות" variant="secondary" onPress={onBackToStore} />
+                        </View>
+                        {mode === 'signup' && (
+                          <View style={{ flex: 1 }}>
+                            <View
+                              style={{
+                                borderRadius: 18,
+                                paddingVertical: 14,
+                                paddingHorizontal: 12,
+                                alignItems: 'center',
+                                backgroundColor: 'rgba(37,99,235,0.06)',
+                                borderWidth: 1,
+                                borderColor: 'rgba(37,99,235,0.14)',
+                              }}
+                            >
+                              <Text
+                                style={{ color: colors.primary, fontWeight: '800', textAlign: 'center', fontSize: 12 }}
+                              >
+                                ההרשמה יוצרת חשבון לקוח בלבד
+                              </Text>
+                            </View>
                           </View>
-                        </Pressable>
+                        )}
                       </View>
-                    )}
-                    {mode === 'signup' && (
-                      <View style={{ flex: 1 }}>
-                        <View
-                          style={{
-                            borderRadius: 18,
-                            paddingVertical: 14,
-                            paddingHorizontal: 12,
-                            alignItems: 'center',
-                            backgroundColor: 'rgba(37,99,235,0.06)',
-                            borderWidth: 1,
-                            borderColor: 'rgba(37,99,235,0.14)',
-                          }}
-                        >
-                          <Text style={{ color: colors.primary, fontWeight: '800', textAlign: 'center', fontSize: 12 }}>
-                            ההרשמה יוצרת חשבון לקוח בלבד
-                          </Text>
+                    </>
+                  )}
+
+                  {step === 'code' && (
+                    <>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontSize: 14,
+                          fontWeight: '700',
+                          textAlign: 'right',
+                          lineHeight: 20,
+                        }}
+                      >
+                        שלחנו קוד אימות בן 6 ספרות למספר{' '}
+                        <Text style={{ color: colors.primary }}>
+                          {verifiedPhone || phone}
+                        </Text>
+                      </Text>
+
+                      <Input
+                        label="קוד אימות"
+                        value={code}
+                        onChangeText={(v) => setCode(v.replace(/\D+/g, '').slice(0, 6))}
+                        keyboardType="number-pad"
+                        placeholder="------"
+                        textContentType="oneTimeCode"
+                        autoComplete="sms-otp"
+                        maxLength={6}
+                        style={{ textAlign: 'center', fontSize: 22, letterSpacing: 6, fontWeight: '800' }}
+                      />
+
+                      <Button
+                        title={verifyLabel}
+                        onPress={onVerifyCode}
+                        disabled={!canVerify}
+                        style={{
+                          shadowColor: colors.primary,
+                          shadowOpacity: 0.18,
+                          shadowRadius: 18,
+                          shadowOffset: { width: 0, height: 10 },
+                          elevation: 2,
+                        }}
+                      />
+
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button title="שינוי טלפון" variant="secondary" onPress={resetToCollect} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Pressable
+                            disabled={resendIn > 0 || submitting}
+                            onPress={onResendCode}
+                            style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
+                          >
+                            <View
+                              style={{
+                                borderRadius: 18,
+                                paddingVertical: 14,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: resendIn > 0 ? '#F1F5F9' : '#EEF4FF',
+                                borderWidth: 1,
+                                borderColor: resendIn > 0 ? '#E2E8F0' : '#C7D8FF',
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: resendIn > 0 ? colors.muted : colors.primary,
+                                  fontWeight: '900',
+                                }}
+                              >
+                                {resendIn > 0 ? `שליחה מחדש בעוד ${resendIn}s` : 'שלח קוד מחדש'}
+                              </Text>
+                            </View>
+                          </Pressable>
                         </View>
                       </View>
-                    )}
-                  </View>
-
+                    </>
+                  )}
                 </View>
               </Card>
             </Animated.View>
@@ -445,4 +576,3 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
     </Screen>
   );
 }
-
