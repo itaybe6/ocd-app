@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -9,7 +9,13 @@ import type { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from './StoreHomeScreen';
 import { OcdPlusMark } from '../../components/OcdPlusMark';
-import { OCD_PLUS_BENEFITS, OcdPlusBenefitRow } from '../../components/ocdPlusBenefits';
+import {
+  OCD_PLUS_HEADLINE,
+  OCD_PLUS_SUBSCRIBE_BUTTON_LABEL,
+  OCD_PLUS_SUBTITLE,
+  OcdPlusChecklist,
+  OcdPlusChecklistSummary,
+} from '../../components/ocdPlusBenefits';
 
 const OCD_PLUS_SUBSCRIBE_URL = process.env.EXPO_PUBLIC_OCD_PLUS_SUBSCRIBE_URL?.trim() ?? '';
 
@@ -77,22 +83,19 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                 <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>מועדון</Text>
               </View>
               <Text style={{ color: colors.text, fontSize: 28, fontWeight: '900', textAlign: 'right', marginTop: 16, lineHeight: 36 }}>
-                המנוי המדהים ששווה מאוד לרכוש
+                {OCD_PLUS_HEADLINE}
               </Text>
-              <View
+              <Text
                 style={{
-                  flexDirection: 'row-reverse',
-                  flexWrap: 'wrap',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  marginTop: 12,
+                  color: colors.muted,
+                  fontSize: 16,
+                  lineHeight: 24,
+                  textAlign: 'right',
+                  marginTop: 10,
                 }}
               >
-                <OcdPlusMark size={26} />
-                <Text style={{ flex: 1, minWidth: '60%', color: colors.muted, fontSize: 16, lineHeight: 26, textAlign: 'right' }}>
-                  הוא המועדון שלנו ללקוחות שרוצים יותר: הנחה קבועה על המחיר, הטבות בלעדיות וחוויה נקייה ומסודרת — בדיוק בשביל מי שאוהב סדר בבית ובחיים.
-                </Text>
-              </View>
+                {OCD_PLUS_SUBTITLE}
+              </Text>
             </View>
 
             {isSubscriber ? (
@@ -130,54 +133,47 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
               </View>
             ) : (
               <>
-                <View
-                  style={{
-                    backgroundColor: colors.card,
-                    borderRadius: 20,
-                    paddingHorizontal: 4,
-                    paddingTop: 8,
-                    paddingBottom: 8,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  {OCD_PLUS_BENEFITS.map((b, index) => (
-                    <OcdPlusBenefitRow key={b.title} {...b} isLast={index === OCD_PLUS_BENEFITS.length - 1} />
-                  ))}
+                <View style={{ marginTop: 8, marginBottom: 4 }}>
+                  <OcdPlusChecklist />
                 </View>
 
-                <View
-                  style={{
-                    marginTop: 24,
-                    backgroundColor: '#0F172A',
-                    borderRadius: 20,
-                    padding: 22,
-                    alignItems: 'flex-end',
-                    gap: 10,
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '900', textAlign: 'right' }}>
-                    מוכנים להצטרף?
-                  </Text>
-                  <Text style={{ color: '#94A3B8', fontSize: 14, lineHeight: 22, textAlign: 'right' }}>
-                    לחיצה על הכפתור למטה מעבירה לעמוד רכישה מאובטח — מהיר, פשוט ובלי כאב ראש.
-                  </Text>
-                </View>
+                <OcdPlusChecklistSummary />
 
                 <Pressable
                   onPress={handlePurchase}
                   disabled={opening}
                   style={({ pressed }) => ({
-                    marginTop: 20,
-                    backgroundColor: colors.primary,
+                    marginTop: 8,
+                    backgroundColor: '#FFFFFF',
                     borderRadius: 999,
-                    paddingVertical: 16,
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    borderWidth: 1,
+                    borderColor: colors.border,
                     opacity: pressed || opening ? 0.88 : 1,
+                    overflow: 'hidden',
                   })}
                 >
-                  <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '900' }}>לחץ לרכישה</Text>
+                  <View
+                    style={{
+                      minHeight: 52,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      paddingVertical: 16,
+                      paddingHorizontal: 24,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: '#000000',
+                        fontSize: 17,
+                        fontWeight: '900',
+                        lineHeight: 22,
+                        textAlign: 'center',
+                        ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+                      }}
+                    >
+                      {OCD_PLUS_SUBSCRIBE_BUTTON_LABEL}
+                    </Text>
+                  </View>
                 </Pressable>
 
               </>

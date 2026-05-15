@@ -7,7 +7,7 @@ import {
 } from '@react-navigation/native-stack';
 import { colors } from '../theme/colors';
 import { Screen } from '../components/Screen';
-import { useAuth } from '../state/AuthContext';
+import { useAuth, type AuthUser } from '../state/AuthContext';
 import { StoreCategoryScreen, StoreHomeScreen, type StoreBottomTabId } from '../screens/store/StoreHomeScreen';
 import { StoreSearchScreen } from '../screens/store/StoreSearchScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
@@ -18,6 +18,7 @@ import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { OcdPlusMark } from '../components/OcdPlusMark';
+import { OcdPlusSubscribeSheetProvider } from '../context/OcdPlusSubscribeSheetContext';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 import type { CustomerDrawerParamList } from './CustomerDrawer';
 import type { RootStackParamList } from './types';
@@ -26,7 +27,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function handleStoreTabNavigation(
   navigation: Pick<NativeStackScreenProps<RootStackParamList>['navigation'], 'navigate'>,
-  tabId: StoreBottomTabId
+  tabId: StoreBottomTabId,
+  user: AuthUser | null
 ) {
   if (tabId === 'favorites') {
     navigation.navigate('StoreFavorites');
@@ -39,7 +41,15 @@ function handleStoreTabNavigation(
   }
 
   if (tabId === 'profile') {
-    navigation.navigate('Login');
+    if (!user) {
+      navigation.navigate('Login');
+      return;
+    }
+    if (user.role === 'customer') {
+      navigation.navigate('Main', { initialCustomerProfile: true });
+      return;
+    }
+    navigation.navigate('Main');
     return;
   }
 
@@ -95,7 +105,6 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
           })
         }
         isOcdPlusSubscriber={false}
-        onOcdPlusSubscribePress={() => navigation.navigate('StoreOcdPlus')}
         initialTab={route.params?.initialTab}
         initialTabRequestId={route.params?.initialTabRequestId}
       />
@@ -113,25 +122,28 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
 }
 
 function StoreOcdPlusRoute(props: NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'>) {
+  const { user } = useAuth();
   return (
     <StoreOcdPlusScreen
       {...props}
-      onBottomTabPress={(tabId) => handleStoreTabNavigation(props.navigation, tabId)}
+      onBottomTabPress={(tabId) => handleStoreTabNavigation(props.navigation, tabId, user)}
     />
   );
 }
 
 function StoreFavoritesRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreFavorites'>) {
+  const { user } = useAuth();
   return (
     <StoreFavoritesScreen
       onOpenProduct={(handle) => navigation.navigate('Product', { handle })}
       onLoginPress={() => navigation.navigate('Login')}
-      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId, user)}
     />
   );
 }
 
 function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreSearch'>) {
+  const { user } = useAuth();
   return (
     <StoreSearchScreen
       onBack={() => navigation.goBack()}
@@ -151,7 +163,7 @@ function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamL
           navigation.goBack();
           return;
         }
-        handleStoreTabNavigation(navigation, tabId);
+        handleStoreTabNavigation(navigation, tabId, user);
       }}
     />
   );
@@ -189,9 +201,8 @@ function StoreCategoryRoute({
           subcategories: category.subcategories,
         })
       }
-      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId)}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId, user)}
       isOcdPlusSubscriber={isOcdPlusSubscriber}
-      onOcdPlusSubscribePress={() => navigation.navigate('StoreOcdPlus')}
       categoryId={categoryId}
       categoryTitle={categoryTitle}
       categoryDescription={categoryDescription}
@@ -278,6 +289,7 @@ export function RootNavigator() {
       ref={navigationRef}
       onReady={() => flushPendingNavigation()}
     >
+      <OcdPlusSubscribeSheetProvider>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Main" component={MainEntryScreen} />
         {!user && <Stack.Screen name="Login" component={LoginRoute} />}
@@ -352,6 +364,7 @@ export function RootNavigator() {
           }}
         />
       </Stack.Navigator>
+      </OcdPlusSubscribeSheetProvider>
     </NavigationContainer>
   );
 }

@@ -6,7 +6,7 @@ type InputProps = TextInputProps & {
   label?: string;
 };
 
-export function Input({ label, style, ...rest }: InputProps) {
+export function Input({ label, style, placeholderTextColor, ...rest }: InputProps) {
   return (
     <View style={{ gap: 6 }}>
       {!!label && (
@@ -14,7 +14,7 @@ export function Input({ label, style, ...rest }: InputProps) {
       )}
       <TextInput
         {...rest}
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={placeholderTextColor ?? colors.muted}
         style={[
           {
             backgroundColor: colors.elevated,

@@ -2,19 +2,24 @@ import React, { useCallback, useState } from 'react';
 import {
   Dimensions,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { ModalSheet } from './ModalSheet';
 import { OcdPlusMark } from './OcdPlusMark';
 import { LavaLampDark } from './LavaLampDark';
-import { OCD_PLUS_BENEFITS, OcdPlusBenefitRow } from './ocdPlusBenefits';
+import {
+  OCD_PLUS_HEADLINE,
+  OCD_PLUS_SUBSCRIBE_BUTTON_LABEL,
+  OCD_PLUS_SUBTITLE,
+  OcdPlusChecklist,
+  OcdPlusChecklistSummary,
+} from './ocdPlusBenefits';
 
 const OCD_PLUS_SUBSCRIBE_URL = process.env.EXPO_PUBLIC_OCD_PLUS_SUBSCRIBE_URL?.trim() ?? '';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -104,7 +109,7 @@ export function OcdPlusSubscribeSheet({ visible, onClose, isSubscriber }: Props)
             marginBottom: 10,
           }}
         >
-          המנוי המדהים ששווה מאוד לרכוש
+          {OCD_PLUS_HEADLINE}
         </Text>
 
         {/* Subtitle */}
@@ -114,69 +119,67 @@ export function OcdPlusSubscribeSheet({ visible, onClose, isSubscriber }: Props)
             fontSize: 14.5,
             lineHeight: 23,
             textAlign: 'center',
-            marginBottom: 26,
+            marginBottom: 22,
             paddingHorizontal: 6,
           }}
         >
-          הנחה קבועה, הטבות בלעדיות וחוויה נקייה ומסודרת — בדיוק בשביל מי שאוהב סדר בבית ובחיים.
+          {OCD_PLUS_SUBTITLE}
         </Text>
 
-        {/* Benefits list */}
-        <View
-          style={{
-            borderRadius: 20,
-            overflow: 'hidden',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.08)',
-            backgroundColor: 'rgba(255,255,255,0.04)',
-            marginBottom: 16,
-          }}
-        >
-          {OCD_PLUS_BENEFITS.map((b, index) => (
-            <OcdPlusBenefitRow
-              key={b.title}
-              {...b}
-              isLast={index === OCD_PLUS_BENEFITS.length - 1}
-              dark
-            />
-          ))}
+        <View style={{ marginBottom: 6, paddingHorizontal: 4 }}>
+          <OcdPlusChecklist dark />
         </View>
 
-        {/* Purchase button */}
+        <OcdPlusChecklistSummary dark />
+
+        {/* Purchase button — bg on outer View; Pressable alone can skip painting fill on some RN/modal stacks */}
         <View
           style={{
+            alignSelf: 'stretch',
             borderRadius: 999,
             overflow: 'hidden',
-            shadowColor: '#6366F1',
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.45,
-            shadowRadius: 18,
-            elevation: 8,
+            backgroundColor: '#FFFFFF',
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 14,
+            elevation: 6,
             marginBottom: 14,
           }}
         >
           <Pressable
             onPress={handlePurchase}
             disabled={opening}
-            style={({ pressed }) => ({ opacity: pressed || opening ? 0.82 : 1 })}
+            android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
+            style={({ pressed }) => ({
+              width: '100%',
+              opacity: pressed || opening ? 0.82 : 1,
+            })}
           >
-            <LinearGradient
-              colors={['#4F46E5', '#2563EB']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+            <View
               style={{
-                paddingVertical: 17,
-                alignItems: 'center',
+                width: '100%',
+                minHeight: 52,
                 justifyContent: 'center',
-                flexDirection: 'row',
-                gap: 8,
+                alignItems: 'center',
+                paddingVertical: 16,
+                paddingHorizontal: 24,
               }}
             >
-              <Ionicons name="star" size={16} color="rgba(255,255,255,0.85)" />
-              <Text style={{ color: '#FFFFFF', fontSize: 16.5, fontWeight: '900', letterSpacing: 0.3 }}>
-                הצטרף למועדון
+              <Text
+                style={{
+                  color: '#000000',
+                  fontSize: 16.5,
+                  fontWeight: '900',
+                  letterSpacing: 0.3,
+                  lineHeight: 22,
+                  textAlign: 'center',
+                  ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+                }}
+              >
+                {OCD_PLUS_SUBSCRIBE_BUTTON_LABEL}
               </Text>
-            </LinearGradient>
+            </View>
           </Pressable>
         </View>
 

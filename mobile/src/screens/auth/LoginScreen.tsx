@@ -1,131 +1,48 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSpring,
-  withTiming,
-  interpolateColor,
-} from 'react-native-reanimated';
+import React, { useMemo, useState } from 'react';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Screen } from '../../components/Screen';
-import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
 
-const LOGO_IMG = require('../../../assets/logo-vertical.png');
+const LOGO_IMG = require('../../../assets/logopng/OCDLOGO-04.png');
+
+const ui = {
+  pageBg: '#FFFFFF',
+  text: '#111111',
+  muted: '#BBBBBB',
+  mutedStrong: '#888888',
+  line: '#E8E8E8',
+  black: '#000000',
+} as const;
+
+/** Open underline-only input — no background, no box. */
+const underlineInput = {
+  borderWidth: 0,
+  borderBottomWidth: 1.5,
+  borderBottomColor: ui.line,
+  borderRadius: 0,
+  backgroundColor: 'transparent',
+  paddingHorizontal: 2,
+  paddingVertical: 14,
+  color: ui.text,
+  textAlign: 'right' as const,
+  fontSize: 16,
+  minHeight: 52,
+};
 
 type LoginScreenProps = {
   onBackToStore: () => void;
 };
-
-function SegmentedToggle({
-  mode,
-  onChangeMode,
-}: {
-  mode: 'login' | 'signup';
-  onChangeMode: (m: 'login' | 'signup') => void;
-}) {
-  const [pillWidth, setPillWidth] = useState(0);
-  const slide = useSharedValue(mode === 'login' ? 1 : 0);
-
-  useEffect(() => {
-    slide.value = withSpring(mode === 'login' ? 1 : 0, {
-      damping: 20,
-      stiffness: 180,
-      mass: 0.7,
-    });
-  }, [mode]);
-
-  const onLayout = useCallback((e: any) => {
-    const w = e.nativeEvent.layout.width;
-    if (w > 0) setPillWidth(w / 2);
-  }, []);
-
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(slide.value, [0, 1], [pillWidth, 0]) }],
-  }));
-
-  const loginTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(slide.value, [0, 1], [colors.primary, '#FFFFFF']),
-    fontWeight: '800',
-    fontSize: 14,
-  }));
-
-  const signupTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(slide.value, [0, 1], ['#FFFFFF', colors.primary]),
-    fontWeight: '800',
-    fontSize: 14,
-  }));
-
-  return (
-    <View
-      onLayout={onLayout}
-      style={{
-        height: 52,
-        borderRadius: 16,
-        backgroundColor: '#E8EEFF',
-        borderWidth: 1.5,
-        borderColor: 'rgba(37,99,235,0.15)',
-        flexDirection: 'row-reverse',
-        padding: 4,
-        overflow: 'hidden',
-      }}
-    >
-      {/* sliding pill indicator */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          {
-            position: 'absolute',
-            top: 4,
-            bottom: 4,
-            left: 4,
-            width: pillWidth - 4,
-            borderRadius: 12,
-            backgroundColor: colors.primary,
-            shadowColor: colors.primary,
-            shadowOpacity: 0.35,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 5,
-          },
-          indicatorStyle,
-        ]}
-      />
-
-      {/* left tab: הרשמה ללקוח */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected: mode === 'signup' }}
-        onPress={() => onChangeMode('signup')}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
-      >
-        <Animated.Text numberOfLines={1} style={signupTextStyle}>
-          הרשמה ללקוח
-        </Animated.Text>
-      </Pressable>
-
-      {/* right tab: התחברות */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected: mode === 'login' }}
-        onPress={() => onChangeMode('login')}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
-      >
-        <Animated.Text numberOfLines={1} style={loginTextStyle}>
-          התחברות
-        </Animated.Text>
-      </Pressable>
-    </View>
-  );
-}
 
 export function LoginScreen({ onBackToStore }: LoginScreenProps) {
   const { signInWithPassword, signUpCustomer } = useAuth();
@@ -137,89 +54,6 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const inLogo = useSharedValue(0);
-  const inCard = useSharedValue(0);
-  const floatA = useSharedValue(0);
-  const floatB = useSharedValue(0);
-  const floatC = useSharedValue(0);
-
-  useEffect(() => {
-    inLogo.value = withSpring(1, { damping: 12, stiffness: 140, mass: 0.9 });
-    inCard.value = withDelay(120, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }));
-
-    floatA.value = withRepeat(withTiming(1, { duration: 4200, easing: Easing.inOut(Easing.quad) }), -1, true);
-    floatB.value = withRepeat(withTiming(1, { duration: 5200, easing: Easing.inOut(Easing.quad) }), -1, true);
-    floatC.value = withRepeat(withTiming(1, { duration: 6400, easing: Easing.inOut(Easing.quad) }), -1, true);
-  }, [inCard, inLogo, floatA, floatB, floatC]);
-
-  const logoStyle = useAnimatedStyle(() => {
-    const s = interpolate(inLogo.value, [0, 1], [0.92, 1]);
-    const y = interpolate(inLogo.value, [0, 1], [8, 0]);
-    return {
-      opacity: inLogo.value,
-      transform: [{ translateY: y }, { scale: s }],
-    };
-  });
-
-  const cardStyle = useAnimatedStyle(() => {
-    const y = interpolate(inCard.value, [0, 1], [18, 0]);
-    return { opacity: inCard.value, transform: [{ translateY: y }] };
-  });
-
-  const blobA = useAnimatedStyle(() => {
-    const t = floatA.value;
-    return {
-      position: 'absolute',
-      width: 260,
-      height: 260,
-      borderRadius: 130,
-      left: -120,
-      top: -70,
-      opacity: 0.35,
-      transform: [
-        { translateX: interpolate(t, [0, 1], [-10, 10]) },
-        { translateY: interpolate(t, [0, 1], [10, -10]) },
-        { scale: interpolate(t, [0, 1], [1, 1.06]) },
-      ],
-    };
-  });
-
-  const blobB = useAnimatedStyle(() => {
-    const t = floatB.value;
-    return {
-      position: 'absolute',
-      width: 220,
-      height: 220,
-      borderRadius: 110,
-      left: 220,
-      top: -110,
-      opacity: 0.28,
-      transform: [
-        { translateX: interpolate(t, [0, 1], [-12, 12]) },
-        { translateY: interpolate(t, [0, 1], [12, -12]) },
-        { scale: interpolate(t, [0, 1], [1, 1.05]) },
-      ],
-    };
-  });
-
-  const blobC = useAnimatedStyle(() => {
-    const t = floatC.value;
-    return {
-      position: 'absolute',
-      width: 280,
-      height: 280,
-      borderRadius: 140,
-      left: 120,
-      top: 420,
-      opacity: 0.22,
-      transform: [
-        { translateX: interpolate(t, [0, 1], [-10, 10]) },
-        { translateY: interpolate(t, [0, 1], [10, -10]) },
-        { scale: interpolate(t, [0, 1], [1, 1.04]) },
-      ],
-    };
-  });
-
   const onSubmit = async () => {
     try {
       setSubmitting(true);
@@ -227,22 +61,9 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
         await signInWithPassword({ phone, password });
         return;
       }
-
-      if (!name.trim()) {
-        Toast.show({ type: 'error', text1: 'נא להזין שם מלא' });
-        return;
-      }
-
-      if (password.length < 4) {
-        Toast.show({ type: 'error', text1: 'הסיסמה חייבת להכיל לפחות 4 תווים' });
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        Toast.show({ type: 'error', text1: 'אימות הסיסמה אינו תואם' });
-        return;
-      }
-
+      if (!name.trim()) { Toast.show({ type: 'error', text1: 'נא להזין שם מלא' }); return; }
+      if (password.length < 4) { Toast.show({ type: 'error', text1: 'הסיסמה חייבת להכיל לפחות 4 תווים' }); return; }
+      if (password !== confirmPassword) { Toast.show({ type: 'error', text1: 'אימות הסיסמה אינו תואם' }); return; }
       await signUpCustomer({ name, phone, address, password });
     } catch (e: any) {
       Toast.show({
@@ -261,188 +82,174 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
     return name.trim().length >= 2 && phone.trim().length >= 3 && password.length >= 4 && confirmPassword.length >= 4;
   }, [confirmPassword, mode, name, password, phone, submitting]);
 
+  const primaryLabel = submitting
+    ? (mode === 'login' ? 'מתחבר…' : 'נרשם…')
+    : mode === 'login' ? 'כניסה' : 'צור חשבון לקוח';
+
   return (
-    <Screen>
+    <Screen backgroundColor={ui.pageBg} padded={false}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={{ flex: 1 }}>
-          <Animated.View pointerEvents="none" style={[blobA, { backgroundColor: '#DBEAFE' }]} />
-          <Animated.View pointerEvents="none" style={[blobB, { backgroundColor: '#E0E7FF' }]} />
-          <Animated.View pointerEvents="none" style={[blobC, { backgroundColor: '#DCFCE7' }]} />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 28, paddingTop: 28, paddingBottom: 48 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
+          {/* Logo + headline */}
+          <View style={{ alignItems: 'center', marginBottom: 24 }}>
+            <Image
+              source={LOGO_IMG}
+              style={{ width: 140, height: 52 }}
+              resizeMode="contain"
+              accessibilityRole="image"
+              accessibilityLabel="לוגו"
+            />
+            <Text style={{ color: ui.text, fontSize: 27, fontWeight: '800', marginTop: 24, textAlign: 'center' }}>
+              {mode === 'login' ? 'רגע לפני שנכנסים' : 'יצירת חשבון'}
+            </Text>
+            <Text style={{ color: ui.mutedStrong, marginTop: 8, fontSize: 15, fontWeight: '400', textAlign: 'center' }}>
+              {mode === 'login' ? 'צריך טלפון וסיסמה' : 'הרשם כדי להמשיך'}
+            </Text>
+          </View>
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1, paddingTop: 24, paddingBottom: 96 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          {/* Fields */}
+          <View style={{ gap: 4 }}>
+            {mode === 'signup' && (
+              <Input
+                label=""
+                value={name}
+                onChangeText={setName}
+                placeholder="שם מלא"
+                textContentType="name"
+                autoComplete="name"
+                style={underlineInput}
+                placeholderTextColor={ui.muted}
+              />
+            )}
+
+            <TextInput
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="טלפון"
+              placeholderTextColor={ui.muted}
+              keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              style={underlineInput}
+            />
+
+            {mode === 'signup' && (
+              <Input
+                label=""
+                value={address}
+                onChangeText={setAddress}
+                placeholder="כתובת"
+                textContentType="fullStreetAddress"
+                autoComplete="street-address"
+                style={underlineInput}
+                placeholderTextColor={ui.muted}
+              />
+            )}
+
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="סיסמה"
+              placeholderTextColor={ui.muted}
+              secureTextEntry
+              textContentType="password"
+              autoComplete="password"
+              style={underlineInput}
+            />
+
+            {mode === 'signup' && (
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="אימות סיסמה"
+                placeholderTextColor={ui.muted}
+                secureTextEntry
+                textContentType="password"
+                autoComplete="password"
+                style={underlineInput}
+              />
+            )}
+          </View>
+
+          {/* Forgot password */}
+          {mode === 'login' && (
+            <Pressable
+              onPress={() =>
+                Toast.show({ type: 'info', text1: 'טיפ', text2: 'אם שכחת סיסמה — פנה למנהל מערכת לאיפוס.' })
+              }
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, alignSelf: 'flex-start', marginTop: 14, paddingVertical: 4 })}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: ui.mutedStrong, fontSize: 14 }}>שכחתי סיסמה</Text>
+            </Pressable>
+          )}
+
+          {/* Submit */}
+          <View style={{ marginTop: 36 }}>
+          <Pressable
+            onPress={onSubmit}
+            disabled={!canSubmit}
+            style={({ pressed }) => ({ opacity: pressed && canSubmit ? 0.88 : 1 })}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canSubmit }}
           >
-            <Animated.View style={[{ alignItems: 'center', marginBottom: 16 }, logoStyle]}>
-              <View
-                style={{
-                  width: 96,
-                  height: 96,
-                  borderRadius: 28,
-                  backgroundColor: colors.primary,
-                  borderWidth: 0,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: '#000',
-                  shadowOpacity: 0.08,
-                  shadowRadius: 16,
-                  shadowOffset: { width: 0, height: 10 },
-                  elevation: 4,
-                }}
+            <View
+              style={{
+                backgroundColor: !canSubmit ? '#D1D5DB' : ui.black,
+                borderRadius: 18,
+                paddingVertical: 17,
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 56,
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 16 }}>{primaryLabel}</Text>
+            </View>
+          </Pressable>
+          </View>
+
+          {/* Switch mode */}
+          <View style={{ alignItems: 'center', marginTop: 28, gap: 14 }}>
+            {mode === 'login' ? (
+              <Pressable
+                onPress={() => setMode('signup')}
+                style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
+                accessibilityRole="button"
               >
-                <Image source={LOGO_IMG} style={{ width: 86, height: 86 }} resizeMode="contain" />
-              </View>
-              <Text style={{ color: colors.text, fontSize: 28, fontWeight: '900', marginTop: 14, textAlign: 'center' }}>
-                מערכת ניהול משימות
-              </Text>
-              <Text style={{ color: colors.muted, marginTop: 6, fontWeight: '700', textAlign: 'center' }}>
-                התחברות מהירה ובטוחה לניהול
-              </Text>
-            </Animated.View>
-
-            <Animated.View style={[cardStyle]}>
-              <Card
-                style={{
-                  padding: 16,
-                  shadowColor: '#000',
-                  shadowOpacity: 0.06,
-                  shadowRadius: 18,
-                  shadowOffset: { width: 0, height: 12 },
-                  elevation: 3,
-                }}
+                <Text style={{ fontSize: 15, textAlign: 'center', color: ui.mutedStrong }}>
+                  אין לך חשבון עדיין?{'  '}
+                  <Text style={{ fontWeight: '800', color: ui.text }}>הירשם כאן</Text>
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => setMode('login')}
+                style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
+                accessibilityRole="button"
               >
-                <View style={{ gap: 12 }}>
-                  <SegmentedToggle mode={mode} onChangeMode={setMode} />
+                <Text style={{ fontSize: 15, textAlign: 'center', color: ui.mutedStrong }}>
+                  כבר יש לך חשבון?{'  '}
+                  <Text style={{ fontWeight: '800', color: ui.text }}>התחבר כאן</Text>
+                </Text>
+              </Pressable>
+            )}
 
-                  {mode === 'signup' && (
-                    <Input
-                      label="שם מלא"
-                      value={name}
-                      onChangeText={setName}
-                      placeholder="ישראל ישראלי"
-                      textContentType="name"
-                      autoComplete="name"
-                    />
-                  )}
-
-                  <Input
-                    label="טלפון"
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                    placeholder="050..."
-                    textContentType="telephoneNumber"
-                    autoComplete="tel"
-                  />
-                  {mode === 'signup' && (
-                    <Input
-                      label="כתובת"
-                      value={address}
-                      onChangeText={setAddress}
-                      placeholder="רחוב, עיר"
-                      textContentType="fullStreetAddress"
-                      autoComplete="street-address"
-                    />
-                  )}
-                  <Input
-                    label="סיסמה"
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••"
-                    secureTextEntry
-                    textContentType="password"
-                    autoComplete="password"
-                  />
-                  {mode === 'signup' && (
-                    <Input
-                      label="אימות סיסמה"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      placeholder="••••••"
-                      secureTextEntry
-                      textContentType="password"
-                      autoComplete="password"
-                    />
-                  )}
-
-                  <Button
-                    title={
-                      submitting ? (mode === 'login' ? 'מתחבר…' : 'נרשם…') : mode === 'login' ? 'התחבר' : 'צור חשבון לקוח'
-                    }
-                    onPress={onSubmit}
-                    disabled={!canSubmit}
-                    style={{
-                      shadowColor: colors.primary,
-                      shadowOpacity: 0.18,
-                      shadowRadius: 18,
-                      shadowOffset: { width: 0, height: 10 },
-                      elevation: 2,
-                    }}
-                  />
-
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Button title="חזרה לחנות" variant="secondary" onPress={onBackToStore} />
-                    </View>
-                    {mode === 'login' && (
-                      <View style={{ flex: 1 }}>
-                        <Pressable
-                          onPress={() =>
-                            Toast.show({
-                              type: 'info',
-                              text1: 'טיפ',
-                              text2: 'אם שכחת סיסמה — פנה למנהל מערכת לאיפוס.',
-                            })
-                          }
-                          style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}
-                        >
-                          <View
-                            style={{
-                              borderRadius: 18,
-                              paddingVertical: 14,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              backgroundColor: '#EEF4FF',
-                              borderWidth: 1,
-                              borderColor: '#C7D8FF',
-                            }}
-                          >
-                            <Text style={{ color: colors.primary, fontWeight: '900' }}>שכחתי סיסמה</Text>
-                          </View>
-                        </Pressable>
-                      </View>
-                    )}
-                    {mode === 'signup' && (
-                      <View style={{ flex: 1 }}>
-                        <View
-                          style={{
-                            borderRadius: 18,
-                            paddingVertical: 14,
-                            paddingHorizontal: 12,
-                            alignItems: 'center',
-                            backgroundColor: 'rgba(37,99,235,0.06)',
-                            borderWidth: 1,
-                            borderColor: 'rgba(37,99,235,0.14)',
-                          }}
-                        >
-                          <Text style={{ color: colors.primary, fontWeight: '800', textAlign: 'center', fontSize: 12 }}>
-                            ההרשמה יוצרת חשבון לקוח בלבד
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-
-                </View>
-              </Card>
-            </Animated.View>
-          </ScrollView>
-        </View>
+            <Pressable
+              onPress={onBackToStore}
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: ui.muted, fontSize: 14 }}>חזרה לחנות</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
 }
-

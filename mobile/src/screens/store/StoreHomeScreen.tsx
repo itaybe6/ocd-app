@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import * as Haptics from 'expo-haptics';
 import {
   ActivityIndicator,
-  I18nManager,
   Image,
   type LayoutChangeEvent,
   Modal,
@@ -59,7 +58,7 @@ import {
   OcdPlusJoinBannerButton,
   formatOcdPrice,
 } from '../../components/OcdPlusProductPriceBlock';
-import { OcdPlusSubscribeSheet } from '../../components/OcdPlusSubscribeSheet';
+import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
 import { useAuth } from '../../state/AuthContext';
 import { colors } from '../../theme/colors';
 import { STORE_BUNDLE_CARD_BODY_MIN_HEIGHT } from '../../theme/storeProductCardLayout';
@@ -2609,7 +2608,6 @@ export function StoreHomeScreen({
   onOpenProduct,
   onOpenCategory,
   isOcdPlusSubscriber = false,
-  onOcdPlusSubscribePress,
   initialTab,
   initialTabRequestId,
 }: {
@@ -2617,7 +2615,6 @@ export function StoreHomeScreen({
   onFavoritesPress?: () => void;
   onSearchPress?: () => void;
   isOcdPlusSubscriber?: boolean;
-  onOcdPlusSubscribePress?: () => void;
   onProductPress?: (handle: string) => void;
   onOpenCart?: () => void;
   onOpenProduct?: (product: StoreProduct) => void;
@@ -2632,6 +2629,7 @@ export function StoreHomeScreen({
   initialTabRequestId?: number;
 }) {
   const insets = useSafeAreaInsets();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const { user } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
@@ -2669,7 +2667,6 @@ export function StoreHomeScreen({
   } | null>(null);
   const [query, setQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [ocdPlusSubscribeSheetOpen, setOcdPlusSubscribeSheetOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const homeSubcategoryTabsRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
@@ -3649,7 +3646,7 @@ export function StoreHomeScreen({
                           <OcdPlusProductPriceBlock
                             regularPrice={product.price}
                             isOcdPlusSubscriber={isOcdPlusSubscriber}
-                            onSubscribePress={onOcdPlusSubscribePress}
+                            onSubscribePress={openOcdPlusSubscribeSheet}
                             titleSize={20}
                           />
                         </View>
@@ -3823,7 +3820,7 @@ export function StoreHomeScreen({
                     >
                       <Pressable
                         onPress={() => {
-                          if (!isOcdPlusSubscriber) setOcdPlusSubscribeSheetOpen(true);
+                          if (!isOcdPlusSubscriber) openOcdPlusSubscribeSheet();
                         }}
                         style={({ pressed }) => ({
                           borderRadius: bannerRadius,
@@ -3856,7 +3853,7 @@ export function StoreHomeScreen({
                     >
                       <OcdPlusJoinBannerButton
                         isSubscriber={isOcdPlusSubscriber}
-                        onPress={() => setOcdPlusSubscribeSheetOpen(true)}
+                        onPress={() => openOcdPlusSubscribeSheet()}
                       />
                     </View>
                   </View>
@@ -3898,9 +3895,9 @@ export function StoreHomeScreen({
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    style={{ marginHorizontal: -12 }}
+                    style={{ marginHorizontal: -12, direction: 'rtl' }}
                     contentContainerStyle={{
-                      flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+                      flexDirection: 'row',
                       gap: 12,
                       paddingHorizontal: 12,
                       paddingBottom: 40,
@@ -3913,10 +3910,12 @@ export function StoreHomeScreen({
                           width: 160,
                           borderRadius: 18,
                           marginBottom: 6,
+                          /* ScrollView uses direction 'rtl' for swipe — reset card layout so prices/text match grid cards */
+                          direction: 'ltr',
                           ...storeProductCardShadowStyle,
                         }}
                       >
-                        <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                        <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', width: '100%' }}>
                           <Pressable onPress={() => onProductPress?.(product.handle)}>
                             <View style={{ height: 148, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
                               <ProductImage product={product} height={148} bottomRadius={0} />
@@ -3955,17 +3954,44 @@ export function StoreHomeScreen({
                             </View>
                           </Pressable>
                           <Pressable onPress={() => onProductPress?.(product.handle)}>
-                            <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: 24 }}>
-                              <View style={{ minHeight: STORE_BUNDLE_CARD_BODY_MIN_HEIGHT }}>
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <Text style={{ color: '#111827', fontSize: 14, fontWeight: '900', textAlign: 'right' }}>
-                                    {formatOcdPrice(product.price)}
-                                  </Text>
-                                  {!!product.compareAtPrice && (
-                                    <Text style={{ color: '#9CA3AF', fontSize: 11, fontWeight: '600', textDecorationLine: 'line-through' }}>
-                                      {formatOcdPrice(product.compareAtPrice)}
+                            <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24, width: '100%', alignSelf: 'stretch' }}>
+                              <View style={{ minHeight: STORE_BUNDLE_CARD_BODY_MIN_HEIGHT, width: '100%' }}>
+                                <View style={{ width: '100%', alignItems: 'flex-end' }}>
+                                  <View
+                                    style={{
+                                      flexDirection: 'row-reverse',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      flexWrap: 'wrap',
+                                      justifyContent: 'flex-start',
+                                      maxWidth: '100%',
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color: '#111827',
+                                        fontSize: 14,
+                                        fontWeight: '900',
+                                        textAlign: 'right',
+                                        writingDirection: 'rtl',
+                                      }}
+                                    >
+                                      {formatOcdPrice(product.price)}
                                     </Text>
-                                  )}
+                                    {!!product.compareAtPrice && (
+                                      <Text
+                                        style={{
+                                          color: '#9CA3AF',
+                                          fontSize: 11,
+                                          fontWeight: '600',
+                                          textDecorationLine: 'line-through',
+                                          writingDirection: 'rtl',
+                                        }}
+                                      >
+                                        {formatOcdPrice(product.compareAtPrice)}
+                                      </Text>
+                                    )}
+                                  </View>
                                 </View>
                                 <Text
                                   numberOfLines={2}
@@ -3975,7 +4001,8 @@ export function StoreHomeScreen({
                                     lineHeight: 17,
                                     fontWeight: '700',
                                     textAlign: 'right',
-                                    marginTop: 3,
+                                    writingDirection: 'rtl',
+                                    marginTop: 4,
                                   }}
                                 >
                                   {product.name}
@@ -3983,7 +4010,13 @@ export function StoreHomeScreen({
                                 {!!product.subtitle ? (
                                   <Text
                                     numberOfLines={1}
-                                    style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                                    style={{
+                                      color: '#9AA3B2',
+                                      fontSize: 10,
+                                      textAlign: 'right',
+                                      writingDirection: 'rtl',
+                                      marginTop: 2,
+                                    }}
                                   >
                                     {product.subtitle}
                                   </Text>
@@ -4007,7 +4040,7 @@ export function StoreHomeScreen({
                           <OcdPlusFloatingBadge
                             regularPrice={product.price}
                             isSubscriber={isOcdPlusSubscriber}
-                            onPress={onOcdPlusSubscribePress}
+                            onPress={openOcdPlusSubscribeSheet}
                           />
                         </View>
                       </View>
@@ -4190,7 +4223,7 @@ export function StoreHomeScreen({
                           <OcdPlusFloatingBadge
                             regularPrice={product.price}
                             isSubscriber={isOcdPlusSubscriber}
-                            onPress={onOcdPlusSubscribePress}
+                            onPress={openOcdPlusSubscribeSheet}
                           />
                         </View>
                       </View>
@@ -4227,11 +4260,6 @@ export function StoreHomeScreen({
           </View>
         </ScrollView>
         <StoreFloatingTabBar activeTab={activeBottomTab} onTabPress={handleBottomTabPress} />
-        <OcdPlusSubscribeSheet
-          visible={ocdPlusSubscribeSheetOpen}
-          onClose={() => setOcdPlusSubscribeSheetOpen(false)}
-          isSubscriber={isOcdPlusSubscriber}
-        />
       </View>
     </View>
   );
@@ -4248,7 +4276,6 @@ export function StoreCategoryScreen({
   onOpenCategory,
   onTabPress,
   isOcdPlusSubscriber = false,
-  onOcdPlusSubscribePress,
   subcategories,
 }: {
   onBack: () => void;
@@ -4267,10 +4294,10 @@ export function StoreCategoryScreen({
   }) => void;
   onTabPress: (tabId: StoreBottomTabId) => void;
   isOcdPlusSubscriber?: boolean;
-  onOcdPlusSubscribePress?: () => void;
   subcategories?: StoreSubcategory[];
 }) {
   const insets = useSafeAreaInsets();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4533,7 +4560,7 @@ export function StoreCategoryScreen({
 
   const renderCategoryHeaderRow = useCallback(
     () => (
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
+      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 2 }}>
         <View style={{ width: 44, alignItems: 'center' }}>
           {onOpenCart ? (
             <Pressable
@@ -4603,7 +4630,7 @@ export function StoreCategoryScreen({
               justifyContent: 'center',
             }}
           >
-            <Text style={{ color: '#111827', fontSize: 17, fontWeight: '700' }}>→</Text>
+            <Text style={{ color: '#111827', fontSize: 17, fontWeight: '700' }}>←</Text>
           </Pressable>
         </View>
       </View>
@@ -4895,7 +4922,7 @@ export function StoreCategoryScreen({
                     <OcdPlusFloatingBadge
                       regularPrice={product.price}
                       isSubscriber={isOcdPlusSubscriber}
-                      onPress={onOcdPlusSubscribePress}
+                      onPress={openOcdPlusSubscribeSheet}
                     />
                   </View>
                 </View>
@@ -4931,16 +4958,15 @@ export function StoreProductScreen({
   product,
   onTabPress,
   isOcdPlusSubscriber = false,
-  onOcdPlusSubscribePress,
 }: {
   onBack: () => void;
   onOpenCart?: () => void;
   product: StoreProduct;
   onTabPress: (tabId: StoreBottomTabId) => void;
   isOcdPlusSubscriber?: boolean;
-  onOcdPlusSubscribePress?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { addItem, itemCount, getQuantity, isMutating } = useCart();
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
@@ -5090,7 +5116,7 @@ export function StoreProductScreen({
                 <OcdPlusProductPriceBlock
                   regularPrice={product.price}
                   isOcdPlusSubscriber={isOcdPlusSubscriber}
-                  onSubscribePress={onOcdPlusSubscribePress}
+                  onSubscribePress={openOcdPlusSubscribeSheet}
                   titleSize={26}
                   variant="onDark"
                 />

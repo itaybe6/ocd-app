@@ -75,7 +75,6 @@ function CustomerStoreScreen({ navigation, route }: DrawerScreenProps<CustomerDr
       onProfilePress={() => navigation.navigate('Profile')}
       onFavoritesPress={() => navigation.navigate('Favorites')}
       isOcdPlusSubscriber={isOcdPlusSubscriber}
-      onOcdPlusSubscribePress={() => safeNavigate('StoreOcdPlus')}
       onSearchPress={() => safeNavigate('StoreSearch')}
       onProductPress={(handle) => safeNavigate('Product', { handle })}
       onOpenCart={() => safeNavigate('StoreCart')}

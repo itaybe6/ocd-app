@@ -18,6 +18,7 @@ import { fetchProductByHandle, type ShopifyProduct, type ShopifyProductVariant }
 import type { RootStackParamList } from '../../navigation/types';
 import { computeOcdPlusPrice, formatOcdPrice } from '../../components/OcdPlusProductPriceBlock';
 import { OcdPlusMark } from '../../components/OcdPlusMark';
+import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
 import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
@@ -125,6 +126,7 @@ function getCartProduct(product: ShopifyProduct, activeVariant: ShopifyProductVa
 
 export function ProductScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
 
   const { user } = useAuth();
   const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
@@ -729,7 +731,7 @@ export function ProductScreen({ navigation, route }: Props) {
               {/* OCD+ — תגית מחיר חבר */}
               {displayCurrencyCode === 'ILS' && (
                 <Pressable
-                  onPress={() => navigation.navigate('StoreOcdPlus')}
+                  onPress={openOcdPlusSubscribeSheet}
                   style={{
                     flexDirection: 'row-reverse',
                     alignItems: 'center',
