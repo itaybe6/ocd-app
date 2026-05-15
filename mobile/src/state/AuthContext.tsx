@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import Toast from 'react-native-toast-message';
-import { supabase } from '../lib/supabase';
+import {
+  sendLoginOtp as sendLoginOtpApi,
+  sendRegisterOtp as sendRegisterOtpApi,
+  verifyLoginOtp as verifyLoginOtpApi,
+  verifyRegisterOtp as verifyRegisterOtpApi,
+} from '../lib/authOtp';
 import { navigationRef } from '../navigation/navigationRef';
 import type { UserRole, UserRow } from '../types/database';
 
@@ -10,8 +15,14 @@ export type AuthUser = Omit<UserRow, 'password'>;
 type AuthContextValue = {
   user: AuthUser | null;
   isBootstrapping: boolean;
-  signInWithPassword: (args: { phone: string; password: string }) => Promise<void>;
-  signUpCustomer: (args: { phone: string; password: string; name: string; address?: string | null }) => Promise<void>;
+  /** Sends an SMS OTP to an existing user's phone number for login. Returns the normalized phone (E.164 without '+'). */
+  sendLoginOtp: (args: { phone: string }) => Promise<{ phone: string }>;
+  /** Verifies the login OTP. On success, persists the user and navigates to Main. */
+  verifyLoginOtp: (args: { phone: string; code: string }) => Promise<void>;
+  /** Sends an SMS OTP to a phone number for new-account registration. */
+  sendRegisterOtp: (args: { phone: string }) => Promise<{ phone: string }>;
+  /** Verifies the register OTP and creates the customer account. On success, persists the user and navigates to the customer profile. */
+  verifyRegisterOtp: (args: { phone: string; code: string; name: string; address?: string | null }) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: AuthUser | null) => Promise<void>;
   hasRole: (role: UserRole) => boolean;
@@ -37,10 +48,6 @@ async function loadPersistedUser(): Promise<AuthUser | null> {
     await AsyncStorage.removeItem(STORAGE_KEY);
     return null;
   }
-}
-
-function normalizePhone(phone: string) {
-  return phone.trim();
 }
 
 function scheduleResetMain(params?: object) {
@@ -109,76 +116,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasRole = useCallback((role: UserRole) => user?.role === role, [user?.role]);
 
-  const signInWithPassword = useCallback(
-    async ({ phone, password }: { phone: string; password: string }) => {
-      const normalizedPhone = normalizePhone(phone);
-      const normalizedPassword = password;
+  const sendLoginOtp = useCallback(async ({ phone }: { phone: string }) => {
+    const res = await sendLoginOtpApi(phone.trim());
+    return { phone: res.phone };
+  }, []);
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, phone, password, role, name, address, price, ocd_plus_subscriber, avatar_url, created_at')
-        .eq('phone', normalizedPhone)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!data) {
-        Toast.show({ type: 'error', text1: 'המשתמש לא נמצא' });
-        return;
-      }
-      if ((data as UserRow).password !== normalizedPassword) {
-        Toast.show({ type: 'error', text1: 'סיסמה שגויה' });
-        return;
-      }
-
-      const { password: _pw, ...safeUser } = data as UserRow;
-      await setUser(safeUser as AuthUser);
+  const verifyLoginOtp = useCallback(
+    async ({ phone, code }: { phone: string; code: string }) => {
+      const { user: authedUser } = await verifyLoginOtpApi({ phone: phone.trim(), code: code.trim() });
+      await setUser(authedUser as AuthUser);
       Toast.show({ type: 'success', text1: 'התחברת בהצלחה' });
       scheduleResetMain();
     },
     [setUser]
   );
 
-  const signUpCustomer = useCallback(
-    async ({ phone, password, name, address }: { phone: string; password: string; name: string; address?: string | null }) => {
-      const normalizedPhone = normalizePhone(phone);
-      const normalizedPassword = password;
-      const normalizedName = name.trim();
-      const normalizedAddress = address?.trim() || null;
+  const sendRegisterOtp = useCallback(async ({ phone }: { phone: string }) => {
+    const res = await sendRegisterOtpApi(phone.trim());
+    return { phone: res.phone };
+  }, []);
 
-      if (!normalizedName || !normalizedPhone || !normalizedPassword) {
-        Toast.show({ type: 'error', text1: 'נא למלא שם, טלפון וסיסמה' });
-        return;
-      }
-
-      const { data: existingUser, error: existingUserError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', normalizedPhone)
-        .maybeSingle();
-
-      if (existingUserError) throw existingUserError;
-      if (existingUser) {
-        Toast.show({ type: 'error', text1: 'כבר קיים חשבון עם הטלפון הזה' });
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('users')
-        .insert({
-          phone: normalizedPhone,
-          password: normalizedPassword,
-          role: 'customer',
-          name: normalizedName,
-          address: normalizedAddress,
-          price: null,
-          avatar_url: null,
-        })
-        .select('id, phone, role, name, address, price, ocd_plus_subscriber, avatar_url, created_at')
-        .single();
-
-      if (error) throw error;
-
-      await setUser(data as AuthUser);
+  const verifyRegisterOtp = useCallback(
+    async ({ phone, code, name, address }: { phone: string; code: string; name: string; address?: string | null }) => {
+      const { user: authedUser } = await verifyRegisterOtpApi({
+        phone: phone.trim(),
+        code: code.trim(),
+        name: name.trim(),
+        address: address?.trim() || null,
+      });
+      await setUser(authedUser as AuthUser);
       Toast.show({ type: 'success', text1: 'נרשמת בהצלחה' });
       scheduleResetMainToCustomerProfile();
     },
@@ -186,8 +152,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isBootstrapping, signInWithPassword, signUpCustomer, signOut, setUser, hasRole }),
-    [user, isBootstrapping, signInWithPassword, signUpCustomer, signOut, setUser, hasRole]
+    () => ({
+      user,
+      isBootstrapping,
+      sendLoginOtp,
+      verifyLoginOtp,
+      sendRegisterOtp,
+      verifyRegisterOtp,
+      signOut,
+      setUser,
+      hasRole,
+    }),
+    [user, isBootstrapping, sendLoginOtp, verifyLoginOtp, sendRegisterOtp, verifyRegisterOtp, signOut, setUser, hasRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -198,4 +174,3 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
-
