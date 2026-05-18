@@ -12,7 +12,8 @@
 // Required Edge Function secrets:
 //   SUPABASE_URL                 (auto)
 //   SUPABASE_SERVICE_ROLE_KEY    (auto)
-//   PULSEEM_FROM_NUMBER          ('EliyaMoshe' / sender id or virtual number registered with Pulseem)
+//   PULSEEM_FROM_NUMBER          sender id or virtual number registered with Pulseem (defaults to '0508085737')
+//   PULSEEM_FIELD_ENCRYPTION_KEY field encryption key from Pulseem API settings
 //
 // One of (REST preferred, ASMX fallback):
 //   PULSEEM_MAIN_API_KEY_B64     base64-encoded Pulseem REST API key  ← preferred
@@ -28,6 +29,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const PULSEEM_REST_URL = 'https://api.pulseem.com/api/v1/SmsApi/SendSms';
 const PULSEEM_ASMX_URL = 'https://www.pulseem.com/PublicService/PublicService.asmx';
+const DEFAULT_PULSEEM_FROM_NUMBER = 'ocd';
 
 type Action =
   | 'check_pulseem'
@@ -50,6 +52,7 @@ type PulseemCreds = {
   password: string;
   fromNumber: string;
   fromNumberRest: string;
+  fieldEncryptionKey: string;
 };
 
 const CORS_HEADERS = {
@@ -89,20 +92,20 @@ function loadPulseemCredentials(): PulseemCreds {
   const userId = (Deno.env.get('PULSEEM_USER_ID') ?? '').trim();
   const password = (Deno.env.get('PULSEEM_PASSWORD') ?? '').trim();
 
-  const fromGeneric = (Deno.env.get('PULSEEM_FROM_NUMBER') ?? '').trim();
+  const fromGeneric = (Deno.env.get('PULSEEM_FROM_NUMBER') ?? '').trim() || DEFAULT_PULSEEM_FROM_NUMBER;
   const fromOtp = (Deno.env.get('PULSEEM_OTP_FROM_NUMBER') ?? '').trim();
   const fromRest = (Deno.env.get('PULSEEM_REST_FROM_NUMBER') ?? '').trim();
+  const fieldEncryptionKey = (Deno.env.get('PULSEEM_FIELD_ENCRYPTION_KEY') ?? '').trim();
 
   const fromNumber = fromOtp || fromGeneric || fromRest;
   const fromNumberRest = fromRest || fromOtp || fromGeneric;
 
-  return { apiKey, userId, password, fromNumber, fromNumberRest };
+  return { apiKey, userId, password, fromNumber, fromNumberRest, fieldEncryptionKey };
 }
 
 /**
- * Normalize an Israeli phone number to international (no '+') for Pulseem,
- * and to a canonical local form for DB lookups (we keep the same normalized
- * value everywhere for consistency).
+ * Normalize an Israeli phone number to international (no '+'). Used as the
+ * canonical key when storing OTP codes in `phone_otp_codes`.
  */
 function normalizePhone(input: string): string {
   const digits = (input ?? '').replace(/\D+/g, '');
@@ -110,6 +113,50 @@ function normalizePhone(input: string): string {
   if (digits.startsWith('972')) return digits;
   if (digits.startsWith('0')) return `972${digits.slice(1)}`;
   return digits;
+}
+
+/**
+ * Build all phone variants we may match against rows in `public.users`. The
+ * column historically stores numbers in mixed formats (e.g. `0502307500`,
+ * `972502307500`, `050-230-7500`), so we look up by every reasonable variant.
+ */
+function phoneLookupVariants(input: string): string[] {
+  const raw = (input ?? '').trim();
+  const digits = raw.replace(/\D+/g, '');
+  if (!digits) return [];
+
+  const variants = new Set<string>();
+  variants.add(raw);
+  variants.add(digits);
+
+  if (digits.startsWith('972')) {
+    variants.add(`+${digits}`);
+    const local = `0${digits.slice(3)}`;
+    variants.add(local);
+  } else if (digits.startsWith('0')) {
+    variants.add(`972${digits.slice(1)}`);
+    variants.add(`+972${digits.slice(1)}`);
+  }
+
+  return Array.from(variants).filter((v) => v.length > 0);
+}
+
+function formatPhoneForPulseem(input: string): string {
+  const digits = (input ?? '').replace(/\D+/g, '');
+  if (digits.startsWith('972') && digits.length === 12) return `0${digits.slice(3)}`;
+  return digits;
+}
+
+/**
+ * Best-effort RPC call. The supabase-js query builder is PromiseLike but does
+ * not expose `.catch`, so we wrap it in a real Promise to swallow errors.
+ */
+async function safeRpc(supabase: SupabaseAdmin, fn: string): Promise<void> {
+  try {
+    await supabase.rpc(fn);
+  } catch {
+    // Intentionally ignored — this is a best-effort cleanup.
+  }
 }
 
 function generateOtp(): string {
@@ -148,6 +195,7 @@ function tryParseJson(text: string): unknown {
 
 async function sendSmsViaRest(opts: {
   apiKey: string;
+  fieldEncryptionKey?: string;
   fromNumber: string;
   toPhone: string;
   text: string;
@@ -163,15 +211,22 @@ async function sendSmsViaRest(opts: {
       isAutomaticUnsubscribeLink: false,
     },
   };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    // Pulseem swagger declares the header name as `APIKey`. Some accounts
+    // also accept `X-Api-Key`; sending both is harmless.
+    APIKey: opts.apiKey,
+    'X-Api-Key': opts.apiKey,
+  };
+
+  if (opts.fieldEncryptionKey) {
+    headers.FieldEncryptionKey = opts.fieldEncryptionKey;
+    headers['X-Field-Encryption-Key'] = opts.fieldEncryptionKey;
+  }
+
   const res = await fetch(PULSEEM_REST_URL, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      // Pulseem swagger declares the header name as `APIKey`. Some accounts
-      // also accept `X-Api-Key`; sending both is harmless.
-      APIKey: opts.apiKey,
-      'X-Api-Key': opts.apiKey,
-    },
+    headers,
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -226,11 +281,18 @@ async function sendOtpSms(opts: { phone: string; code: string }) {
   const creds = loadPulseemCredentials();
 
   const text = `OCD: קוד האימות שלך הוא ${opts.code}. הקוד תקף ל-5 דקות. אין למסור אותו לאף גורם.`;
+  const pulseemPhone = formatPhoneForPulseem(opts.phone);
 
   if (creds.apiKey) {
     const from = creds.fromNumberRest || creds.fromNumber;
     if (!from) throw new Error('Missing PULSEEM_FROM_NUMBER (sender)');
-    return sendSmsViaRest({ apiKey: creds.apiKey, fromNumber: from, toPhone: opts.phone, text });
+    return sendSmsViaRest({
+      apiKey: creds.apiKey,
+      fieldEncryptionKey: creds.fieldEncryptionKey,
+      fromNumber: from,
+      toPhone: pulseemPhone,
+      text,
+    });
   }
 
   if (creds.userId && creds.password) {
@@ -239,7 +301,7 @@ async function sendOtpSms(opts: { phone: string; code: string }) {
       userId: creds.userId,
       password: creds.password,
       fromNumber: creds.fromNumber,
-      toPhone: opts.phone,
+      toPhone: pulseemPhone,
       text,
     });
   }
@@ -377,6 +439,7 @@ Deno.serve(async (req) => {
           ok: true,
           mode: c.apiKey ? 'rest' : c.userId && c.password ? 'asmx' : 'none',
           hasApiKey: !!c.apiKey,
+          hasFieldEncryptionKey: !!c.fieldEncryptionKey,
           hasUserPass: !!(c.userId && c.password),
           hasFromNumber: !!c.fromNumber,
           fromNumberSample: c.fromNumber ? `${c.fromNumber.slice(0, 3)}…` : null,
@@ -385,14 +448,16 @@ Deno.serve(async (req) => {
 
       case 'send_login_otp': {
         const phone = normalizePhone(payload.phone ?? '');
+        const variants = phoneLookupVariants(payload.phone ?? '');
         if (!phone) return jsonResponse({ ok: false, error: 'מספר טלפון חסר או לא תקין' }, { status: 400 });
 
-        const { data: user, error: userErr } = await supabase
+        const { data: users, error: userErr } = await supabase
           .from('users')
           .select('id')
-          .eq('phone', phone)
-          .maybeSingle();
+          .in('phone', variants)
+          .limit(1);
         if (userErr) return jsonResponse({ ok: false, error: userErr.message }, { status: 500 });
+        const user = users?.[0];
         if (!user) return jsonResponse({ ok: false, error: 'המשתמש לא נמצא' }, { status: 404 });
 
         const throttle = await throttleSends(supabase, phone, 'login');
@@ -401,7 +466,7 @@ Deno.serve(async (req) => {
         const code = generateOtp();
         await persistOtp(supabase, phone, 'login', code);
         const sendResult = await sendOtpSms({ phone, code });
-        await supabase.rpc('cleanup_expired_phone_otp_codes').catch(() => null);
+        await safeRpc(supabase, 'cleanup_expired_phone_otp_codes');
 
         return jsonResponse({
           ok: true,
@@ -413,17 +478,19 @@ Deno.serve(async (req) => {
 
       case 'verify_login_otp': {
         const phone = normalizePhone(payload.phone ?? '');
+        const variants = phoneLookupVariants(payload.phone ?? '');
         if (!phone) return jsonResponse({ ok: false, error: 'מספר טלפון חסר או לא תקין' }, { status: 400 });
 
         const result = await verifyOtp(supabase, phone, 'login', String(payload.code ?? ''));
         if (!result.ok) return jsonResponse({ ok: false, error: result.error }, { status: result.status });
 
-        const { data: user, error: userErr } = await supabase
+        const { data: users, error: userErr } = await supabase
           .from('users')
           .select(USER_COLUMNS)
-          .eq('phone', phone)
-          .maybeSingle();
+          .in('phone', variants)
+          .limit(1);
         if (userErr) return jsonResponse({ ok: false, error: userErr.message }, { status: 500 });
+        const user = users?.[0];
         if (!user) return jsonResponse({ ok: false, error: 'המשתמש לא נמצא' }, { status: 404 });
 
         return jsonResponse({ ok: true, user });
@@ -431,15 +498,17 @@ Deno.serve(async (req) => {
 
       case 'send_register_otp': {
         const phone = normalizePhone(payload.phone ?? '');
+        const variants = phoneLookupVariants(payload.phone ?? '');
         if (!phone) return jsonResponse({ ok: false, error: 'מספר טלפון חסר או לא תקין' }, { status: 400 });
 
         const { data: existing, error: existingErr } = await supabase
           .from('users')
           .select('id')
-          .eq('phone', phone)
-          .maybeSingle();
+          .in('phone', variants)
+          .limit(1);
         if (existingErr) return jsonResponse({ ok: false, error: existingErr.message }, { status: 500 });
-        if (existing) return jsonResponse({ ok: false, error: 'כבר קיים חשבון עם הטלפון הזה' }, { status: 409 });
+        if (existing && existing.length > 0)
+          return jsonResponse({ ok: false, error: 'כבר קיים חשבון עם הטלפון הזה' }, { status: 409 });
 
         const throttle = await throttleSends(supabase, phone, 'register');
         if (!throttle.ok) return jsonResponse({ ok: false, error: throttle.error }, { status: throttle.status });
@@ -447,7 +516,7 @@ Deno.serve(async (req) => {
         const code = generateOtp();
         await persistOtp(supabase, phone, 'register', code);
         const sendResult = await sendOtpSms({ phone, code });
-        await supabase.rpc('cleanup_expired_phone_otp_codes').catch(() => null);
+        await safeRpc(supabase, 'cleanup_expired_phone_otp_codes');
 
         return jsonResponse({
           ok: true,
@@ -459,6 +528,7 @@ Deno.serve(async (req) => {
 
       case 'verify_register_otp': {
         const phone = normalizePhone(payload.phone ?? '');
+        const variants = phoneLookupVariants(payload.phone ?? '');
         const name = (payload.name ?? '').trim();
         const address = (payload.address ?? null)?.toString().trim() || null;
 
@@ -471,19 +541,23 @@ Deno.serve(async (req) => {
         const { data: existing, error: existingErr } = await supabase
           .from('users')
           .select('id')
-          .eq('phone', phone)
-          .maybeSingle();
+          .in('phone', variants)
+          .limit(1);
         if (existingErr) return jsonResponse({ ok: false, error: existingErr.message }, { status: 500 });
-        if (existing) return jsonResponse({ ok: false, error: 'כבר קיים חשבון עם הטלפון הזה' }, { status: 409 });
+        if (existing && existing.length > 0)
+          return jsonResponse({ ok: false, error: 'כבר קיים חשבון עם הטלפון הזה' }, { status: 409 });
 
         // The legacy `password` column is NOT NULL; OTP login no longer uses
         // it, so we store an unused random secret to satisfy the constraint.
         const placeholderPassword = `otp:${crypto.randomUUID()}${crypto.randomUUID()}`;
+        // Store new users in local Israeli format (e.g. `0502307500`) to match
+        // the historical convention in `public.users`.
+        const localPhone = formatPhoneForPulseem(phone);
 
         const { data: created, error: insertErr } = await supabase
           .from('users')
           .insert({
-            phone,
+            phone: localPhone,
             password: placeholderPassword,
             role: 'customer',
             name,

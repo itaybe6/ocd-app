@@ -22,6 +22,7 @@ type CheckPulseemResult = {
   ok: true;
   mode: 'rest' | 'asmx' | 'none';
   hasApiKey: boolean;
+  hasFieldEncryptionKey: boolean;
   hasUserPass: boolean;
   hasFromNumber: boolean;
   fromNumberSample: string | null;
