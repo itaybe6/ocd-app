@@ -22,6 +22,7 @@
     "expo": "~54.0.0",
     "expo-blur": "^55.0.10",
     "expo-constants": "~18.0.9",
+    "expo-dev-client": "~6.0.21",
     "expo-file-system": "~19.0.21",
     "expo-haptics": "^55.0.14",
     "expo-image-manipulator": "~14.0.8",
