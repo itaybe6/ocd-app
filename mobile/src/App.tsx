@@ -12,6 +12,7 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { LoadingProvider, useLoading } from './state/LoadingContext';
 import { registerForPushNotifications } from './lib/pushNotifications';
 import { safeNavigate } from './navigation/navigationRef';
+import { DebugErrorBoundary, DebugLogOverlay } from './components/DebugErrorBoundary';
 
 function AppShell() {
   const { isLoading } = useLoading();
@@ -43,25 +44,28 @@ function AppShell() {
       <RootNavigator />
       <LoadingOverlay visible={isLoading} />
       <Toast />
+      <DebugLogOverlay />
     </View>
   );
 }
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <LoadingProvider>
-          <AuthProvider>
-            <FavoritesProvider>
-              <CartProvider>
-                <AppShell />
-              </CartProvider>
-            </FavoritesProvider>
-          </AuthProvider>
-        </LoadingProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <DebugErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <LoadingProvider>
+            <AuthProvider>
+              <FavoritesProvider>
+                <CartProvider>
+                  <AppShell />
+                </CartProvider>
+              </FavoritesProvider>
+            </AuthProvider>
+          </LoadingProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </DebugErrorBoundary>
   );
 }
 
