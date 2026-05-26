@@ -1,7 +1,17 @@
-import { supabaseUrl, supabaseAnonKey } from './supabase';
+import { supabaseUrl, supabaseAnonKey, getSupabaseEnvDiagnostics } from './supabase';
 import type { UserRow } from '../types/database';
 
 const FUNCTION_URL = `${supabaseUrl}/functions/v1/auth-phone-otp`;
+
+function describeEnvForUser(): string {
+  const d = getSupabaseEnvDiagnostics();
+  return (
+    `SUPABASE_URL=${d.urlPresent ? d.urlHost : 'MISSING'} ` +
+    `ANON_KEY=${
+      d.anonKeyPresent ? `len=${d.anonKeyLength} tail=${d.anonKeyTail}` : 'MISSING'
+    }`
+  );
+}
 
 export type AuthOtpUser = Omit<UserRow, 'password'>;
 
@@ -29,6 +39,15 @@ type CheckPulseemResult = {
 };
 
 async function callOtpFunction<T>(body: Record<string, unknown>): Promise<T> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      `Supabase env vars are missing in this build (${describeEnvForUser()}). ` +
+        `EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY were not ` +
+        `inlined into the JS bundle. Set them on EAS for the active profile ` +
+        `and rebuild with --clear-cache.`
+    );
+  }
+
   const res = await fetch(FUNCTION_URL, {
     method: 'POST',
     headers: {
@@ -47,10 +66,18 @@ async function callOtpFunction<T>(body: Record<string, unknown>): Promise<T> {
   }
 
   if (!res.ok || !parsed || parsed.ok === false) {
-    const message =
+    const baseMessage =
       parsed?.error ??
+      parsed?.message ??
       `auth-phone-otp returned ${res.status}`;
-    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+    const message =
+      res.status === 401
+        ? `${typeof baseMessage === 'string' ? baseMessage : JSON.stringify(baseMessage)} ` +
+          `(${describeEnvForUser()})`
+        : typeof baseMessage === 'string'
+        ? baseMessage
+        : JSON.stringify(baseMessage);
+    throw new Error(message);
   }
   return parsed as T;
 }

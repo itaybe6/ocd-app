@@ -1,14 +1,18 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-type EnvName = 'EXPO_PUBLIC_SUPABASE_URL' | 'EXPO_PUBLIC_SUPABASE_ANON_KEY';
-
-function readEnv(name: EnvName): string | undefined {
-  const v = process.env[name];
+// IMPORTANT: Read each EXPO_PUBLIC_* var via *static* dot-notation only.
+// Babel / Metro inline `process.env.EXPO_PUBLIC_FOO` at build time, but
+// dynamic forms like `process.env[name]` are NOT inlined and end up as
+// `undefined` in production builds — which is exactly what caused the
+// TestFlight 401 ("Missing authorization header") on auth-phone-otp,
+// while Expo Go (which populates process.env at runtime from .env)
+// kept working.
+function nonEmpty(v: string | undefined): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
-const _supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL');
-const _supabaseAnonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+const _supabaseUrl = nonEmpty(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const _supabaseAnonKey = nonEmpty(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
 if (!_supabaseUrl || !_supabaseAnonKey) {
   // Log but do NOT throw at module-load: throwing here causes a silent
@@ -26,6 +30,30 @@ if (!_supabaseUrl || !_supabaseAnonKey) {
 
 export const supabaseUrl = _supabaseUrl ?? '';
 export const supabaseAnonKey = _supabaseAnonKey ?? '';
+
+/**
+ * Safe runtime diagnostics for the Supabase env vars. Useful when the JS
+ * bundle was built before EAS env was set, so `EXPO_PUBLIC_SUPABASE_*` end up
+ * inlined as empty strings and the app silently fails with 401 on Edge
+ * Functions ("Missing authorization header"). Does NOT expose secrets.
+ */
+export function getSupabaseEnvDiagnostics() {
+  return {
+    urlPresent: supabaseUrl.length > 0,
+    urlHost: supabaseUrl ? safeHost(supabaseUrl) : null,
+    anonKeyPresent: supabaseAnonKey.length > 0,
+    anonKeyLength: supabaseAnonKey.length,
+    anonKeyTail: supabaseAnonKey ? supabaseAnonKey.slice(-4) : null,
+  };
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'invalid-url';
+  }
+}
 
 function buildClient(): SupabaseClient {
   if (!_supabaseUrl || !_supabaseAnonKey) {
