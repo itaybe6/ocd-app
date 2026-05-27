@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import {
+  deleteCustomerAccount as deleteCustomerAccountApi,
   sendLoginOtp as sendLoginOtpApi,
   sendRegisterOtp as sendRegisterOtpApi,
   verifyLoginOtp as verifyLoginOtpApi,
@@ -24,6 +25,7 @@ type AuthContextValue = {
   /** Verifies the register OTP and creates the customer account. On success, persists the user and navigates to the customer profile. */
   verifyRegisterOtp: (args: { phone: string; code: string; name: string; address?: string | null }) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteCustomerAccount: () => Promise<void>;
   setUser: (u: AuthUser | null) => Promise<void>;
   hasRole: (role: UserRole) => boolean;
 };
@@ -114,6 +116,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     scheduleResetToLogin();
   }, [setUser]);
 
+  const deleteCustomerAccount = useCallback(async () => {
+    if (!user?.id || !user.phone) {
+      throw new Error('לא נמצא משתמש מחובר');
+    }
+    await deleteCustomerAccountApi({ userId: user.id, phone: user.phone });
+    await setUser(null);
+    Toast.show({ type: 'success', text1: 'החשבון נמחק' });
+    scheduleResetToLogin();
+  }, [setUser, user?.id, user?.phone]);
+
   const hasRole = useCallback((role: UserRole) => user?.role === role, [user?.role]);
 
   const sendLoginOtp = useCallback(async ({ phone }: { phone: string }) => {
@@ -160,10 +172,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sendRegisterOtp,
       verifyRegisterOtp,
       signOut,
+      deleteCustomerAccount,
       setUser,
       hasRole,
     }),
-    [user, isBootstrapping, sendLoginOtp, verifyLoginOtp, sendRegisterOtp, verifyRegisterOtp, signOut, setUser, hasRole]
+    [
+      user,
+      isBootstrapping,
+      sendLoginOtp,
+      verifyLoginOtp,
+      sendRegisterOtp,
+      verifyRegisterOtp,
+      signOut,
+      deleteCustomerAccount,
+      setUser,
+      hasRole,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

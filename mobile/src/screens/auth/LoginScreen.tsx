@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -29,6 +29,92 @@ type Mode = 'login' | 'signup';
 type Step = 'collect' | 'code';
 
 const RESEND_SECONDS = 30;
+
+function OtpSentDialog({
+  visible,
+  mode,
+  phone,
+  onClose,
+}: {
+  visible: boolean;
+  mode: Mode;
+  phone: string;
+  onClose: () => void;
+}) {
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(15,23,42,0.42)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal: 24,
+        }}
+      >
+        <View
+          style={{
+            width: '100%',
+            maxWidth: 380,
+            borderRadius: 28,
+            backgroundColor: '#FFFFFF',
+            padding: 22,
+            shadowColor: '#000',
+            shadowOpacity: 0.18,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 14 },
+            elevation: 8,
+            alignItems: 'stretch',
+          }}
+        >
+          <View style={{ alignItems: 'flex-end', gap: 14 }}>
+            <View
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 16,
+                backgroundColor: 'rgba(37,99,235,0.12)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>✓</Text>
+            </View>
+
+            <View style={{ gap: 7, alignSelf: 'stretch' }}>
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 21,
+                  fontWeight: '900',
+                  textAlign: 'right',
+                  writingDirection: 'rtl',
+                }}
+              >
+                קוד האימות נשלח
+              </Text>
+              <Text
+                style={{
+                  color: colors.muted,
+                  fontSize: 14,
+                  fontWeight: '700',
+                  lineHeight: 22,
+                  textAlign: 'right',
+                  writingDirection: 'rtl',
+                }}
+              >
+                שלחנו SMS עם קוד אימות למספר {phone}.
+                {mode === 'login' ? ' אפשר להזין בשדה הבא גם את סיסמת המשתמש.' : ''}
+              </Text>
+            </View>
+          </View>
+
+          <Button title="הבנתי" onPress={onClose} style={{ marginTop: 20, borderRadius: 16 }} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 function SegmentedToggle({
   mode,
@@ -144,6 +230,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+  const [otpNoticeVisible, setOtpNoticeVisible] = useState(false);
   const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const inLogo = useSharedValue(0);
@@ -255,6 +342,7 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
     setCode('');
     setVerifiedPhone('');
     setResendIn(0);
+    setOtpNoticeVisible(false);
     if (resendTimerRef.current) clearInterval(resendTimerRef.current);
   }, []);
 
@@ -285,7 +373,8 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
       setVerifiedPhone(res.phone);
       setStep('code');
       startResendTimer();
-      Toast.show({ type: 'success', text1: 'נשלח קוד אימות', text2: 'הקוד יגיע ב-SMS תוך מספר שניות' });
+      Keyboard.dismiss();
+      setOtpNoticeVisible(true);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שגיאה בשליחת הקוד', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -304,7 +393,8 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
       setVerifiedPhone(res.phone);
       setCode('');
       startResendTimer();
-      Toast.show({ type: 'success', text1: 'נשלח קוד חדש' });
+      Keyboard.dismiss();
+      setOtpNoticeVisible(true);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שגיאה בשליחת קוד חדש', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -317,7 +407,10 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
       setSubmitting(true);
       const codeTrim = code.trim();
       if (codeTrim.length < 4) {
-        Toast.show({ type: 'error', text1: 'נא להזין קוד אימות תקין' });
+        Toast.show({
+          type: 'error',
+          text1: mode === 'login' ? 'נא להזין קוד אימות או סיסמה תקינים' : 'נא להזין קוד אימות תקין',
+        });
         return;
       }
       if (mode === 'login') {
@@ -505,18 +598,26 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
                         <Text style={{ color: colors.primary }}>
                           {verifiedPhone || phone}
                         </Text>
+                        {mode === 'login' ? '. אפשר להזין כאן גם את סיסמת המשתמש.' : ''}
                       </Text>
 
                       <Input
-                        label="קוד אימות"
+                        label={mode === 'login' ? 'קוד אימות או סיסמה' : 'קוד אימות'}
                         value={code}
-                        onChangeText={(v) => setCode(v.replace(/\D+/g, '').slice(0, 6))}
-                        keyboardType="number-pad"
-                        placeholder="------"
+                        onChangeText={(v) =>
+                          setCode(mode === 'login' ? v.slice(0, 64) : v.replace(/\D+/g, '').slice(0, 6))
+                        }
+                        keyboardType={mode === 'login' ? 'default' : 'number-pad'}
+                        placeholder={mode === 'login' ? 'הזן קוד או סיסמה' : '------'}
                         textContentType="oneTimeCode"
                         autoComplete="sms-otp"
-                        maxLength={6}
-                        style={{ textAlign: 'center', fontSize: 22, letterSpacing: 6, fontWeight: '800' }}
+                        maxLength={mode === 'login' ? 64 : 6}
+                        style={{
+                          textAlign: 'center',
+                          fontSize: 22,
+                          letterSpacing: mode === 'login' ? 0 : 6,
+                          fontWeight: '800',
+                        }}
                       />
 
                       <Button
@@ -571,6 +672,13 @@ export function LoginScreen({ onBackToStore }: LoginScreenProps) {
               </Card>
             </Animated.View>
           </ScrollView>
+
+          <OtpSentDialog
+            visible={otpNoticeVisible}
+            mode={mode}
+            phone={verifiedPhone || phone}
+            onClose={() => setOtpNoticeVisible(false)}
+          />
         </View>
       </KeyboardAvoidingView>
     </Screen>

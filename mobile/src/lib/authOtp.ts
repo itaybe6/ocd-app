@@ -38,6 +38,10 @@ type CheckPulseemResult = {
   fromNumberSample: string | null;
 };
 
+type DeleteCustomerAccountResult = {
+  ok: true;
+};
+
 async function callOtpFunction<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(
@@ -110,6 +114,14 @@ export async function verifyRegisterOtp(args: {
     code: args.code,
     name: args.name,
     address: args.address ?? null,
+  });
+}
+
+export async function deleteCustomerAccount(args: { userId: string; phone: string }): Promise<DeleteCustomerAccountResult> {
+  return callOtpFunction<DeleteCustomerAccountResult>({
+    action: 'delete_customer_account',
+    userId: args.userId,
+    phone: args.phone,
   });
 }
 

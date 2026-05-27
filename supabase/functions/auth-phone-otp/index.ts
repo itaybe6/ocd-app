@@ -5,9 +5,10 @@
 // POST JSON:
 //   { action: 'check_pulseem' }
 //   { action: 'send_login_otp',     phone }
-//   { action: 'verify_login_otp',   phone, code }
+//   { action: 'verify_login_otp',   phone, code } // code may also be the user's password
 //   { action: 'send_register_otp',  phone }
 //   { action: 'verify_register_otp', phone, code, name, address? }
+//   { action: 'delete_customer_account', userId, phone }
 //
 // Required Edge Function secrets:
 //   SUPABASE_URL                 (auto)
@@ -36,11 +37,13 @@ type Action =
   | 'send_login_otp'
   | 'verify_login_otp'
   | 'send_register_otp'
-  | 'verify_register_otp';
+  | 'verify_register_otp'
+  | 'delete_customer_account';
 
 type Payload = {
   action?: Action;
   phone?: string;
+  userId?: string;
   code?: string;
   name?: string;
   address?: string | null;
@@ -157,6 +160,24 @@ async function safeRpc(supabase: SupabaseAdmin, fn: string): Promise<void> {
   } catch {
     // Intentionally ignored — this is a best-effort cleanup.
   }
+}
+
+async function tryOptionalMutation(query: PromiseLike<{ error: { message?: string } | null }>): Promise<void> {
+  const res = await query;
+  if (!res.error) return;
+  const msg = res.error.message ?? '';
+  if (msg.includes('relation') && msg.includes('does not exist')) return;
+  throw new Error(msg || 'Database mutation failed');
+}
+
+async function optionalSelect<T>(
+  query: PromiseLike<{ data: T | null; error: { message?: string } | null }>,
+): Promise<T | null> {
+  const res = await query;
+  if (!res.error) return res.data;
+  const msg = res.error.message ?? '';
+  if (msg.includes('relation') && msg.includes('does not exist')) return null;
+  throw new Error(msg || 'Database query failed');
 }
 
 function generateOtp(): string {
@@ -405,6 +426,7 @@ async function verifyOtp(
 
 const USER_COLUMNS =
   'id, phone, role, name, address, price, ocd_plus_subscriber, avatar_url, created_at';
+const USER_COLUMNS_WITH_PASSWORD = `${USER_COLUMNS}, password`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
@@ -479,21 +501,27 @@ Deno.serve(async (req) => {
       case 'verify_login_otp': {
         const phone = normalizePhone(payload.phone ?? '');
         const variants = phoneLookupVariants(payload.phone ?? '');
+        const codeOrPassword = String(payload.code ?? '').trim();
         if (!phone) return jsonResponse({ ok: false, error: 'מספר טלפון חסר או לא תקין' }, { status: 400 });
-
-        const result = await verifyOtp(supabase, phone, 'login', String(payload.code ?? ''));
-        if (!result.ok) return jsonResponse({ ok: false, error: result.error }, { status: result.status });
 
         const { data: users, error: userErr } = await supabase
           .from('users')
-          .select(USER_COLUMNS)
+          .select(USER_COLUMNS_WITH_PASSWORD)
           .in('phone', variants)
           .limit(1);
         if (userErr) return jsonResponse({ ok: false, error: userErr.message }, { status: 500 });
         const user = users?.[0];
         if (!user) return jsonResponse({ ok: false, error: 'המשתמש לא נמצא' }, { status: 404 });
 
-        return jsonResponse({ ok: true, user });
+        const { password, ...userWithoutPassword } = user;
+        if (password && codeOrPassword === String(password).trim()) {
+          return jsonResponse({ ok: true, user: userWithoutPassword });
+        }
+
+        const result = await verifyOtp(supabase, phone, 'login', codeOrPassword);
+        if (!result.ok) return jsonResponse({ ok: false, error: result.error }, { status: result.status });
+
+        return jsonResponse({ ok: true, user: userWithoutPassword });
       }
 
       case 'send_register_otp': {
@@ -570,6 +598,47 @@ Deno.serve(async (req) => {
         if (insertErr) return jsonResponse({ ok: false, error: insertErr.message }, { status: 500 });
 
         return jsonResponse({ ok: true, user: created });
+      }
+
+      case 'delete_customer_account': {
+        const userId = (payload.userId ?? '').trim();
+        const phone = normalizePhone(payload.phone ?? '');
+        const variants = phoneLookupVariants(payload.phone ?? '');
+
+        if (!userId) return jsonResponse({ ok: false, error: 'מזהה משתמש חסר' }, { status: 400 });
+        if (!phone) return jsonResponse({ ok: false, error: 'מספר טלפון חסר או לא תקין' }, { status: 400 });
+
+        const { data: userRows, error: userErr } = await supabase
+          .from('users')
+          .select('id, role')
+          .eq('id', userId)
+          .in('phone', variants)
+          .limit(1);
+        if (userErr) return jsonResponse({ ok: false, error: userErr.message }, { status: 500 });
+        const user = userRows?.[0];
+        if (!user) return jsonResponse({ ok: false, error: 'המשתמש לא נמצא' }, { status: 404 });
+        if (user.role !== 'customer') {
+          return jsonResponse({ ok: false, error: 'ניתן למחוק עצמאית רק חשבון לקוח' }, { status: 403 });
+        }
+
+        const jobs = await optionalSelect<Array<{ id: string }>>(
+          supabase.from('jobs').select('id').eq('customer_id', userId),
+        );
+        const jobIds = (jobs ?? []).map((job) => job.id);
+        if (jobIds.length > 0) {
+          await tryOptionalMutation(supabase.from('job_service_points').delete().in('job_id', jobIds));
+          await tryOptionalMutation(supabase.from('jobs').delete().in('id', jobIds));
+        }
+
+        await tryOptionalMutation(supabase.from('service_points').delete().eq('customer_id', userId));
+        await tryOptionalMutation(supabase.from('installation_jobs').delete().eq('customer_id', userId));
+        await tryOptionalMutation(supabase.from('template_stations').delete().eq('customer_id', userId));
+        await tryOptionalMutation(supabase.from('special_jobs').update({ customer_id: null }).eq('customer_id', userId));
+
+        const { error: deleteErr } = await supabase.from('users').delete().eq('id', userId);
+        if (deleteErr) return jsonResponse({ ok: false, error: deleteErr.message }, { status: 500 });
+
+        return jsonResponse({ ok: true });
       }
 
       default:

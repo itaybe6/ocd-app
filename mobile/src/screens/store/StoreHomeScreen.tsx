@@ -1086,29 +1086,6 @@ function isSelectedBrandsCategoryName(name: string): boolean {
   );
 }
 
-/** רק לרשת Bento: מחליף מקומות בין «טואלטיקה» ל־«מארזי ניקיון משתלמים» אם הן סמוכות. */
-function swapToiletriesAndBundlesForBento(categories: StoreCategory[]): StoreCategory[] {
-  return categories;
-}
-
-/** רק לרשת Bento: מערכות בישום ↔ מרככי כביסה וטקסטיל (כרטיס גדול מול ריבוע קטן בשורת 3). */
-function swapFragranceAndFabricForBento(categories: StoreCategory[]): StoreCategory[] {
-  const isFragranceSystems = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('בישום');
-  };
-  const isFabricSofteners = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return (n.includes('מרככי') || n.includes('מרכך')) && (n.includes('כביסה') || n.includes('טקסטיל'));
-  };
-  const iFrag = categories.findIndex((c) => isFragranceSystems(c.name));
-  const iFab = categories.findIndex((c) => isFabricSofteners(c.name));
-  if (iFrag < 0 || iFab < 0 || iFrag === iFab) return categories;
-  const out = [...categories];
-  [out[iFrag], out[iFab]] = [out[iFab]!, out[iFrag]!];
-  return out;
-}
-
 function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenuSection[] {
   const sections: SidebarMenuSection[] = [{ id: 'all', title: 'כל המוצרים', categoryId: 'all' }];
 
@@ -1124,7 +1101,7 @@ function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenu
             {
               id: `child:${item.id}`,
               title: item.title,
-              categoryId: item.collectionHandle,
+              categoryId: remapShopifyCategoryHandle(item.collectionHandle),
               parentTitle: prefix,
               categoryDescription: item.collectionDescription,
               categoryImageUrl: item.collectionImageUrl,
@@ -1137,24 +1114,39 @@ function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenu
   };
 
   menuItems.forEach((item) => {
-    const childItems = item.children?.length ? toChildItems(item.children) : [];
+    const appHandle = item.collectionHandle
+      ? remapShopifyCategoryHandle(item.collectionHandle)
+      : undefined;
+    const override = appHandle ? HOME_CATEGORY_HANDLE_OVERRIDES[appHandle] : undefined;
+    const sectionTitle = override?.label ?? item.title;
+    /** כשיש פיילבק סטטי לקטגוריה — מציגים בסיידבר את אותם תתי־קטגוריות שמופיעים באתר. */
+    const staticChildItems: SidebarChildItem[] | undefined = override?.subcategories?.length
+      ? override.subcategories.map((sub) => ({
+          id: `child:static:${appHandle}:${sub.id}`,
+          title: sub.title,
+          categoryId: sub.id,
+          parentTitle: sectionTitle,
+        }))
+      : undefined;
+    const childItems =
+      staticChildItems ?? (item.children?.length ? toChildItems(item.children) : []);
 
     if (childItems.length) {
       sections.push({
         id: `menu:${item.id}`,
-        title: item.title,
-        categoryId: item.collectionHandle,
+        title: sectionTitle,
+        categoryId: appHandle,
         children: childItems,
       });
       return;
     }
 
-    if (!item.collectionHandle) return;
+    if (!appHandle) return;
 
     sections.push({
       id: `menu:${item.id}`,
-      title: item.title,
-      categoryId: item.collectionHandle,
+      title: sectionTitle,
+      categoryId: appHandle,
     });
   });
 
@@ -2126,6 +2118,153 @@ function buildBentoGroups<T>(
   return groups;
 }
 
+/**
+ * מיפוי handle של Shopify ל-handle בו האפליקציה משתמשת בפועל.
+ * נדרש מפני שהתפריט הראשי ב-Shopify מצביע ל-`אקססוריז-לבית` (אקססוריז ביתיים),
+ * אבל באתר ocd-online.co.il הקטגוריה «אביזרי ניקיון» מצביעה לקולקציה אחרת לגמרי
+ * (`אביזרי-נקיון` עם כלי ניגוב, מנקי חלונות וכו'). בלי המיפוי נציג את התתי־קטגוריות
+ * הלא נכונות (אקססוריז למטבח/אמבטיה וכד') במקום אביזרי הניקיון בפועל.
+ */
+const SHOPIFY_TO_APP_CATEGORY_HANDLE: Record<string, string> = {
+  'אקססוריז-לבית': 'אביזרי-נקיון',
+};
+
+function remapShopifyCategoryHandle(handle: string): string {
+  return SHOPIFY_TO_APP_CATEGORY_HANDLE[handle] ?? handle;
+}
+
+/**
+ * תווית, תמונת כיסוי ותתי־קטגוריות סטטיים לכל קטגוריית-שורש בדף הבית, בהתאם
+ * לאתר ocd-online.co.il. ה-keys הם ה-handle של הקולקציה _אחרי_ המיפוי
+ * (`SHOPIFY_TO_APP_CATEGORY_HANDLE`). תתי־הקטגוריות נלקחות מה-fallback הסטטי
+ * שהאתר משתמש בו (האתר טוען את אותו main-menu אך ממזג עם רשימה סטטית, מאחר
+ * שתפריט Shopify לא מכיל את כל ההיררכיה — למשל «מערכות בישום» ו«אקססוריז»
+ * מוחזרים שם ללא ילדים/עם ילדים שונים).
+ */
+const HOME_CATEGORY_HANDLE_OVERRIDES: Record<
+  string,
+  {
+    label: string;
+    localCover?: number;
+    /** תתי־קטגוריות סטטיות — דורסות את הילדים שמגיעים מתפריט Shopify */
+    subcategories?: ReadonlyArray<{ id: string; title: string }>;
+  }
+> = {
+  'בישום-חללים': {
+    label: 'בישום חללים',
+    localCover: require('../../../assets/cat-1.webp'),
+    subcategories: [
+      { id: 'בישום-חללים', title: 'מערכות בישום' },
+      { id: 'שמני-בישום', title: 'שמני בישום' },
+      { id: 'מבשמי-מקלות-ואווירה', title: 'מבשמי מקלות ואווירה' },
+      { id: 'נרות-ריחניים', title: 'נרות ריחניים' },
+    ],
+  },
+  'חומרי-ניקיון': { label: 'מוצרי ניקיון', localCover: require('../../../assets/cat-6.webp') },
+  'מרככי-כביסה-וטקסטיל': {
+    label: 'מרככי כביסה וטקסטיל',
+    localCover: require('../../../assets/cat-3.webp'),
+    subcategories: [
+      { id: 'נוזלי-כביסה-מרככים-ואבקות', title: 'נוזלי כביסה, מרככים ואבקות' },
+      { id: 'בישום-ורענון-כביסה', title: 'בישום ורענון כביסה' },
+      { id: 'הלבנה-כתמים-וטיפול', title: 'הלבנה, כתמים וטיפול' },
+    ],
+  },
+  'אביזרי-נקיון': {
+    label: 'אביזרי ניקיון',
+    localCover: require('../../../assets/cat-5.webp'),
+    subcategories: [
+      { id: 'כלי-ניגוב-ושטיפה', title: 'כלי ניגוב ושטיפה' },
+      { id: 'מנקי-חלונות', title: 'מנקי חלונות' },
+      { id: 'ערכות-שטיפה-ושואבים', title: 'ערכות שטיפה ושואבים' },
+      { id: 'סלי-כביסה-ומתלים', title: 'סלי כביסה ומתלים' },
+      { id: 'אביזרים-נוספים', title: 'אביזרים נוספים' },
+    ],
+  },
+  'עיצוב-הבית': {
+    label: 'עיצוב הבית',
+    localCover: require('../../../assets/cat-4.webp'),
+    subcategories: [
+      { id: 'עיצוב-לסלון', title: 'עיצוב לסלון' },
+      { id: 'פחים-מעוצבים-חדש', title: 'פחים מעוצבים' },
+      { id: 'מראות-חדש', title: 'מראות' },
+      { id: 'עיצוב-למטבח', title: 'עיצוב למטבח' },
+      { id: 'עיצוב-לאמבטיה', title: 'עיצוב לאמבטיה' },
+      { id: 'עציצים-חדש', title: 'עציצים' },
+    ],
+  },
+  'מבצעי-פסח': { label: 'מארזים משתלמים', localCover: require('../../../assets/cat-2.webp') },
+  'מארזי-ניקיון-משתלמים-copy': {
+    label: 'מוצרים לבית',
+    localCover: require('../../../assets/cat-7.webp'),
+    subcategories: [
+      { id: 'טואלטיקה', title: 'טואלטיקה' },
+      { id: 'חד-פעמי', title: 'חד פעמי' },
+    ],
+  },
+};
+
+/** סדר התצוגה של הקטגוריות בדף הבית — תואם לאתר ocd-online.co.il. */
+const HOME_CATEGORY_HANDLE_ORDER: readonly string[] = [
+  'בישום-חללים',
+  'חומרי-ניקיון',
+  'מרככי-כביסה-וטקסטיל',
+  'אביזרי-נקיון',
+  'עיצוב-הבית',
+  'מבצעי-פסח',
+  'מארזי-ניקיון-משתלמים-copy',
+];
+
+function applyCategoryHandleOverrides(categories: StoreCategory[]): StoreCategory[] {
+  const remapped = categories.map((category) => {
+    const appHandle = remapShopifyCategoryHandle(category.id);
+    const override = HOME_CATEGORY_HANDLE_OVERRIDES[appHandle];
+    if (!override && appHandle === category.id) return category;
+    return {
+      ...category,
+      id: appHandle,
+      name: override?.label ?? category.name,
+    };
+  });
+  const overrideOrder = new Map(HOME_CATEGORY_HANDLE_ORDER.map((handle, index) => [handle, index]));
+  return remapped.slice().sort((a, b) => {
+    const ai = overrideOrder.has(a.id) ? overrideOrder.get(a.id)! : Number.MAX_SAFE_INTEGER;
+    const bi = overrideOrder.has(b.id) ? overrideOrder.get(b.id)! : Number.MAX_SAFE_INTEGER;
+    if (ai !== bi) return ai - bi;
+    return categories.indexOf(a) - categories.indexOf(b);
+  });
+}
+
+/**
+ * בונה מפת תתי־קטגוריות לקטגוריות-שורש בדף הבית, ממוזגת ממקור התפריט של Shopify
+ * עם הפיילבק הסטטי שמגיע מהאתר. כשמוגדרים תתי־קטגוריות סטטיים — הם דורסים
+ * את הילדים מ-Shopify (כך שגם «מערכות בישום» ו«אביזרי ניקיון» יציגו את אותם
+ * תתי־קטגוריות שמופיעים באתר). המפה ממופתחת לפי ה-handle של האפליקציה
+ * (אחרי `SHOPIFY_TO_APP_CATEGORY_HANDLE`).
+ */
+function buildHomeCategoryChildrenMap(
+  menuItems: ShopifyMenuItem[],
+): Record<string, StoreSubcategory[]> {
+  const fromMenu = getTopLevelCategoryChildrenMap(menuItems);
+  const result: Record<string, StoreSubcategory[]> = {};
+
+  for (const [shopifyHandle, children] of Object.entries(fromMenu)) {
+    const appHandle = remapShopifyCategoryHandle(shopifyHandle);
+    result[appHandle] = children;
+  }
+
+  for (const [appHandle, override] of Object.entries(HOME_CATEGORY_HANDLE_OVERRIDES)) {
+    if (!override.subcategories?.length) continue;
+    result[appHandle] = override.subcategories.map((s) => ({
+      id: s.id,
+      title: s.title,
+      parentTitle: override.label,
+    }));
+  }
+
+  return result;
+}
+
 /** קטגוריות בפריסת Bento — מתחת לבאנר; טאבי המבצעים/הכי נמכרים/חדשים בתחתית הדף */
 function HomeOurCategoriesSection({
   categories,
@@ -2165,33 +2304,17 @@ function HomeOurCategoriesSection({
   const imgHForCols = (cols: 2 | 3) =>
     cols === 2 ? HOME_CATEGORY_IMG_H_PAIR : HOME_CATEGORY_IMG_H_THIRD;
 
-  const isToiletriesName = (name: string) => {
-    const n = normalizeCategoryTitle(name);
+  /** «טואלטיקה»/«מוצרים לבית» (שורת זוג צרה לצד «מארזים משתלמים» הרחב). */
+  const isToiletriesCategory = (category: StoreCategory) => {
+    if (category.id === 'מארזי-ניקיון-משתלמים-copy') return true;
+    const n = normalizeCategoryTitle(category.name);
     return n.includes('טואל') || n.includes('טואלי');
   };
-  const isBundlesName = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('מארז') && n.includes('ניקיון');
-  };
-  /** תואם גם ל־swapFragranceAndFabricForBento — כרטיס מרככי כביסה וטקסטיל */
-  const isFabricSoftenersCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return (n.includes('מרככי') || n.includes('מרכך')) && (n.includes('כביסה') || n.includes('טקסטיל'));
-  };
-  /** תואם ל־swapFragranceAndFabricForBento — «מערכות בישום» */
-  const isFragranceSystemsCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('בישום');
-  };
-  /** אקססוריז / אקססוארים */
-  const isAccessoriesCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('אקססור') || n.includes('אקססואר');
-  };
-  /** עיצוב הבית */
-  const isHomeDesignCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('עיצוב') && n.includes('בית');
+  /** «מארזי ניקיון משתלמים»/«מארזים משתלמים» (כרטיס רחב לצד טואלטיקה). */
+  const isBundlesCategory = (category: StoreCategory) => {
+    if (category.id === 'מבצעי-פסח') return true;
+    const n = normalizeCategoryTitle(category.name);
+    return n.includes('מארז') && (n.includes('ניקיון') || n.includes('משתלמ'));
   };
 
   /** רוחב כרטיס בשורת 2 — כאשר הזוג מכיל «טואלטיקה» + «מארזי ניקיון משתלמים» מכריחים:
@@ -2204,11 +2327,11 @@ function HomeOurCategoriesSection({
   ) => {
     if (itemCount === 1) return widePairW;
 
-    const hasToiletries = groupItems.some((c) => isToiletriesName(c.name));
-    const hasBundles = groupItems.some((c) => isBundlesName(c.name));
+    const hasToiletries = groupItems.some((c) => isToiletriesCategory(c));
+    const hasBundles = groupItems.some((c) => isBundlesCategory(c));
     if (hasToiletries && hasBundles) {
       const thisItem = groupItems[itemIndex]!;
-      return isToiletriesName(thisItem.name) ? narrowPairW : widePairW;
+      return isToiletriesCategory(thisItem) ? narrowPairW : widePairW;
     }
 
     const slotInCycle = groupIndex % 3;
@@ -2260,8 +2383,8 @@ function HomeOurCategoriesSection({
           const hasToiletriesAndBundlesPair =
             group.cols === 2 &&
             group.items.length === 2 &&
-            group.items.some((c) => isToiletriesName(c.name)) &&
-            group.items.some((c) => isBundlesName(c.name));
+            group.items.some((c) => isToiletriesCategory(c)) &&
+            group.items.some((c) => isBundlesCategory(c));
           /** החלפת מיקום שמאל/ימין ב־row-reverse — רק לזוג הזה */
           const rowItems = hasToiletriesAndBundlesPair
             ? [group.items[1]!, group.items[0]!]
@@ -2293,11 +2416,7 @@ function HomeOurCategoriesSection({
                   mergeFromCategories.find((c) => c.id === category.id)?.imageUrl ??
                   coverUrlByCategoryId[category.id];
 
-                const useLocalFabricCover = isFabricSoftenersCategory(category.name);
-                const useLocalFragranceCover = isFragranceSystemsCategory(category.name);
-                const useLocalAccessoriesCover = isAccessoriesCategory(category.name);
-                const useLocalHomeDesignCover = isHomeDesignCategory(category.name);
-                const useLocalBundlesCover = isBundlesName(category.name);
+                const localCover = HOME_CATEGORY_HANDLE_OVERRIDES[category.id]?.localCover;
 
                 return (
                   <Pressable
@@ -2333,37 +2452,9 @@ function HomeOurCategoriesSection({
                           backgroundColor: '#F0F2F5',
                         }}
                       >
-                        {useLocalFabricCover ? (
+                        {localCover ? (
                           <Image
-                            source={require('../../../assets/kvisa1.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalFragranceCover ? (
-                          <Image
-                            source={require('../../../assets/bisom.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalAccessoriesCover ? (
-                          <Image
-                            source={require('../../../assets/exxsorie.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalHomeDesignCover ? (
-                          <Image
-                            source={require('../../../assets/homedesing.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalBundlesCover ? (
-                          <Image
-                            source={require('../../../assets/marazim2.png')}
+                            source={localCover}
                             style={{ width: cardW, height: cardTotalH }}
                             resizeMode="cover"
                             accessibilityLabel={category.name}
@@ -2633,12 +2724,14 @@ export function StoreHomeScreen({
   const { user } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
+  const { itemCount } = useCart();
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([{ id: 'all', name: 'כל המוצרים' }]);
   const [menuItems, setMenuItems] = useState<ShopifyMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingStorefront, setRefreshingStorefront] = useState(false);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -2670,6 +2763,7 @@ export function StoreHomeScreen({
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const homeSubcategoryTabsRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
+  const storefrontMountedRef = useRef(true);
   const [activePrimaryTab, setActivePrimaryTab] = useState<StoreMainTabId>('home');
   const lastHandledInitialTabRequestIdRef = useRef<number | undefined>(undefined);
 
@@ -2679,64 +2773,68 @@ export function StoreHomeScreen({
   }, [activePrimaryTab]);
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadStorefrontData = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    const isRefresh = mode === 'refresh';
+    try {
+      if (isRefresh) setRefreshingStorefront(true);
+      else setLoading(true);
+      setError(null);
+      const [liveProducts, liveCollections] = await Promise.all([
+        fetchProducts(),
+        fetchCollections(),
+      ]);
+      let liveMenuItems: ShopifyMenuItem[] = [];
 
-    const loadStorefrontData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        const [liveProducts, liveCollections] = await Promise.all([
-          fetchProducts(),
-          fetchCollections(),
-        ]);
-        let liveMenuItems: ShopifyMenuItem[] = [];
-
-        try {
-          liveMenuItems = await fetchMenuItems();
-        } catch {
-          liveMenuItems = [];
-        }
-
-        if (!isMounted) return;
-        const mappedProducts = liveProducts.map((product, index) => toStoreProduct(product, index));
-        const mappedCollections: StoreCategory[] = liveMenuItems.length
-          ? flattenMenuCategories(liveMenuItems)
-          : [
-              { id: 'all', name: 'כל המוצרים' },
-              ...liveCollections.map((collection: ShopifyCollection) => ({
-                id: collection.handle,
-                name: collection.title,
-                subtitle: collection.description,
-                imageUrl: collection.imageUrl,
-              })),
-            ];
-
-        setAllProducts(mappedProducts);
-        setVisibleProducts(mappedProducts);
-        setFeaturedProducts(mappedProducts.slice(0, 2));
-        setCategories(mappedCollections);
-        setMenuItems(liveMenuItems);
-      } catch (err) {
-        if (!isMounted) return;
-        setAllProducts([]);
-        setVisibleProducts([]);
-        setFeaturedProducts([]);
-        setCategories([{ id: 'all', name: 'כל המוצרים' }]);
-        setMenuItems([]);
-        setError(err instanceof Error ? err.message : 'שגיאה בטעינת מוצרים');
-      } finally {
-        if (!isMounted) return;
-        setLoading(false);
+        liveMenuItems = await fetchMenuItems();
+      } catch {
+        liveMenuItems = [];
       }
-    };
 
-    loadStorefrontData();
+      if (!storefrontMountedRef.current) return;
+      const mappedProducts = liveProducts.map((product, index) => toStoreProduct(product, index));
+      const rawCollections: StoreCategory[] = liveMenuItems.length
+        ? flattenMenuCategories(liveMenuItems)
+        : [
+            { id: 'all', name: 'כל המוצרים' },
+            ...liveCollections.map((collection: ShopifyCollection) => ({
+              id: collection.handle,
+              name: collection.title,
+              subtitle: collection.description,
+              imageUrl: collection.imageUrl,
+            })),
+          ];
+      const mappedCollections = applyCategoryHandleOverrides(rawCollections);
+
+      setAllProducts(mappedProducts);
+      setVisibleProducts(mappedProducts);
+      setFeaturedProducts(mappedProducts.slice(0, 2));
+      setCategories(mappedCollections);
+      setMenuItems(liveMenuItems);
+    } catch (err) {
+      if (!storefrontMountedRef.current) return;
+      setAllProducts([]);
+      setVisibleProducts([]);
+      setFeaturedProducts([]);
+      setCategories([{ id: 'all', name: 'כל המוצרים' }]);
+      setMenuItems([]);
+      setError(err instanceof Error ? err.message : 'שגיאה בטעינת מוצרים');
+    } finally {
+      if (!storefrontMountedRef.current) return;
+      if (isRefresh) setRefreshingStorefront(false);
+      else setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    storefrontMountedRef.current = true;
+
+    void loadStorefrontData();
 
     return () => {
-      isMounted = false;
+      storefrontMountedRef.current = false;
     };
-  }, []);
+  }, [loadStorefrontData]);
 
   // ─── Load bundles collection ───────────────────────────────────────────────
   useEffect(() => {
@@ -2803,11 +2901,13 @@ export function StoreHomeScreen({
     () => (menuItems.length ? buildSidebarSectionsFromMenu(menuItems) : buildSidebarSections(categories)),
     [categories, menuItems]
   );
-  const topLevelCategories = useMemo(
-    () => (menuItems.length ? getTopLevelMenuCategories(menuItems) : categories.filter((category) => category.id !== 'all')),
-    [categories, menuItems]
-  );
-  const topLevelCategoryChildrenMap = useMemo(() => getTopLevelCategoryChildrenMap(menuItems), [menuItems]);
+  const topLevelCategories = useMemo(() => {
+    const raw = menuItems.length
+      ? getTopLevelMenuCategories(menuItems)
+      : categories.filter((category) => category.id !== 'all');
+    return applyCategoryHandleOverrides(raw);
+  }, [categories, menuItems]);
+  const topLevelCategoryChildrenMap = useMemo(() => buildHomeCategoryChildrenMap(menuItems), [menuItems]);
 
   /** ברירת מחדל לפי שם בתפריט; אם הוגדר `EXPO_PUBLIC_HOME_SELECTED_BRANDS_COLLECTION_HANDLE` — רק לפי handle מה־API */
   const selectedBrandsMenuItem = useMemo((): ShopifyMenuItem | null => {
@@ -2878,10 +2978,10 @@ export function StoreHomeScreen({
     return null;
   }, [selectedBrandsMenuItem, selectedBrandsApiFallback]);
 
-  /** סדר מותאם לרשת הקטגוריות בלבד — ללא «חברות נבחרות» אם היא מופיעה ברמת העל של הבנטו */
+  /** סדר הקטגוריות מגיע ישירות מתפריט Shopify — ללא «חברות נבחרות» אם היא מוצגת כרצועה נפרדת. */
   const topLevelCategoriesBento = useMemo(
     () =>
-      swapFragranceAndFabricForBento(swapToiletriesAndBundlesForBento(topLevelCategories)).filter(
+      topLevelCategories.filter(
         (c) => !selectedBrandsParentCategory || c.id !== selectedBrandsParentCategory.id,
       ),
     [topLevelCategories, selectedBrandsParentCategory],
@@ -3444,15 +3544,102 @@ export function StoreHomeScreen({
           </Pressable>
         </Modal>
 
-        {/* Logo bar */}
-        <View style={{ backgroundColor: '#F5F5F5', paddingTop: insets.top }}>
-          <View style={{ justifyContent: 'center', alignItems: 'center', paddingVertical: 10 }}>
+        {/* Promo + logo bar */}
+        <View style={{ backgroundColor: '#FFFFFF' }}>
+          <View style={{ backgroundColor: '#202020', paddingTop: insets.top }}>
+            <View
+              style={{
+                minHeight: 36,
+                paddingHorizontal: 16,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '800', textAlign: 'center' }}>
+                משלוחים חינם בהזמנות מעל ₪299
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={{
+              height: 68,
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: '#FFFFFF',
+              borderBottomWidth: 1,
+              borderBottomColor: '#EEF0F3',
+            }}
+          >
+            {onOpenCart ? (
+              <Pressable
+                onPress={onOpenCart}
+                accessibilityRole="button"
+                accessibilityLabel="פתח עגלה"
+                style={{
+                  position: 'absolute',
+                  left: 16,
+                  width: 42,
+                  height: 42,
+                  borderRadius: 21,
+                  backgroundColor: '#FFFFFF',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: '#000',
+                  shadowOpacity: 0.08,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 3,
+                }}
+              >
+                <ShoppingCart size={20} color="#111827" strokeWidth={2} />
+                {itemCount > 0 && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: -2,
+                      right: -2,
+                      minWidth: 18,
+                      height: 18,
+                      paddingHorizontal: itemCount > 9 ? 5 : 0,
+                      borderRadius: 9,
+                      backgroundColor: '#111111',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '900', lineHeight: 12 }}>
+                      {itemCount > 99 ? '99+' : String(itemCount)}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ) : null}
+
             <Image
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               source={require('../../../assets/logopng/OCDLOGO-04.png')}
               style={{ width: 150, height: 56 }}
               resizeMode="contain"
             />
+
+            <Pressable
+              onPress={() => setMenuOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="פתח תפריט קטגוריות"
+              style={{
+                position: 'absolute',
+                right: 16,
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="menu-outline" size={30} color="#111827" />
+            </Pressable>
           </View>
         </View>
 
@@ -3464,6 +3651,13 @@ export function StoreHomeScreen({
             backgroundColor: '#F5F5F5',
           }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingStorefront}
+              onRefresh={() => void loadStorefrontData('refresh')}
+              tintColor="#111827"
+            />
+          }
           {...(Platform.OS === 'ios'
             ? { contentInsetAdjustmentBehavior: 'never' as const }
             : {})}
