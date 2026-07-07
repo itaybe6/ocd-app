@@ -81,22 +81,6 @@ export type StoreCategory = {
   imageUrl?: string | null;
 };
 
-type SidebarMenuSection = {
-  id: string;
-  title: string;
-  categoryId?: string;
-  children?: Array<{
-    id: string;
-    title: string;
-    categoryId: string;
-    parentTitle?: string;
-    categoryDescription?: string;
-    categoryImageUrl?: string | null;
-  }>;
-};
-
-type SidebarChildItem = NonNullable<SidebarMenuSection['children']>[number];
-
 export type StoreSubcategory = {
   id: string;
   title: string;
@@ -2094,33 +2078,17 @@ function HomeOurCategoriesSection({
   const imgHForCols = (cols: 2 | 3) =>
     cols === 2 ? HOME_CATEGORY_IMG_H_PAIR : HOME_CATEGORY_IMG_H_THIRD;
 
-  const isToiletriesName = (name: string) => {
-    const n = normalizeCategoryTitle(name);
+  /** «טואלטיקה»/«מוצרים לבית» (שורת זוג צרה לצד «מארזים משתלמים» הרחב). */
+  const isToiletriesCategory = (category: StoreCategory) => {
+    if (category.id === 'מארזי-ניקיון-משתלמים-copy') return true;
+    const n = normalizeCategoryTitle(category.name);
     return n.includes('טואל') || n.includes('טואלי');
   };
-  const isBundlesName = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('מארז') && n.includes('ניקיון');
-  };
-  /** תואם גם ל־swapFragranceAndFabricForBento — כרטיס מרככי כביסה וטקסטיל */
-  const isFabricSoftenersCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return (n.includes('מרככי') || n.includes('מרכך')) && (n.includes('כביסה') || n.includes('טקסטיל'));
-  };
-  /** תואם ל־swapFragranceAndFabricForBento — «מערכות בישום» */
-  const isFragranceSystemsCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('בישום');
-  };
-  /** אקססוריז / אקססוארים */
-  const isAccessoriesCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('אקססור') || n.includes('אקססואר');
-  };
-  /** עיצוב הבית */
-  const isHomeDesignCategory = (name: string) => {
-    const n = normalizeCategoryTitle(name);
-    return n.includes('עיצוב') && n.includes('בית');
+  /** «מארזי ניקיון משתלמים»/«מארזים משתלמים» (כרטיס רחב לצד טואלטיקה). */
+  const isBundlesCategory = (category: StoreCategory) => {
+    if (category.id === 'מבצעי-פסח') return true;
+    const n = normalizeCategoryTitle(category.name);
+    return n.includes('מארז') && (n.includes('ניקיון') || n.includes('משתלמ'));
   };
 
   /** רוחב כרטיס בשורת 2 — כאשר הזוג מכיל «טואלטיקה» + «מארזי ניקיון משתלמים» מכריחים:
@@ -2133,11 +2101,11 @@ function HomeOurCategoriesSection({
   ) => {
     if (itemCount === 1) return widePairW;
 
-    const hasToiletries = groupItems.some((c) => isToiletriesName(c.name));
-    const hasBundles = groupItems.some((c) => isBundlesName(c.name));
+    const hasToiletries = groupItems.some((c) => isToiletriesCategory(c));
+    const hasBundles = groupItems.some((c) => isBundlesCategory(c));
     if (hasToiletries && hasBundles) {
       const thisItem = groupItems[itemIndex]!;
-      return isToiletriesName(thisItem.name) ? narrowPairW : widePairW;
+      return isToiletriesCategory(thisItem) ? narrowPairW : widePairW;
     }
 
     const slotInCycle = groupIndex % 3;
@@ -2189,8 +2157,8 @@ function HomeOurCategoriesSection({
           const hasToiletriesAndBundlesPair =
             group.cols === 2 &&
             group.items.length === 2 &&
-            group.items.some((c) => isToiletriesName(c.name)) &&
-            group.items.some((c) => isBundlesName(c.name));
+            group.items.some((c) => isToiletriesCategory(c)) &&
+            group.items.some((c) => isBundlesCategory(c));
           /** החלפת מיקום שמאל/ימין ב־row-reverse — רק לזוג הזה */
           const rowItems = hasToiletriesAndBundlesPair
             ? [group.items[1]!, group.items[0]!]
@@ -2222,11 +2190,7 @@ function HomeOurCategoriesSection({
                   mergeFromCategories.find((c) => c.id === category.id)?.imageUrl ??
                   coverUrlByCategoryId[category.id];
 
-                const useLocalFabricCover = isFabricSoftenersCategory(category.name);
-                const useLocalFragranceCover = isFragranceSystemsCategory(category.name);
-                const useLocalAccessoriesCover = isAccessoriesCategory(category.name);
-                const useLocalHomeDesignCover = isHomeDesignCategory(category.name);
-                const useLocalBundlesCover = isBundlesName(category.name);
+                const localCover = HOME_CATEGORY_HANDLE_OVERRIDES[category.id]?.localCover;
 
                 return (
                   <Pressable
@@ -2262,37 +2226,9 @@ function HomeOurCategoriesSection({
                           backgroundColor: '#F0F2F5',
                         }}
                       >
-                        {useLocalFabricCover ? (
+                        {localCover ? (
                           <Image
-                            source={require('../../../assets/kvisa1.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalFragranceCover ? (
-                          <Image
-                            source={require('../../../assets/bisom.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalAccessoriesCover ? (
-                          <Image
-                            source={require('../../../assets/exxsorie.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalHomeDesignCover ? (
-                          <Image
-                            source={require('../../../assets/homedesing.png')}
-                            style={{ width: cardW, height: cardTotalH }}
-                            resizeMode="cover"
-                            accessibilityLabel={category.name}
-                          />
-                        ) : useLocalBundlesCover ? (
-                          <Image
-                            source={require('../../../assets/marazim2.png')}
+                            source={localCover}
                             style={{ width: cardW, height: cardTotalH }}
                             resizeMode="cover"
                             accessibilityLabel={category.name}
@@ -2418,6 +2354,7 @@ export function StoreHomeScreen({
   const { itemCount } = useCart();
   const { width: windowWidth } = useWindowDimensions();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
+  const { itemCount } = useCart();
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
@@ -2447,10 +2384,9 @@ export function StoreHomeScreen({
   /** תתי־קטגוריות מהתפריט המרוחק */
   const [homeSubcategoryPreviewUrls, setHomeSubcategoryPreviewUrls] = useState<Record<string, string | undefined>>({});
   const [query, setQuery] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const homeSubcategoryTabsRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
+  const storefrontMountedRef = useRef(true);
   const [activePrimaryTab, setActivePrimaryTab] = useState<StoreMainTabId>('home');
   const lastHandledInitialTabRequestIdRef = useRef<number | undefined>(undefined);
   const storefrontLoadedOnceRef = useRef(false);
@@ -2743,6 +2679,49 @@ export function StoreHomeScreen({
     return () => { cancelled = true; };
   }, [homeSubcategoryListKey, selectedCategory, effectiveHomeDirectSubcategories]);
 
+  /**
+   * טעינה עצלה של תצוגות מקדימות לתתי־קטגוריות ברצועת העיגולים שמעל הבנטו.
+   * נטען רק כשהמשתמש מרחיב קטגוריה (חיסכון בקריאות API), והתוצאות נשמרות בקאש.
+   */
+  useEffect(() => {
+    if (!homeStripExpandedCategoryId) return;
+    const subs = topLevelCategoryChildrenMap[homeStripExpandedCategoryId];
+    if (!subs?.length) return;
+    /** דילוג אם כל התתי־קטגוריות כבר נטענו (גם undefined נחשב כנטען — כדי לא לבקש שוב) */
+    if (subs.every((s) => Object.prototype.hasOwnProperty.call(homeStripSubcategoryPreviewUrls, s.id))) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string | undefined> = {};
+      await Promise.all(
+        subs.map(async (sub) => {
+          if (Object.prototype.hasOwnProperty.call(homeStripSubcategoryPreviewUrls, sub.id)) return;
+          if (sub.imageUrl) {
+            next[sub.id] = sub.imageUrl;
+            return;
+          }
+          try {
+            const img = await fetchCollectionImage(sub.id);
+            next[sub.id] = img ?? undefined;
+          } catch {
+            next[sub.id] = undefined;
+          }
+        }),
+      );
+      for (const sub of subs) {
+        const overrideUri = resolveFeaturedBrandPreviewUri(sub.title);
+        if (overrideUri) next[sub.id] = overrideUri;
+      }
+      if (!cancelled && Object.keys(next).length) {
+        setHomeStripSubcategoryPreviewUrls((prev) => ({ ...prev, ...next }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [homeStripExpandedCategoryId, topLevelCategoryChildrenMap, homeStripSubcategoryPreviewUrls]);
+
   useEffect(() => {
     if (!effectiveHomeDirectSubcategories.length) return;
     if (
@@ -2822,7 +2801,6 @@ export function StoreHomeScreen({
     }
 
     lastHandledInitialTabRequestIdRef.current = initialTabRequestId;
-    setMenuOpen(false);
 
     if (initialTab === 'search') {
       setActivePrimaryTab('search');
@@ -2910,7 +2888,6 @@ export function StoreHomeScreen({
 
   const handleBottomTabPress = (itemId: StoreBottomTabId) => {
     if (itemId === 'home') {
-      setMenuOpen(false);
       setActivePrimaryTab('home');
       searchInputRef.current?.blur();
       setSelectedCategory('all');
@@ -2929,7 +2906,6 @@ export function StoreHomeScreen({
     }
 
     if (itemId === 'search') {
-      setMenuOpen(false);
       if (onSearchPress) {
         searchInputRef.current?.blur();
         onSearchPress();
@@ -2944,14 +2920,12 @@ export function StoreHomeScreen({
     }
 
     if (itemId === 'favorites') {
-      setMenuOpen(false);
       searchInputRef.current?.blur();
       onFavoritesPress?.();
       return;
     }
 
     if (itemId === 'profile') {
-      setMenuOpen(false);
       searchInputRef.current?.blur();
       onProfilePress();
       return;

@@ -45,6 +45,7 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+  const [otpNoticeVisible, setOtpNoticeVisible] = useState(false);
   const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastAutoVerifiedCode = useRef('');
 
@@ -102,7 +103,8 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
       lastAutoVerifiedCode.current = '';
       setStep('code');
       startResendTimer();
-      Toast.show({ type: 'success', text1: 'נשלח קוד אימות', text2: 'הקוד יגיע ב-SMS תוך מספר שניות' });
+      Keyboard.dismiss();
+      setOtpNoticeVisible(true);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שגיאה בשליחת הקוד', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -120,7 +122,8 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
       setCode('');
       lastAutoVerifiedCode.current = '';
       startResendTimer();
-      Toast.show({ type: 'success', text1: 'נשלח קוד חדש' });
+      Keyboard.dismiss();
+      setOtpNoticeVisible(true);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שגיאה בשליחת קוד חדש', text2: e?.message ?? 'Unknown error' });
     } finally {

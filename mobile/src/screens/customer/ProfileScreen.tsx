@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -126,6 +127,64 @@ function StatPill({ value, label }: { value: string; label: string }) {
   );
 }
 
+function DeleteAccountDialog({
+  visible,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={() => {
+        if (!deleting) onCancel();
+      }}
+    >
+      <View style={styles.dialogBackdrop}>
+        <View style={styles.dialogCard}>
+          <View style={styles.dialogIcon}>
+            <Ionicons name="trash-outline" size={24} color={P.destructive} />
+          </View>
+
+          <Text style={styles.dialogTitle}>מחיקת חשבון</Text>
+          <Text style={styles.dialogBody}>
+            החשבון שלך, המועדפים והיסטוריית ההזמנות יימחקו לצמיתות. לא ניתן לבטל פעולה זו.
+          </Text>
+
+          <View style={styles.dialogActions}>
+            <Pressable
+              disabled={deleting}
+              onPress={onCancel}
+              style={({ pressed }) => [styles.dialogButton, styles.dialogCancelButton, pressed && styles.dialogPressed]}
+            >
+              <Text style={styles.dialogCancelText}>ביטול</Text>
+            </Pressable>
+
+            <Pressable
+              disabled={deleting}
+              onPress={onConfirm}
+              style={({ pressed }) => [styles.dialogButton, styles.dialogDeleteButton, pressed && styles.dialogPressed]}
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.dialogDeleteText}>מחק חשבון</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 /* ─── main screen ─────────────────────────────────────────────────────────── */
 
 export function CustomerProfileScreen({
@@ -137,12 +196,14 @@ export function CustomerProfileScreen({
   onOpenOrders: () => void;
   onOpenAddresses: () => void;
 }) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, deleteCustomerAccount } = useAuth();
   const { favoriteCount } = useFavorites();
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [recentOrders, setRecentOrders] = useState<CustomerOrderRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!user?.id) return;
@@ -164,6 +225,22 @@ export function CustomerProfileScreen({
   }, [user?.id]);
 
   useFocusEffect(useCallback(() => { fetchAll(); }, [fetchAll]));
+
+  const confirmDeleteAccount = useCallback(() => {
+    if (deletingAccount) return;
+    setDeleteConfirmVisible(true);
+  }, [deletingAccount]);
+
+  const handleDeleteAccount = useCallback(async () => {
+    try {
+      setDeletingAccount(true);
+      await deleteCustomerAccount();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'מחיקת החשבון נכשלה', text2: e?.message ?? 'Unknown error' });
+      setDeletingAccount(false);
+      setDeleteConfirmVisible(false);
+    }
+  }, [deleteCustomerAccount]);
 
   const totalSpent = useMemo(
     () => recentOrders.reduce((sum, o) => sum + Number(o.total_amount ?? 0), 0),
@@ -258,7 +335,7 @@ export function CustomerProfileScreen({
               {/* icon — absolute, RIGHT */}
               <View style={styles.orderIconSlot}>
                 <Ionicons
-                  name={item.status === 'delivered' ? 'checkmark-circle-outline' : 'cube-outline'}
+                  name={item.status === 'confirmed' ? 'checkmark-circle-outline' : 'cube-outline'}
                   size={22}
                   color={P.iconColor}
                 />
@@ -295,7 +372,13 @@ export function CustomerProfileScreen({
                 <Text style={styles.emptyTitle}>אין הזמנות עדיין</Text>
                 <Text style={styles.emptyText}>ברגע שתבצע רכישה היא תופיע כאן.</Text>
                 <View style={styles.emptyActions}>
-                  <Button title="התנתקות" fullWidth={false} variant="secondary" onPress={() => void signOut()} />
+                  <Button title="התנתקות" variant="secondary" onPress={() => void signOut()} />
+                  <Button
+                    title={deletingAccount ? 'מוחק…' : 'מחיקת חשבון'}
+                    variant="danger"
+                    disabled={deletingAccount}
+                    onPress={confirmDeleteAccount}
+                  />
                 </View>
               </View>
             )
@@ -311,8 +394,23 @@ export function CustomerProfileScreen({
               destructive
               onPress={() => void signOut()}
             />
+            <RowDivider />
+            <ListRow
+              icon="trash-outline"
+              label={deletingAccount ? 'מוחק חשבון…' : 'מחיקת חשבון'}
+              chevron={false}
+              destructive
+              onPress={confirmDeleteAccount}
+            />
           </View>
         )}
+
+        <DeleteAccountDialog
+          visible={deleteConfirmVisible}
+          deleting={deletingAccount}
+          onCancel={() => setDeleteConfirmVisible(false)}
+          onConfirm={handleDeleteAccount}
+        />
 
         <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
       </View>
@@ -528,8 +626,92 @@ const styles = StyleSheet.create({
   emptyCard: { alignItems: 'center', paddingVertical: 36, gap: 8, marginTop: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: P.label },
   emptyText: { fontSize: 14, color: P.tertiaryLabel, textAlign: 'center' },
-  emptyActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  emptyActions: { width: '100%', paddingHorizontal: 16, gap: 8, marginTop: 8 },
 
   /* sign-out */
   signOutCard: { marginBottom: 16, marginTop: 8 },
+
+  /* custom dialogs */
+  dialogBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.46)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  dialogCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    padding: 22,
+    alignItems: 'stretch',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
+  },
+  dialogIcon: {
+    alignSelf: 'flex-end',
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#FFF0F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  dialogTitle: {
+    color: P.label,
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 8,
+  },
+  dialogBody: {
+    color: P.secondaryLabel,
+    fontSize: 15,
+    lineHeight: 23,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 20,
+  },
+  dialogActions: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+  },
+  dialogButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogCancelButton: {
+    backgroundColor: P.bg,
+    borderWidth: 1,
+    borderColor: P.separator,
+  },
+  dialogDeleteButton: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: P.destructive,
+  },
+  dialogPressed: {
+    opacity: 0.9,
+  },
+  dialogCancelText: {
+    color: P.label,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  dialogDeleteText: {
+    color: '#991B1B',
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
 });
