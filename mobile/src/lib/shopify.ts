@@ -1,3 +1,5 @@
+import { normalizeCheckoutUrl } from './checkoutUrl';
+
 /** Pinned Storefront API version (see https://shopify.dev/docs/api/usage/versioning) */
 const SHOPIFY_API_VERSION = '2026-04';
 
@@ -10,7 +12,6 @@ const SHOPIFY_STOREFRONT_TOKEN =
   process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN?.trim() ||
   process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN?.trim() ||
   process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN?.trim();
-const SHOPIFY_MENU_HANDLE = process.env.EXPO_PUBLIC_SHOPIFY_MENU_HANDLE?.trim() || 'main-menu';
 
 export type ShopifyImage = {
   url: string;
@@ -40,6 +41,7 @@ export type ShopifyProduct = {
   compareAtPrice: number | null;
   currencyCode: string;
   productType: string;
+  tags: string[];
   /** קולקציית Shopify ראשונה (מסודר ע״י Shopify) — לתווית קטגוריה בכרטיס מוצר */
   primaryCollectionTitle: string | null;
   variantId: string | null;
@@ -152,6 +154,7 @@ type ShopifyProductNode = {
   description: string;
   handle: string;
   productType: string;
+  tags?: string[];
   featuredImage: ShopifyImage | null;
   collections?: {
     edges: Array<{
@@ -202,21 +205,6 @@ type ShopifyCollectionNode = {
   image: ShopifyImage | null;
 };
 
-type ShopifyMenuItemNode = {
-  id: string;
-  title: string;
-  url: string | null;
-  items?: ShopifyMenuItemNode[];
-  resource?: {
-    __typename: 'Collection';
-    id: string;
-    title: string;
-    handle: string;
-    description: string;
-    image: ShopifyImage | null;
-  } | null;
-};
-
 type ShopifyCollectionsQueryResponse = {
   data?: {
     collections: {
@@ -258,19 +246,6 @@ type ShopifyCollectionImageQueryResponse = {
           };
         }>;
       };
-    } | null;
-  };
-  errors?: Array<{
-    message: string;
-  }>;
-};
-
-type ShopifyMenuQueryResponse = {
-  data?: {
-    menu: {
-      id: string;
-      title: string;
-      items: ShopifyMenuItemNode[];
     } | null;
   };
   errors?: Array<{
@@ -392,6 +367,7 @@ const PRODUCT_FIELDS = `
   description
   handle
   productType
+  tags
   collections(first: 8) {
     edges {
       node {
@@ -565,6 +541,7 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     compareAtPrice,
     currencyCode: variant?.price.currencyCode ?? fallbackPrice.currencyCode,
     productType: node.productType?.trim() || 'מוצרים',
+    tags: node.tags ?? [],
     primaryCollectionTitle,
     variantId: variant?.id ?? null,
     variantTitle: variant?.title ?? null,
@@ -583,13 +560,6 @@ function normalizeCollection(node: ShopifyCollectionNode): ShopifyCollection {
   };
 }
 
-function extractCollectionHandleFromUrl(url: string | null | undefined) {
-  if (!url) return undefined;
-
-  const match = url.match(/\/collections\/([^/?#]+)/i);
-  return match?.[1];
-}
-
 /** חיפוש פריט תפריט לפי handle של קולקציה (רקורסיבי) — לרצועת «חברות נבחרות» לפי API */
 export function findMenuItemByCollectionHandle(
   menuItems: ShopifyMenuItem[],
@@ -605,28 +575,6 @@ export function findMenuItemByCollectionHandle(
     }
   }
   return null;
-}
-
-function normalizeMenuItem(node: ShopifyMenuItemNode): ShopifyMenuItem | null {
-  const collectionHandle = node.resource?.handle ?? extractCollectionHandleFromUrl(node.url);
-  const collectionDescription = node.resource?.description || undefined;
-  const collectionImageUrl = node.resource?.image?.url ?? undefined;
-  const children = (node.items ?? [])
-    .map((child) => normalizeMenuItem(child))
-    .filter((child): child is ShopifyMenuItem => !!child);
-
-  if (!collectionHandle && !children.length) {
-    return null;
-  }
-
-  return {
-    id: node.id,
-    title: node.title.trim(),
-    collectionHandle,
-    collectionDescription,
-    collectionImageUrl,
-    children: children.length ? children : undefined,
-  };
 }
 
 function getCartPalette(index: number) {
@@ -686,7 +634,7 @@ function normalizeCart(cart: ShopifyCartNode | null): ShopifyCart | null {
 
   return {
     id: cart.id,
-    checkoutUrl: cart.checkoutUrl,
+    checkoutUrl: normalizeCheckoutUrl(cart.checkoutUrl),
     totalQuantity: cart.totalQuantity,
     cost: {
       subtotalAmount: toNumber(cart.cost.subtotalAmount.amount),
@@ -983,63 +931,6 @@ export async function fetchCollections(limit?: number): Promise<ShopifyCollectio
   return out;
 }
 
-/** עומק פריטי תפריט בגרף — תתי־קטגוריות עמוקות (למשל «חברות נבחרות») אחרת לא נטענות מה־API */
-const MENU_STOREFRONT_QUERY_DEPTH = 8;
-
-const MENU_ITEM_NODE_FIELDS = `
-  id
-  title
-  url
-  resource {
-    __typename
-    ... on Collection {
-      id
-      title
-      handle
-      description
-      image {
-        url
-        altText
-      }
-    }
-  }
-`;
-
-function menuItemsNestedSelection(remainingDepth: number): string {
-  if (remainingDepth <= 1) {
-    return MENU_ITEM_NODE_FIELDS;
-  }
-  return `
-    ${MENU_ITEM_NODE_FIELDS}
-    items {
-      ${menuItemsNestedSelection(remainingDepth - 1)}
-    }
-  `;
-}
-
-export async function fetchMenuItems(handle = SHOPIFY_MENU_HANDLE): Promise<ShopifyMenuItem[]> {
-  const query = `
-    query GetMenu($handle: String!) {
-      menu(handle: $handle) {
-        id
-        title
-        items {
-          ${menuItemsNestedSelection(MENU_STOREFRONT_QUERY_DEPTH)}
-        }
-      }
-    }
-  `;
-
-  const payload = await storefrontRequest<ShopifyMenuQueryResponse>(query, { handle });
-  const messages = getGraphQlErrors(payload.errors);
-
-  if (messages.length) {
-    throw new Error(messages.join(', '));
-  }
-
-  return payload.data?.menu?.items.map((item) => normalizeMenuItem(item)).filter((item): item is ShopifyMenuItem => !!item) ?? [];
-}
-
 type ShopifyCollectionSummaryQueryResponse = {
   data?: {
     collection: {
@@ -1095,48 +986,6 @@ export async function fetchCollectionSummary(handle: string): Promise<{
     description: node.description ?? '',
     imageUrl: node.image?.url ?? null,
   };
-}
-
-type ShopifyCollectionHasProductsResponse = {
-  data?: {
-    collection?: {
-      products?: {
-        edges: Array<{ node: { id: string } }>;
-      };
-    } | null;
-  };
-  errors?: Array<{ message: string }>;
-};
-
-/** האם בקולקציה יש לפחות מוצר אחד (שאילתה מינימלית) — להסתרת תתי־קטגוריות ריקות */
-export async function fetchCollectionHasProducts(handle: string): Promise<boolean> {
-  const normalized = handle.trim();
-  if (!normalized) return false;
-
-  const query = `
-    query CollectionHasProducts($handle: String!) {
-      collection(handle: $handle) {
-        products(first: 1, sortKey: BEST_SELLING) {
-          edges {
-            node {
-              id
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  const payload = await storefrontRequest<ShopifyCollectionHasProductsResponse>(query, {
-    handle: normalized,
-  });
-  const messages = getGraphQlErrors(payload.errors);
-  if (messages.length) {
-    throw new Error(messages.join(', '));
-  }
-
-  const edges = payload.data?.collection?.products?.edges ?? [];
-  return edges.length > 0;
 }
 
 /** מיון מוצרים בקולקציה — ראה `ProductCollectionSortKeys` ב־Storefront API */
@@ -1375,4 +1224,12 @@ export async function removeCartLines(cartId: string, lineIds: string[]): Promis
 
   const payload = await storefrontRequest<ShopifyCartLinesRemoveResponse>(query, { cartId, lineIds });
   return assertCartMutation(payload.data?.cartLinesRemove, payload.errors);
+}
+
+/** Public Storefront GraphQL helper (Lovable / shop menu pipeline) */
+export async function storefrontApiRequest<TResponse>(
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<TResponse> {
+  return storefrontRequest<TResponse>(query, variables);
 }

@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { normalizeCheckoutUrl } from '../lib/checkoutUrl';
 import {
   createCart,
   type ShopifyCartAttributeInput,
@@ -94,7 +95,7 @@ export async function createCheckout(lineItems: CheckoutLineItem[]): Promise<Cre
   });
 
   const cart = await createCart(lines, buildMobileAppCartOptions());
-  const checkoutUrl = cart.checkoutUrl?.trim();
+  const checkoutUrl = normalizeCheckoutUrl(cart.checkoutUrl?.trim() ?? '');
 
   if (!checkoutUrl) {
     throw new Error('Shopify did not return a checkout URL');

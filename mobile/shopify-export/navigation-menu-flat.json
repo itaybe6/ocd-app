@@ -1,0 +1,236 @@
+[
+  {
+    "path": "מערכות בישום",
+    "title": "מערכות בישום",
+    "collectionHandle": "בישום-חללים",
+    "url": "https://ocd-online.co.il/collections/%D7%91%D7%99%D7%A9%D7%95%D7%9D-%D7%97%D7%9C%D7%9C%D7%99%D7%9D"
+  },
+  {
+    "path": "מוצרי ניקיון",
+    "title": "מוצרי ניקיון",
+    "collectionHandle": "חומרי-ניקיון",
+    "url": "https://ocd-online.co.il/collections/%D7%97%D7%95%D7%9E%D7%A8%D7%99-%D7%A0%D7%99%D7%A7%D7%99%D7%95%D7%9F"
+  },
+  {
+    "path": "מוצרי ניקיון / ניקיון יסודי לרצפות",
+    "title": "ניקיון יסודי לרצפות",
+    "collectionHandle": "חומרי-ניקיו-רצפות",
+    "url": "https://ocd-online.co.il/collections/%D7%97%D7%95%D7%9E%D7%A8%D7%99-%D7%A0%D7%99%D7%A7%D7%99%D7%95-%D7%A8%D7%A6%D7%A4%D7%95%D7%AA"
+  },
+  {
+    "path": "מוצרי ניקיון / שירותים ומקלחת",
+    "title": "שירותים ומקלחת",
+    "collectionHandle": "מוצרי-נקיון-שירותים",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%95%D7%A6%D7%A8%D7%99-%D7%A0%D7%A7%D7%99%D7%95%D7%9F-%D7%A9%D7%99%D7%A8%D7%95%D7%AA%D7%99%D7%9D"
+  },
+  {
+    "path": "מוצרי ניקיון / מטבח וכלים",
+    "title": "מטבח וכלים",
+    "collectionHandle": "מוצרי-נקיון-מטבח",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%95%D7%A6%D7%A8%D7%99-%D7%A0%D7%A7%D7%99%D7%95%D7%9F-%D7%9E%D7%98%D7%91%D7%97"
+  },
+  {
+    "path": "מוצרי ניקיון / נקיון הרכב",
+    "title": "נקיון הרכב",
+    "collectionHandle": "מוצרי-נקיון-חדרי-שינה",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%95%D7%A6%D7%A8%D7%99-%D7%A0%D7%A7%D7%99%D7%95%D7%9F-%D7%97%D7%93%D7%A8%D7%99-%D7%A9%D7%99%D7%A0%D7%94"
+  },
+  {
+    "path": "מוצרי ניקיון / מוצרי טירולר ",
+    "title": "מוצרי טירולר ",
+    "collectionHandle": "%D7%98%D7%99%D7%A8%D7%95%D7%9C%D7%A8",
+    "url": "https://ocd-online.co.il/collections/%D7%98%D7%99%D7%A8%D7%95%D7%9C%D7%A8?page=1"
+  },
+  {
+    "path": "מוצרי ניקיון / מוצרי TNX",
+    "title": "מוצרי TNX",
+    "collectionHandle": "מוצרי-tnx",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%95%D7%A6%D7%A8%D7%99-tnx"
+  },
+  {
+    "path": "מוצרי ניקיון / לחלונות מבריקים",
+    "title": "לחלונות מבריקים",
+    "collectionHandle": "חלונות",
+    "url": "https://ocd-online.co.il/collections/%D7%97%D7%9C%D7%95%D7%A0%D7%95%D7%AA"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל",
+    "title": "מרככי כביסה וטקסטיל",
+    "collectionHandle": "מרככי-כביסה-וטקסטיל",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%A8%D7%9B%D7%9B%D7%99-%D7%9B%D7%91%D7%99%D7%A1%D7%94-%D7%95%D7%98%D7%A7%D7%A1%D7%98%D7%99%D7%9C"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל / מוצרי פרפיום(כביסכל)",
+    "title": "מוצרי פרפיום(כביסכל)",
+    "collectionHandle": "מוצרי-פרפיוםכביסכל",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%95%D7%A6%D7%A8%D7%99-%D7%A4%D7%A8%D7%A4%D7%99%D7%95%D7%9D%D7%9B%D7%91%D7%99%D7%A1%D7%9B%D7%9C"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל / פינל",
+    "title": "פינל",
+    "collectionHandle": "פינל-1",
+    "url": "https://ocd-online.co.il/collections/%D7%A4%D7%99%D7%A0%D7%9C-1"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל / סנו ",
+    "title": "סנו ",
+    "collectionHandle": "סנו",
+    "url": "https://ocd-online.co.il/collections/%D7%A1%D7%A0%D7%95"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל / אייר טופ",
+    "title": "אייר טופ",
+    "collectionHandle": "מרכי-כביסה-אייר-טופ",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%A8%D7%9B%D7%99-%D7%9B%D7%91%D7%99%D7%A1%D7%94-%D7%90%D7%99%D7%99%D7%A8-%D7%98%D7%95%D7%A4"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל / מארזים מיוחדים",
+    "title": "מארזים מיוחדים",
+    "collectionHandle": "מרכי-כביסה-מארזים",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%A8%D7%9B%D7%99-%D7%9B%D7%91%D7%99%D7%A1%D7%94-%D7%9E%D7%90%D7%A8%D7%96%D7%99%D7%9D"
+  },
+  {
+    "path": "מרככי כביסה וטקסטיל / טאצ",
+    "title": "טאצ",
+    "collectionHandle": "מרככי-כביסה-טאצ",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%A8%D7%9B%D7%9B%D7%99-%D7%9B%D7%91%D7%99%D7%A1%D7%94-%D7%98%D7%90%D7%A6"
+  },
+  {
+    "path": "אקססוריז",
+    "title": "אקססוריז",
+    "collectionHandle": "אקססוריז-לבית",
+    "url": "https://ocd-online.co.il/collections/%D7%90%D7%A7%D7%A1%D7%A1%D7%95%D7%A8%D7%99%D7%96-%D7%9C%D7%91%D7%99%D7%AA"
+  },
+  {
+    "path": "אקססוריז / נרות אווירה",
+    "title": "נרות אווירה",
+    "collectionHandle": "נרות-ריחניים",
+    "url": "https://ocd-online.co.il/collections/%D7%A0%D7%A8%D7%95%D7%AA-%D7%A8%D7%99%D7%97%D7%A0%D7%99%D7%99%D7%9D"
+  },
+  {
+    "path": "אקססוריז / כלים מעוצבים למטבח",
+    "title": "כלים מעוצבים למטבח",
+    "collectionHandle": "אקססוריז-למטבח",
+    "url": "https://ocd-online.co.il/collections/%D7%90%D7%A7%D7%A1%D7%A1%D7%95%D7%A8%D7%99%D7%96-%D7%9C%D7%9E%D7%98%D7%91%D7%97"
+  },
+  {
+    "path": "אקססוריז / אביזרי אמבטיה מעוצבים",
+    "title": "אביזרי אמבטיה מעוצבים",
+    "collectionHandle": "אקססוריז-למקלחת",
+    "url": "https://ocd-online.co.il/collections/%D7%90%D7%A7%D7%A1%D7%A1%D7%95%D7%A8%D7%99%D7%96-%D7%9C%D7%9E%D7%A7%D7%9C%D7%97%D7%AA"
+  },
+  {
+    "path": "אקססוריז / אביזרים לחדר כביסה",
+    "title": "אביזרים לחדר כביסה",
+    "collectionHandle": "אקססוריז-לכביסה",
+    "url": "https://ocd-online.co.il/collections/%D7%90%D7%A7%D7%A1%D7%A1%D7%95%D7%A8%D7%99%D7%96-%D7%9C%D7%9B%D7%91%D7%99%D7%A1%D7%94"
+  },
+  {
+    "path": "אקססוריז / ספרים מעוצבים",
+    "title": "ספרים מעוצבים",
+    "collectionHandle": "אקססוריז-ספרים",
+    "url": "https://ocd-online.co.il/collections/%D7%90%D7%A7%D7%A1%D7%A1%D7%95%D7%A8%D7%99%D7%96-%D7%A1%D7%A4%D7%A8%D7%99%D7%9D"
+  },
+  {
+    "path": "עיצוב הבית",
+    "title": "עיצוב הבית",
+    "collectionHandle": "עיצוב-הבית",
+    "url": "https://ocd-online.co.il/collections/%D7%A2%D7%99%D7%A6%D7%95%D7%91-%D7%94%D7%91%D7%99%D7%AA"
+  },
+  {
+    "path": "עיצוב הבית / כיסאות לבית",
+    "title": "כיסאות לבית",
+    "collectionHandle": "כיסאות",
+    "url": "https://ocd-online.co.il/collections/%D7%9B%D7%99%D7%A1%D7%90%D7%95%D7%AA"
+  },
+  {
+    "path": "עיצוב הבית / פחים מעוצבים",
+    "title": "פחים מעוצבים",
+    "collectionHandle": "brabantia",
+    "url": "https://ocd-online.co.il/collections/brabantia"
+  },
+  {
+    "path": "עיצוב הבית / ריהוט סלוני",
+    "title": "ריהוט סלוני",
+    "collectionHandle": "פינות-ישיבה",
+    "url": "https://ocd-online.co.il/collections/%D7%A4%D7%99%D7%A0%D7%95%D7%AA-%D7%99%D7%A9%D7%99%D7%91%D7%94"
+  },
+  {
+    "path": "עיצוב הבית / שולחנות אירוח",
+    "title": "שולחנות אירוח",
+    "collectionHandle": "שולחנות",
+    "url": "https://ocd-online.co.il/collections/%D7%A9%D7%95%D7%9C%D7%97%D7%A0%D7%95%D7%AA"
+  },
+  {
+    "path": "עיצוב הבית / שטיחים מעוצבים",
+    "title": "שטיחים מעוצבים",
+    "collectionHandle": "שטיחים",
+    "url": "https://ocd-online.co.il/collections/%D7%A9%D7%98%D7%99%D7%97%D7%99%D7%9D"
+  },
+  {
+    "path": "חברות נבחרות",
+    "title": "חברות נבחרות",
+    "collectionHandle": null,
+    "url": "https://ocd-online.co.il/"
+  },
+  {
+    "path": "חברות נבחרות / סנו",
+    "title": "סנו",
+    "collectionHandle": "סנו-1",
+    "url": "https://ocd-online.co.il/collections/%D7%A1%D7%A0%D7%95-1"
+  },
+  {
+    "path": "חברות נבחרות / טאצ",
+    "title": "טאצ",
+    "collectionHandle": "טאצ",
+    "url": "https://ocd-online.co.il/collections/%D7%98%D7%90%D7%A6"
+  },
+  {
+    "path": "חברות נבחרות / פינל",
+    "title": "פינל",
+    "collectionHandle": "פינל-1",
+    "url": "https://ocd-online.co.il/collections/%D7%A4%D7%99%D7%A0%D7%9C-1"
+  },
+  {
+    "path": "חברות נבחרות / יעקובי",
+    "title": "יעקובי",
+    "collectionHandle": "יעקבי",
+    "url": "https://ocd-online.co.il/collections/%D7%99%D7%A2%D7%A7%D7%91%D7%99"
+  },
+  {
+    "path": "חברות נבחרות / סאג",
+    "title": "סאג",
+    "collectionHandle": "סאג",
+    "url": "https://ocd-online.co.il/collections/%D7%A1%D7%90%D7%92"
+  },
+  {
+    "path": "חברות נבחרות / סוסיטסא",
+    "title": "סוסיטסא",
+    "collectionHandle": "סוסיטסא",
+    "url": "https://ocd-online.co.il/collections/%D7%A1%D7%95%D7%A1%D7%99%D7%98%D7%A1%D7%90"
+  },
+  {
+    "path": "חברות נבחרות / מוצרי TNX",
+    "title": "מוצרי TNX",
+    "collectionHandle": "מוצרי-tnx",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%95%D7%A6%D7%A8%D7%99-tnx"
+  },
+  {
+    "path": "חברות נבחרות / מוצרי Tana-Green Care",
+    "title": "מוצרי Tana-Green Care",
+    "collectionHandle": "מארזי-ניקיון-משתלמים-copy-1",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%90%D7%A8%D7%96%D7%99-%D7%A0%D7%99%D7%A7%D7%99%D7%95%D7%9F-%D7%9E%D7%A9%D7%AA%D7%9C%D7%9E%D7%99%D7%9D-copy-1"
+  },
+  {
+    "path": "מארזי ניקיון משתלמים",
+    "title": "מארזי ניקיון משתלמים",
+    "collectionHandle": "מבצעי-פסח",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%91%D7%A6%D7%A2%D7%99-%D7%A4%D7%A1%D7%97"
+  },
+  {
+    "path": "טואליטיקה",
+    "title": "טואליטיקה",
+    "collectionHandle": "מארזי-ניקיון-משתלמים-copy",
+    "url": "https://ocd-online.co.il/collections/%D7%9E%D7%90%D7%A8%D7%96%D7%99-%D7%A0%D7%99%D7%A7%D7%99%D7%95%D7%9F-%D7%9E%D7%A9%D7%AA%D7%9C%D7%9E%D7%99%D7%9D-copy"
+  }
+]

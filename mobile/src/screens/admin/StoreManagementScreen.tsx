@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { fetchProducts } from '../../lib/shopify';
 import { useLoading } from '../../state/LoadingContext';
 import { OcdPlusMark } from '../../components/OcdPlusMark';
+import { colors } from '../../theme/colors';
 
 LocaleConfig.locales['he'] = {
   monthNames: ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
@@ -321,7 +322,7 @@ export function StoreManagementScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#F6F7FB' }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
         contentContainerStyle={{ gap: 14, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 36 }}
         showsVerticalScrollIndicator={false}

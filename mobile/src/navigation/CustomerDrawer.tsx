@@ -14,6 +14,7 @@ import { CustomerProfileScreen } from '../screens/customer/ProfileScreen';
 import { CustomerServicesScreen } from '../screens/customer/ServicesScreen';
 import { CustomerFavoritesScreen } from '../screens/customer/FavoritesScreen';
 import { CustomerOrdersScreen } from '../screens/customer/OrdersScreen';
+import { CustomerAddressesScreen } from '../screens/customer/AddressesScreen';
 import { safeNavigate } from './navigationRef';
 import { StoreHomeScreen, type StoreBottomTabId, type StoreMainTabId } from '../screens/store/StoreHomeScreen';
 
@@ -26,6 +27,7 @@ export type CustomerDrawerParamList = {
     | undefined;
   Profile: undefined;
   Orders: undefined;
+  Addresses: undefined;
   Services: undefined;
   Favorites: undefined;
 };
@@ -45,8 +47,8 @@ function handleCustomerTabPress(
     return;
   }
 
-  if (tabId === 'cart') {
-    safeNavigate('StoreCart');
+  if (tabId === 'ocdPlus') {
+    safeNavigate('StoreOcdPlus');
     return;
   }
 
@@ -98,13 +100,28 @@ function CustomerProfileRoute({ navigation }: DrawerScreenProps<CustomerDrawerPa
   return (
     <CustomerProfileScreen
       onOpenOrders={() => navigation.navigate('Orders')}
+      onOpenAddresses={() => navigation.navigate('Addresses')}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
   );
 }
 
-function CustomerOrdersRoute() {
-  return <CustomerOrdersScreen />;
+function CustomerOrdersRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'Orders'>) {
+  return (
+    <CustomerOrdersScreen
+      onBack={() => navigation.navigate('Profile')}
+      onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
+    />
+  );
+}
+
+function CustomerAddressesRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'Addresses'>) {
+  return (
+    <CustomerAddressesScreen
+      onBack={() => navigation.navigate('Profile')}
+      onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
+    />
+  );
 }
 
 function CustomerFavoritesRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'Favorites'>) {
@@ -173,6 +190,7 @@ export function CustomerDrawer({ initialRouteName = 'Store' }: CustomerDrawerPro
       <Drawer.Screen name="Store" options={{ title: 'חנות', headerShown: false }} component={CustomerStoreScreen} />
       <Drawer.Screen name="Profile" options={{ title: 'פרופיל', headerShown: false }} component={CustomerProfileRoute} />
       <Drawer.Screen name="Orders" options={{ title: 'רכישות', headerShown: false }} component={CustomerOrdersRoute} />
+      <Drawer.Screen name="Addresses" options={{ title: 'כתובות', headerShown: false }} component={CustomerAddressesRoute} />
       <Drawer.Screen name="Favorites" options={{ title: 'אהבתי', headerShown: false }} component={CustomerFavoritesRoute} />
       <Drawer.Screen name="Services" options={{ title: 'שירותים' }} component={CustomerServicesScreen} />
     </Drawer.Navigator>

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Pressable, ScrollView, Share, StatusBar, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Pressable, Share, StatusBar, Text, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +9,6 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { favoriteInputFromShopify } from '../../lib/favorites';
@@ -23,6 +21,8 @@ import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { createCheckout } from '../../services/shopify';
+import { useBrands } from '../../hooks/useBrands';
+import { ProductBrandBadge } from '../../components/ProductBrandBadge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
 
@@ -37,10 +37,6 @@ const RTL_TEXT = {
   writingDirection: 'rtl' as const,
 };
 
-const PRODUCT_CART_STEPPER_AUTO_CLOSE_MS = 3200;
-
-const CART_BAR_MORPH_SPRING = { damping: 18, stiffness: 220, mass: 0.52 } as const;
-
 /** פלטה משותפת עם עמוד העגלה — שומרת תחושה אחידה ונקייה */
 const PALETTE = {
   background: '#F6F7F9',
@@ -53,17 +49,10 @@ const PALETTE = {
   softText: '#94A3B8',
   dark: '#0B1220',
   pill: '#F1F5F9',
-};
-
-const PRODUCT_CART_STEPPER_ACCENT = '#0B1220';
-
-const productCartStepperCircleBtn = {
-  width: 34,
-  height: 34,
-  borderRadius: 17,
-  backgroundColor: '#FFFFFF',
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
+  gold: '#C18D39',
+  galleryBg: '#F5F7F9',
+  success: '#16A34A',
+  danger: '#DC2626',
 };
 
 function formatPrice(price: number, currencyCode: string) {
@@ -124,6 +113,49 @@ function getCartProduct(product: ShopifyProduct, activeVariant: ShopifyProductVa
   };
 }
 
+/** כפתור עגול צף — ניווט/שיתוף/מועדפים מעל הגלריה */
+function FloatingCircleButton({
+  onPress,
+  disabled,
+  label,
+  children,
+  active = false,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  label: string;
+  children: React.ReactNode;
+  active?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => ({
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: active ? '#FEE2E2' : 'rgba(255,255,255,0.94)',
+        borderWidth: 1,
+        borderColor: active ? 'rgba(220,38,38,0.2)' : 'rgba(15,23,42,0.06)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#0F172A',
+        shadowOpacity: 0.14,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 5,
+        transform: [{ scale: pressed ? 0.94 : 1 }],
+      })}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 export function ProductScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
@@ -132,6 +164,7 @@ export function ProductScreen({ navigation, route }: Props) {
   const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
   const { addItem, getQuantity, updateQuantity, isMutating } = useCart();
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
+  const { data: remoteBrands = [] } = useBrands();
   const handle = route.params.handle;
   const [reloadSeq, setReloadSeq] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -149,14 +182,17 @@ export function ProductScreen({ navigation, route }: Props) {
   // Active variant drives the displayed image, price, and cart variant
   const multipleVariants = (product?.variants.length ?? 0) > 1;
   const activeVariant: ShopifyProductVariant | null = product?.variants[activeVariantIndex] ?? product?.variants[0] ?? null;
-  const displayImageUrl = activeVariant?.imageUrl ?? galleryFallbackImage?.url ?? null;
-  const displayImageAlt = activeVariant?.imageAltText ?? galleryFallbackImage?.altText ?? null;
   const displayPrice = activeVariant?.price ?? product?.price ?? 0;
   const displayCompareAtPrice = activeVariant?.compareAtPrice ?? product?.compareAtPrice ?? null;
   const displayIsOnSale = !!displayCompareAtPrice && displayCompareAtPrice > displayPrice;
   const displayCurrencyCode = activeVariant?.currencyCode ?? product?.currencyCode ?? 'ILS';
   const displayAvailableForSale = activeVariant?.availableForSale ?? product?.availableForSale ?? false;
   const displayVariantId = activeVariant?.id ?? product?.variantId ?? null;
+  const discountPercent = displayIsOnSale
+    ? Math.round((1 - displayPrice / displayCompareAtPrice!) * 100)
+    : 0;
+
+  const isCartCtaDisabled = !displayAvailableForSale || !displayVariantId;
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
@@ -178,6 +214,13 @@ export function ProductScreen({ navigation, route }: Props) {
         Extrapolation.CLAMP,
       ),
     }],
+  }));
+  /** התמונה מתכווצת ומתעמעמת מעט בגלילה — נותן עומק בלי לפגוע בביצועים */
+  const galleryZoomStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, imageHeight * 0.9], [1, 0.35], Extrapolation.CLAMP),
+    transform: [
+      { scale: interpolate(scrollY.value, [-imageHeight, 0], [1.35, 1], Extrapolation.CLAMP) },
+    ],
   }));
 
   // כמות מקומית — מסונכרנת עם העגלה ומשתנה ע"י הסטפר
@@ -352,10 +395,8 @@ export function ProductScreen({ navigation, route }: Props) {
     );
   }
 
-  const isCartCtaDisabled = !displayAvailableForSale || !displayVariantId;
-
-  // גובה סרגל הפעולות התחתון — נשמר כקבוע כדי לחשב את ה-padding בגלילה
-  const actionBarHeight = Math.max(insets.bottom, 14) + 4 + 12 + 62;
+  // גובה סרגל הפעולות הצף התחתון — משמש לחישוב padding בגלילה
+  const actionBarHeight = Math.max(insets.bottom, 12) + 112;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
@@ -375,90 +416,32 @@ export function ProductScreen({ navigation, route }: Props) {
       >
         {/* מועדפים + שיתוף */}
         <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-          {/* שיתוף */}
-          <Pressable
-            onPress={() => void handleShare()}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="שתף מוצר"
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 21,
-              backgroundColor: '#FFFFFF',
-              borderWidth: 1,
-              borderColor: 'rgba(0,0,0,0.08)',
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOpacity: 0.18,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-              elevation: 5,
-            }}
-          >
+          <FloatingCircleButton onPress={() => void handleShare()} label="שתף מוצר">
             <Ionicons name="share-outline" size={19} color={PALETTE.text} />
-          </Pressable>
+          </FloatingCircleButton>
 
-          {/* מועדפים */}
-          <Pressable
+          <FloatingCircleButton
             onPress={handleFavoriteToggle}
             disabled={isFavoritePending(product.id)}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="הוסף למועדפים"
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 21,
-              backgroundColor: isFavorite(product.id) ? '#FEE2E2' : '#FFFFFF',
-              borderWidth: 1,
-              borderColor: isFavorite(product.id) ? 'rgba(220,38,38,0.2)' : 'rgba(0,0,0,0.08)',
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOpacity: 0.18,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-              elevation: 5,
-            }}
+            label="הוסף למועדפים"
+            active={isFavorite(product.id)}
           >
             {isFavoritePending(product.id) ? (
-              <ActivityIndicator size="small" color="#DC2626" />
+              <ActivityIndicator size="small" color={PALETTE.danger} />
             ) : (
               <Ionicons
                 name={isFavorite(product.id) ? 'heart' : 'heart-outline'}
                 size={19}
-                color={isFavorite(product.id) ? '#DC2626' : PALETTE.text}
+                color={isFavorite(product.id) ? PALETTE.danger : PALETTE.text}
               />
             )}
-          </Pressable>
+          </FloatingCircleButton>
         </View>
 
         {/* כפתור חזרה */}
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="חזרה"
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 21,
-            backgroundColor: '#FFFFFF',
-            borderWidth: 1,
-            borderColor: 'rgba(0,0,0,0.08)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOpacity: 0.18,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 3 },
-            elevation: 5,
-          }}
-        >
+        <FloatingCircleButton onPress={() => navigation.goBack()} label="חזרה">
           <Ionicons name="arrow-back" size={19} color={PALETTE.text} />
-        </Pressable>
+        </FloatingCircleButton>
       </View>
 
       {/* ── גלילה ראשית ── */}
@@ -471,51 +454,78 @@ export function ProductScreen({ navigation, route }: Props) {
         scrollEventThrottle={16}
       >
         {/* ── גלריית תמונות — sticky: translateY מנטרל גלילה ── */}
-        <Animated.View style={[{ height: imageHeight, backgroundColor: '#FFFFFF' }, stickyImageStyle]}>
+        <Animated.View style={[{ height: imageHeight, backgroundColor: PALETTE.galleryBg, overflow: 'hidden' }, stickyImageStyle]}>
           {galleryItems.length > 0 ? (
             <>
-              <FlatList
-                ref={galleryScrollRef}
-                data={galleryItems}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item) => item.id}
-                onMomentumScrollEnd={(e) => {
-                  const index = Math.round(e.nativeEvent.contentOffset.x / imageHeight);
-                  setActiveGalleryIndex(index);
-                }}
-                renderItem={({ item, index }) => (
-                  <Pressable
-                    onPress={() => {
-                      setLightboxIndex(index);
-                      setLightboxVisible(true);
-                    }}
-                    style={{ width: imageHeight, height: imageHeight }}
-                  >
-                    {item.url ? (
-                      <Image
-                        source={{ uri: item.url }}
-                        resizeMode="cover"
-                        accessibilityLabel={item.altText ?? 'תמונת מוצר'}
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    ) : (
-                      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8ECF0', gap: 8 }}>
-                        <Ionicons name="image-outline" size={48} color="#94A3B8" />
-                        <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '700', ...RTL_TEXT }}>אין תמונה זמינה</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                )}
-              />
+              <Animated.View style={[{ flex: 1 }, galleryZoomStyle]}>
+                <FlatList
+                  ref={galleryScrollRef}
+                  data={galleryItems}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  keyExtractor={(item) => item.id}
+                  onMomentumScrollEnd={(e) => {
+                    const index = Math.round(e.nativeEvent.contentOffset.x / imageHeight);
+                    setActiveGalleryIndex(index);
+                  }}
+                  renderItem={({ item, index }) => (
+                    <Pressable
+                      onPress={() => {
+                        setLightboxIndex(index);
+                        setLightboxVisible(true);
+                      }}
+                      style={{ width: imageHeight, height: imageHeight }}
+                    >
+                      {item.url ? (
+                        <Image
+                          source={{ uri: item.url }}
+                          resizeMode="cover"
+                          accessibilityLabel={item.altText ?? 'תמונת מוצר'}
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      ) : (
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8ECF0', gap: 8 }}>
+                          <Ionicons name="image-outline" size={48} color="#94A3B8" />
+                          <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '700', ...RTL_TEXT }}>אין תמונה זמינה</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  )}
+                />
+              </Animated.View>
 
-              {/* נקודות אינדיקטור */}
+              {/* תג מבצע על התמונה */}
+              {displayIsOnSale && discountPercent > 0 && (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: insets.top + 62,
+                    right: 16,
+                    backgroundColor: PALETTE.danger,
+                    borderRadius: 999,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    shadowColor: PALETTE.danger,
+                    shadowOpacity: 0.35,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                    elevation: 5,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '900', writingDirection: 'rtl' }}>
+                    {discountPercent}%- מבצע
+                  </Text>
+                </View>
+              )}
+
+              {/* מונה תמונות + נקודות אינדיקטור */}
               {galleryItems.length > 1 && (
                 <View
                   style={{
                     position: 'absolute',
-                    bottom: 40,
+                    bottom: 44,
                     left: 0,
                     right: 0,
                     flexDirection: 'row',
@@ -524,17 +534,29 @@ export function ProductScreen({ navigation, route }: Props) {
                     gap: 6,
                   }}
                 >
-                  {galleryItems.map((_, i) => (
-                    <View
-                      key={i}
-                      style={{
-                        width: i === activeGalleryIndex ? 18 : 7,
-                        height: 7,
-                        borderRadius: 4,
-                        backgroundColor: i === activeGalleryIndex ? '#000000' : 'rgba(0,0,0,0.25)',
-                      }}
-                    />
-                  ))}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: 'rgba(255,255,255,0.85)',
+                      borderRadius: 999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                    }}
+                  >
+                    {galleryItems.map((_, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          width: i === activeGalleryIndex ? 18 : 7,
+                          height: 7,
+                          borderRadius: 4,
+                          backgroundColor: i === activeGalleryIndex ? '#0F172A' : 'rgba(15,23,42,0.25)',
+                        }}
+                      />
+                    ))}
+                  </View>
                 </View>
               )}
             </>
@@ -545,6 +567,7 @@ export function ProductScreen({ navigation, route }: Props) {
             </View>
           )}
         </Animated.View>
+
         {/* ── מודל תמונה מלאה ── */}
         <Modal visible={lightboxVisible} transparent animationType="fade" onRequestClose={() => setLightboxVisible(false)}>
           <StatusBar hidden />
@@ -632,238 +655,295 @@ export function ProductScreen({ navigation, route }: Props) {
           </View>
         </Modal>
 
-        {/* גיליון לבן — מכסה את תחתית התמונה בעיגול */}
+        {/* ── גיליון תוכן — מכסה את תחתית התמונה בעיגול ── */}
         <View
           style={{
-            marginTop: -28,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: -8 },
-            shadowOpacity: 0.13,
-            shadowRadius: 16,
-            elevation: 14,
+            marginTop: -30,
+            position: 'relative',
+            zIndex: 2,
+            overflow: 'visible',
           }}
         >
-        <LinearGradient
-          colors={['#FFFFFF', '#F4F5F7', '#ECEEF2', '#F4F5F7', '#FFFFFF']}
-          locations={[0, 0.18, 0.45, 0.75, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={{
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            overflow: 'hidden',
-          }}
-        >
+          {product ? (
+            <ProductBrandBadge
+              product={{ name: product.title, tags: product.tags }}
+              brands={remoteBrands}
+              size={42}
+              top={-21}
+              right={20}
+              zIndex={20}
+            />
+          ) : null}
+          <View
+            style={{
+              borderTopLeftRadius: 30,
+              borderTopRightRadius: 30,
+              backgroundColor: '#FFFFFF',
+              shadowColor: '#0F172A',
+              shadowOffset: { width: 0, height: -10 },
+              shadowOpacity: 0.1,
+              shadowRadius: 18,
+              elevation: 14,
+            }}
+          >
+          {/* ידית גרירה ויזואלית */}
+          <View style={{ alignItems: 'center', paddingTop: 12 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0' }} />
+          </View>
+
           {/* ── כותרת ומחיר ── */}
-          <View style={{ paddingHorizontal: 20, paddingTop: 22, paddingBottom: 20 }}>
-            {!!productTypeLabel && productTypeLabel !== 'מוצרים' && (
-              <View style={{ flexDirection: 'row-reverse', marginBottom: 10 }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 }}>
+            {/* שורת תגיות: זמינות (ימין) + קטגוריה (שמאל) */}
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
                 <View
                   style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 8,
-                    backgroundColor: '#F1F5F9',
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: displayAvailableForSale ? PALETTE.success : PALETTE.danger,
+                  }}
+                />
+                <Text
+                  style={{
+                    color: displayAvailableForSale ? PALETTE.success : PALETTE.danger,
+                    fontSize: 12,
+                    fontWeight: '700',
+                    ...RTL_TEXT,
+                  }}
+                >
+                  {displayAvailableForSale ? 'במלאי' : 'אזל מהמלאי'}
+                </Text>
+              </View>
+
+              {!!productTypeLabel && productTypeLabel !== 'מוצרים' && (
+                <View
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                    borderRadius: 999,
+                    backgroundColor: PALETTE.pill,
                   }}
                 >
                   <Text
                     style={{
-                      color: '#64748B',
-                      fontWeight: '700',
+                      color: '#475569',
+                      fontWeight: '800',
                       fontSize: 11,
                       letterSpacing: 0.5,
-                      textTransform: 'uppercase',
                       ...RTL_TEXT,
                     }}
                   >
                     {productTypeLabel}
                   </Text>
                 </View>
-              </View>
-            )}
+              )}
+            </View>
 
             <Text
               style={{
-                color: '#0F172A',
-                fontSize: 20,
-                lineHeight: 28,
-                fontWeight: '500',
-                letterSpacing: -0.2,
-                marginBottom: 16,
+                color: PALETTE.text,
+                fontSize: 22,
+                lineHeight: 30,
+                fontWeight: '800',
+                letterSpacing: -0.3,
                 ...RTL_TEXT,
               }}
             >
               {product.title}
             </Text>
 
-            {/* מחיר */}
-            <View style={{ alignItems: 'flex-end', gap: 8 }}>
-              {/* שורת מחיר: מחיר נוכחי + מחיר מקורי עם קו */}
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+            {/* כרטיס מחיר */}
+            <View
+              style={{
+                marginTop: 16,
+                borderRadius: 20,
+                backgroundColor: PALETTE.surfaceMuted,
+                borderWidth: 1,
+                borderColor: PALETTE.divider,
+                padding: 16,
+              }}
+            >
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <Text
                   style={{
-                    color: '#0F172A',
-                    fontSize: 26,
-                    fontWeight: '700',
-                    letterSpacing: -0.5,
+                    color: PALETTE.text,
+                    fontSize: 28,
+                    fontWeight: '900',
+                    letterSpacing: -0.6,
                     ...RTL_TEXT,
                   }}
                 >
                   {formatPrice(displayPrice, displayCurrencyCode)}
                 </Text>
                 {displayIsOnSale && (
-                  <Text
-                    style={{
-                      color: '#94A3B8',
-                      fontSize: 16,
-                      fontWeight: '400',
-                      textDecorationLine: 'line-through',
-                      ...RTL_TEXT,
-                    }}
-                  >
-                    {formatPrice(displayCompareAtPrice!, displayCurrencyCode)}
-                  </Text>
+                  <>
+                    <Text
+                      style={{
+                        color: PALETTE.softText,
+                        fontSize: 16,
+                        fontWeight: '500',
+                        textDecorationLine: 'line-through',
+                        ...RTL_TEXT,
+                      }}
+                    >
+                      {formatPrice(displayCompareAtPrice!, displayCurrencyCode)}
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: '#FEE2E2',
+                        borderRadius: 999,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                      }}
+                    >
+                      <Text style={{ color: PALETTE.danger, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' }}>
+                        חיסכון {discountPercent}%
+                      </Text>
+                    </View>
+                  </>
                 )}
               </View>
+            </View>
 
-              {/* OCD+ — תגית מחיר חבר */}
-              {displayCurrencyCode === 'ILS' && (
-                <Pressable
-                  onPress={openOcdPlusSubscribeSheet}
-                  style={{
-                    flexDirection: 'row-reverse',
-                    alignItems: 'center',
-                    gap: 8,
-                    backgroundColor: '#000000',
-                    borderRadius: 14,
-                    paddingVertical: 9,
-                    paddingHorizontal: 14,
-                    alignSelf: 'flex-end',
-                  }}
-                >
-                  <OcdPlusMark size={18} />
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'baseline', gap: 4 }}>
-                    <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '500', writingDirection: 'rtl' }}>
-                      עם
-                    </Text>
-                    <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800', writingDirection: 'rtl' }}>
-                      OCD+
-                    </Text>
-                    <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '500', writingDirection: 'rtl' }}>
-                      המחיר הוא רק
-                    </Text>
-                    <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', writingDirection: 'rtl' }}>
+            {/* OCD+ — באנר מחיר חבר (נפרד מכרטיס המחיר כדי שלא ייחתך) */}
+            {displayCurrencyCode === 'ILS' && (
+              <Pressable
+                onPress={openOcdPlusSubscribeSheet}
+                style={{
+                  marginTop: 10,
+                  minHeight: 48,
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#000000',
+                  borderRadius: 16,
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+                  <OcdPlusMark size={22} />
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '500', flexShrink: 1, ...RTL_TEXT }}>
+                    עם <Text style={{ fontWeight: '800' }}>OCD+</Text> המחיר הוא רק{' '}
+                    <Text style={{ fontSize: 15.5, fontWeight: '900' }}>
                       {formatOcdPrice(computeOcdPlusPrice(displayPrice))}
                     </Text>
-                  </View>
-                </Pressable>
-              )}
-            </View>
+                  </Text>
+                </View>
+                {!isOcdPlusSubscriber && (
+                  <Ionicons name="chevron-back" size={16} color="rgba(255,255,255,0.6)" />
+                )}
+              </Pressable>
+            )}
           </View>
 
           {/* ── וריאציות ── */}
           {multipleVariants && (
-            <>
-              <View style={{ height: 1, backgroundColor: '#DDE1E8', marginHorizontal: 20 }} />
-              <View style={{ paddingTop: 18, paddingBottom: 18, paddingHorizontal: 20, gap: 14 }}>
-                {/* כותרת + שם הנבחר */}
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ paddingTop: 22, paddingHorizontal: 20, gap: 14 }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  <View style={{ width: 18, height: 3, borderRadius: 2, backgroundColor: PALETTE.gold }} />
                   <Text
                     style={{
-                      color: '#0F172A',
-                      fontSize: 14,
+                      color: PALETTE.text,
+                      fontSize: 15,
                       fontWeight: '800',
                       letterSpacing: -0.2,
                       ...RTL_TEXT,
                     }}
                   >
-                    בחר וריאציה
+                    בחירת וריאציה
                   </Text>
-                  {activeVariant && (
-                    <Text
-                      style={{
-                        color: '#64748B',
-                        fontSize: 13,
-                        fontWeight: '500',
-                        ...RTL_TEXT,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {activeVariant.title}
-                    </Text>
-                  )}
                 </View>
+                {activeVariant && (
+                  <Text
+                    style={{
+                      color: PALETTE.muted,
+                      fontSize: 13,
+                      fontWeight: '500',
+                      maxWidth: '50%',
+                      ...RTL_TEXT,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {activeVariant.title}
+                  </Text>
+                )}
+              </View>
 
-                {/* תגיות ווריאציות — עוטפות לשורות */}
-                <View
-                  style={{
-                    flexDirection: 'row-reverse',
-                    flexWrap: 'wrap',
-                    gap: 10,
-                  }}
-                >
-                  {product.variants.map((variant, index) => {
-                    const isActive = index === activeVariantIndex;
-                    const isUnavailable = !variant.availableForSale;
-                    return (
-                      <Pressable
-                        key={`${variant.id}-tag`}
-                        onPress={() => setActiveVariantIndex(index)}
-                        disabled={isUnavailable}
+              {/* תגיות ווריאציות — עוטפות לשורות */}
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  flexWrap: 'wrap',
+                  gap: 10,
+                }}
+              >
+                {product.variants.map((variant, index) => {
+                  const isActive = index === activeVariantIndex;
+                  const isUnavailable = !variant.availableForSale;
+                  return (
+                    <Pressable
+                      key={`${variant.id}-tag`}
+                      onPress={() => setActiveVariantIndex(index)}
+                      disabled={isUnavailable}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row-reverse',
+                          alignItems: 'center',
+                          gap: 6,
+                          paddingHorizontal: 16,
+                          paddingVertical: 10,
+                          borderRadius: 14,
+                          borderWidth: 1.5,
+                          borderColor: isActive ? '#000000' : PALETTE.border,
+                          backgroundColor: isActive ? '#000000' : '#FFFFFF',
+                          opacity: isUnavailable ? 0.35 : 1,
+                        }}
                       >
-                        <View
+                        {isActive && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                        <Text
                           style={{
-                            paddingHorizontal: 14,
-                            paddingVertical: 8,
-                            borderRadius: 20,
-                            borderWidth: 1,
-                            borderColor: isActive ? '#000000' : '#CBD5E1',
-                            backgroundColor: isActive ? '#000000' : '#FFFFFF',
-                            opacity: isUnavailable ? 0.35 : 1,
+                            color: isActive ? '#FFFFFF' : '#334155',
+                            fontSize: 13.5,
+                            fontWeight: isActive ? '800' : '600',
+                            textDecorationLine: isUnavailable ? 'line-through' : 'none',
+                            ...RTL_TEXT,
                           }}
                         >
-                          <Text
-                            style={{
-                              color: isActive ? '#FFFFFF' : '#334155',
-                              fontSize: 13.5,
-                              fontWeight: isActive ? '700' : '500',
-                              textDecorationLine: isUnavailable ? 'line-through' : 'none',
-                              ...RTL_TEXT,
-                            }}
-                          >
-                            {variant.title}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                          {variant.title}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </View>
-            </>
+            </View>
           )}
 
           {/* ── תיאור המוצר ── */}
-          <View style={{ height: 1, backgroundColor: '#DDE1E8', marginHorizontal: 20 }} />
-          <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8, gap: 10 }}>
-            <Text
-              style={{
-                color: '#64748B',
-                fontSize: 12,
-                fontWeight: '700',
-                letterSpacing: 0.8,
-                textTransform: 'uppercase',
-                ...RTL_TEXT,
-              }}
-            >
-              תיאור המוצר
-            </Text>
-            <View style={{ gap: 8 }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 24, gap: 12 }}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+              <View style={{ width: 18, height: 3, borderRadius: 2, backgroundColor: PALETTE.gold }} />
+              <Text
+                style={{
+                  color: PALETTE.text,
+                  fontSize: 15,
+                  fontWeight: '800',
+                  letterSpacing: -0.2,
+                  ...RTL_TEXT,
+                }}
+              >
+                תיאור המוצר
+              </Text>
+            </View>
+            <View style={{ gap: 10 }}>
               {descriptionParts.map((part, index) => (
                 <Text
                   key={`${product.id}-desc-${index}`}
-                  style={{ color: '#334155', lineHeight: 25, fontSize: 14.5, ...RTL_TEXT }}
+                  style={{ color: '#475569', lineHeight: 26, fontSize: 14.5, ...RTL_TEXT }}
                 >
                   {part}
                 </Text>
@@ -872,37 +952,53 @@ export function ProductScreen({ navigation, route }: Props) {
           </View>
 
           {/* ── פרטי אמון ── */}
-          <View style={{ height: 1, backgroundColor: '#DDE1E8', marginHorizontal: 20, marginTop: 16 }} />
           <View
             style={{
               flexDirection: 'row-reverse',
               paddingHorizontal: 20,
-              paddingVertical: 16,
+              paddingTop: 24,
+              paddingBottom: 28,
+              gap: 10,
             }}
           >
             {[
               { icon: 'shield-checkmark-outline' as const, label: 'תשלום מאובטח' },
               { icon: 'refresh-outline' as const, label: 'החזרה קלה' },
               { icon: 'flash-outline' as const, label: 'משלוח מהיר' },
-            ].map((item, i) => (
+            ].map((item) => (
               <View
                 key={item.label}
                 style={{
                   flex: 1,
                   alignItems: 'center',
-                  gap: 5,
-                  borderRightWidth: i < 2 ? 1 : 0,
-                  borderRightColor: '#F0F2F5',
+                  gap: 8,
+                  backgroundColor: PALETTE.surfaceMuted,
+                  borderWidth: 1,
+                  borderColor: PALETTE.divider,
+                  borderRadius: 18,
+                  paddingVertical: 14,
+                  paddingHorizontal: 6,
                 }}
               >
-                <Ionicons name={item.icon} size={20} color="#64748B" />
-                <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '600', textAlign: 'center' }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: '#EEF2F6',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name={item.icon} size={19} color="#475569" />
+                </View>
+                <Text style={{ color: '#475569', fontSize: 11.5, fontWeight: '700', textAlign: 'center' }}>
                   {item.label}
                 </Text>
               </View>
             ))}
           </View>
-        </LinearGradient>
+          </View>
         </View>
       </Animated.ScrollView>
 
@@ -929,7 +1025,6 @@ export function ProductScreen({ navigation, route }: Props) {
       >
         {/* שורה: [כפתור פעולה]  [− כמות +] */}
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', width: '100%' }}>
-
           {/* כפתור ראשי — דינמי לפי מצב */}
           <Pressable
             onPress={handleCartButton}
@@ -959,11 +1054,11 @@ export function ProductScreen({ navigation, route }: Props) {
               <>
                 <Ionicons name={cartButtonIcon} size={20} color="#FFFFFF" />
                 <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800', textAlign: 'center' }}>
                     {cartButtonLabel}
                   </Text>
                   {!isCartCtaDisabled && (
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '500', textAlign: 'center' }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
                       {formatPrice(displayPrice * pendingQty, displayCurrencyCode)}
                     </Text>
                   )}
@@ -972,8 +1067,18 @@ export function ProductScreen({ navigation, route }: Props) {
             )}
           </Pressable>
 
-          {/* סטפר כמות */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', height: 58, gap: 4, paddingHorizontal: 2 }}>
+          {/* סטפר כמות — קפסולה אחת */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              height: 58,
+              borderRadius: 18,
+              backgroundColor: '#F3F5F8',
+              paddingHorizontal: 6,
+              gap: 2,
+            }}
+          >
             {/* + */}
             <Pressable
               onPress={() => { if (!isMutating && !isCartCtaDisabled) setPendingQty((p) => p + 1); }}
@@ -987,19 +1092,19 @@ export function ProductScreen({ navigation, route }: Props) {
                 backgroundColor: '#FFFFFF',
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
+                shadowColor: '#0F172A',
                 shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 6,
-                elevation: 3,
+                shadowOpacity: 0.08,
+                shadowRadius: 5,
+                elevation: 2,
               }}
             >
-              <Text style={{ fontSize: 24, fontWeight: '400', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', lineHeight: 28, includeFontPadding: false }}>+</Text>
+              <Text style={{ fontSize: 22, fontWeight: '400', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', lineHeight: 26, includeFontPadding: false }}>+</Text>
             </Pressable>
 
             {/* כמות */}
             <View style={{ width: 34, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ textAlign: 'center', fontSize: 18, fontWeight: '700', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', fontVariant: ['tabular-nums'], includeFontPadding: false }}>
+              <Text style={{ textAlign: 'center', fontSize: 18, fontWeight: '800', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', fontVariant: ['tabular-nums'], includeFontPadding: false }}>
                 {pendingQty}
               </Text>
             </View>
@@ -1017,14 +1122,14 @@ export function ProductScreen({ navigation, route }: Props) {
                 backgroundColor: '#FFFFFF',
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
+                shadowColor: '#0F172A',
                 shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 6,
-                elevation: 3,
+                shadowOpacity: 0.08,
+                shadowRadius: 5,
+                elevation: 2,
               }}
             >
-              <Text style={{ fontSize: 26, fontWeight: '300', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', lineHeight: 30, includeFontPadding: false }}>−</Text>
+              <Text style={{ fontSize: 24, fontWeight: '300', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', lineHeight: 28, includeFontPadding: false }}>−</Text>
             </Pressable>
           </View>
         </View>

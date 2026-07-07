@@ -1,0 +1,626 @@
+[
+  {
+    "id": "gid://shopify/Collection/314571686051",
+    "title": "חומרי ניקיון BUZIL",
+    "handle": "חומרי-ניקיון-buzil",
+    "updatedAt": "2026-05-12T19:36:04Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/318196482211",
+    "title": "כיסאות",
+    "handle": "כיסאות",
+    "updatedAt": "2026-05-12T19:36:05Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320945586339",
+    "title": "אקססוריז ספרים",
+    "handle": "אקססוריז-ספרים",
+    "updatedAt": "2026-05-12T19:36:06Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320953581731",
+    "title": "מרכי כביסה - סנו",
+    "handle": "סנו",
+    "updatedAt": "2026-05-12T19:36:06Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320953647267",
+    "title": "מרכי כביסה - אייר טופ",
+    "handle": "מרכי-כביסה-אייר-טופ",
+    "updatedAt": "2026-05-12T19:36:06Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668581539",
+    "title": "מראות",
+    "handle": "מראות-חדש",
+    "updatedAt": "2026-05-14T23:54:08Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571653283",
+    "title": "שטיחים",
+    "handle": "שטיחים",
+    "updatedAt": "2026-05-17T00:15:12Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333670252707",
+    "title": "טואלטיקה",
+    "handle": "טואלטיקה",
+    "updatedAt": "2026-05-27T13:33:38Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320944439459",
+    "title": "שולחנות",
+    "handle": "שולחנות",
+    "updatedAt": "2026-06-06T17:50:25Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320944636067",
+    "title": "ריהוט סלוני",
+    "handle": "פינות-ישיבה",
+    "updatedAt": "2026-06-06T17:50:25Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333623853219",
+    "title": "מראות",
+    "handle": "מראות",
+    "updatedAt": "2026-06-06T22:18:46Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668810915",
+    "title": "ערכות שטיפה ושואבים",
+    "handle": "ערכות-שטיפה-ושואבים",
+    "updatedAt": "2026-06-09T11:23:21Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571620515",
+    "title": "עגלות נקיון",
+    "handle": "עגלות-נקיון",
+    "updatedAt": "2026-06-10T11:22:02Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333623656611",
+    "title": "עציצים",
+    "handle": "עציצים",
+    "updatedAt": "2026-06-11T11:20:24Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668679843",
+    "title": "עציצים",
+    "handle": "עציצים-חדש",
+    "updatedAt": "2026-06-11T11:20:24Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/332908855459",
+    "title": "טואליטיקה",
+    "handle": "מארזי-ניקיון-משתלמים-copy",
+    "updatedAt": "2026-06-20T11:23:56Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333669433507",
+    "title": "ניקוי הרכב",
+    "handle": "ניקוי-הרכב",
+    "updatedAt": "2026-06-21T11:23:21Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333597769891",
+    "title": "voluspa",
+    "handle": "voluspa",
+    "updatedAt": "2026-06-22T11:22:12Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333854081187",
+    "title": "barbantia",
+    "handle": "barbantia",
+    "updatedAt": "2026-06-24T11:22:09Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314332020899",
+    "title": "Home page",
+    "handle": "frontpage",
+    "updatedAt": "2026-06-25T19:22:01Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320952795299",
+    "title": "מוצרי נקיון - רכב",
+    "handle": "מוצרי-נקיון-חדרי-שינה",
+    "updatedAt": "2026-06-27T11:21:18Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320956301475",
+    "title": "מרככי כביסה - טאצ'",
+    "handle": "מרככי-כביסה-טאצ",
+    "updatedAt": "2026-06-27T11:21:18Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333669925027",
+    "title": "שמני בישום",
+    "handle": "שמני-בישום",
+    "updatedAt": "2026-06-30T11:27:06Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320945455267",
+    "title": "אקססוריז לכביסה",
+    "handle": "אקססוריז-לכביסה",
+    "updatedAt": "2026-07-02T11:23:58Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320953680035",
+    "title": "מרכי כביסה - מארזים",
+    "handle": "מרכי-כביסה-מארזים",
+    "updatedAt": "2026-07-02T11:23:58Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668876451",
+    "title": "סלי כביסה ומתלים",
+    "handle": "סלי-כביסה-ומתלים",
+    "updatedAt": "2026-07-02T11:23:58Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314572275875",
+    "title": "מערכות בישום שמני בישום",
+    "handle": "בישום-חללים",
+    "updatedAt": "2026-07-03T11:19:52Z",
+    "description": "מערכות בישום לחללים של בין עשרות מטרים עד אלפי מטרים , חללים גדולים / קטניםבתי פרטיים בנייניםמפעלים ריחות שונים עם שמנים מיוחדים המותאמים למערכות בישום המיוחדות שלנו.",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323168698531",
+    "title": "נמכרים בישום",
+    "handle": "נמכרים-בישום",
+    "updatedAt": "2026-07-03T11:19:52Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333783335075",
+    "title": "Ocd",
+    "handle": "ocd",
+    "updatedAt": "2026-07-03T11:19:52Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314572013731",
+    "title": "נרות ריחניים",
+    "handle": "נרות-ריחניים",
+    "updatedAt": "2026-07-04T11:21:31Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571489443",
+    "title": "פחים",
+    "handle": "brabantia",
+    "updatedAt": "2026-07-04T11:21:32Z",
+    "description": "פחים מעוצבים ומיוחדים בכל מיני ליטרים ועיצובים , עם החברות המובילות בעולם!",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/315000193187",
+    "title": "פחים מעוצבים",
+    "handle": "פחים-מעוצבים",
+    "updatedAt": "2026-07-04T11:21:32Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333622739107",
+    "title": "מארי",
+    "handle": "מארי",
+    "updatedAt": "2026-07-04T11:21:32Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668548771",
+    "title": "פחים מעוצבים",
+    "handle": "פחים-מעוצבים-חדש",
+    "updatedAt": "2026-07-04T11:21:32Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571849891",
+    "title": "מבשמי מקלות ואווירה",
+    "handle": "מבשמי-מקלות-ואווירה",
+    "updatedAt": "2026-07-05T11:18:01Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/330805379235",
+    "title": "מארזי ניקיון משתלמים",
+    "handle": "מבצעי-פסח",
+    "updatedAt": "2026-07-05T11:18:01Z",
+    "description": "למה לקנות כל חומר בנפרד כשאפשר לעבוד חכם? אספנו עבורכם את התותחים הכבדים של עולם הניקיון וארזנו אותם לערכות מושלמות שסוגרות לכם כל פינה בבית – מבלי לשבור את הגב או את הכיס.בין אם אתם נאבקים באבנית במקלחון, רוצים לחדש את הספה בסלון, צריכים הברקה מקצועית לרכב או פשוט מכורים לבית שמריח כמו מלון בוטיק – כאן תמצאו את הפתרון המדויק. כל המארזים מורכבים מחומרי הפרימיום של החברות המובילות במשק, עכשיו במחירי חבילה סופר-משתלמים. קליק אחד, והניקיון המקצועי בדרך אליכם!",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/331546820771",
+    "title": "מוצרי TNX",
+    "handle": "מוצרי-tnx",
+    "updatedAt": "2026-07-05T11:18:01Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333597835427",
+    "title": "Decorado",
+    "handle": "דקרודו",
+    "updatedAt": "2026-07-05T11:18:01Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333667762339",
+    "title": "הלבנה, כתמים וטיפול",
+    "handle": "הלבנה-כתמים-וטיפול",
+    "updatedAt": "2026-07-06T11:19:49Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571161763",
+    "title": "חומרי ניקיון",
+    "handle": "חומרי-ניקיון",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571358371",
+    "title": "חומרי ניקיון SUCITESA",
+    "handle": "חומרי-ניקיון-sucitesa",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571391139",
+    "title": "חומרי ניקיון בר ביצוע",
+    "handle": "חומרי-ניקיון-בר-ביצוע",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571817123",
+    "title": "טירולר",
+    "handle": "טירולר",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314572046499",
+    "title": "פינל",
+    "handle": "פינל",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314572341411",
+    "title": "מרככי כביסה וטקסטיל",
+    "handle": "מרככי-כביסה-וטקסטיל",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/319281004707",
+    "title": "כביסכל",
+    "handle": "מוצרי-פרפיוםכביסכל",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320952336547",
+    "title": "מוצרי נקיון - מטבח",
+    "handle": "מוצרי-נקיון-מטבח",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/322062254243",
+    "title": "מוצרי טירולר",
+    "handle": "מוצרי-טירולר",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323167846563",
+    "title": "סנו",
+    "handle": "סנו-1",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323167912099",
+    "title": "טאצ",
+    "handle": "טאצ",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323168010403",
+    "title": "פינל",
+    "handle": "פינל-1",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323168174243",
+    "title": "יעקבי",
+    "handle": "יעקבי",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323168338083",
+    "title": "סוסיטסא",
+    "handle": "סוסיטסא",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/323168567459",
+    "title": "סאג",
+    "handle": "סאג",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333076529315",
+    "title": "מוצרי Tana-Green Care",
+    "handle": "מארזי-ניקיון-משתלמים-copy-1",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333667696803",
+    "title": "נוזלי כביסה, מרככים ואבקות",
+    "handle": "נוזלי-כביסה-מרככים-ואבקות",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333667729571",
+    "title": "בישום ורענון כביסה",
+    "handle": "בישום-ורענון-כביסה",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668745379",
+    "title": "כלי ניגוב ושטיפה",
+    "handle": "כלי-ניגוב-ושטיפה",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668778147",
+    "title": "מנקי חלונות",
+    "handle": "מנקי-חלונות",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333669564579",
+    "title": "ניקיון יסודי לרצפות",
+    "handle": "חומרי-ניקיו-רצפות",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333669630115",
+    "title": "שרותים ומקלחת",
+    "handle": "מוצרי-נקיון-שירותים",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333669662883",
+    "title": "מטבח וכלים",
+    "handle": "חומרי-ניקיון-מטבח-וכלים",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333670285475",
+    "title": "חד פעמי",
+    "handle": "חד-פעמי",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333671891107",
+    "title": "ניקיון כללי",
+    "handle": "ניקיון-כללי",
+    "updatedAt": "2026-07-06T11:19:50Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320945258659",
+    "title": "אקססוריז למקלחת",
+    "handle": "אקססוריז-למקלחת",
+    "updatedAt": "2026-07-06T13:01:58Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333669597347",
+    "title": "לחלונות מבריקים",
+    "handle": "חלונות",
+    "updatedAt": "2026-07-06T13:42:41Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314999963811",
+    "title": "נמכרו הכי הרבה השבוע",
+    "handle": "נמכרו-הכי-הרבה-השבוע",
+    "updatedAt": "2026-07-06T13:47:09Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314572177571",
+    "title": "אביזרי נקיון",
+    "handle": "אביזרי-נקיון",
+    "updatedAt": "2026-07-07T07:18:36Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333592395939",
+    "title": "shiny",
+    "handle": "shiny",
+    "updatedAt": "2026-07-07T07:18:36Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668843683",
+    "title": "מטליות, ספוגים ומגבונים",
+    "handle": "מטליות-ספוגים-ומגבונים",
+    "updatedAt": "2026-07-07T07:18:36Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314999406755",
+    "title": "מומלצים",
+    "handle": "מומלצים",
+    "updatedAt": "2026-07-07T07:50:40Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668974755",
+    "title": "אביזרים נוספים",
+    "handle": "אביזרים-נוספים",
+    "updatedAt": "2026-07-07T08:18:49Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668614307",
+    "title": "עיצוב למטבח",
+    "handle": "עיצוב-למטבח",
+    "updatedAt": "2026-07-07T09:17:10Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668647075",
+    "title": "עיצוב לאמבטיה",
+    "handle": "עיצוב-לאמבטיה",
+    "updatedAt": "2026-07-07T09:17:10Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314571718819",
+    "title": "אקססוריז לבית",
+    "handle": "אקססוריז-לבית",
+    "updatedAt": "2026-07-07T09:21:23Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/314724647075",
+    "title": "עיצוב הבית",
+    "handle": "עיצוב-הבית",
+    "updatedAt": "2026-07-07T09:21:23Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/320945062051",
+    "title": "אקססוריז למטבח",
+    "handle": "אקססוריז-למטבח",
+    "updatedAt": "2026-07-07T09:21:23Z",
+    "description": "",
+    "imageUrl": null
+  },
+  {
+    "id": "gid://shopify/Collection/333668516003",
+    "title": "עיצוב לסלון",
+    "handle": "עיצוב-לסלון",
+    "updatedAt": "2026-07-07T09:21:23Z",
+    "description": "",
+    "imageUrl": null
+  }
+]

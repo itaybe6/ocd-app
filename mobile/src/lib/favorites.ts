@@ -65,5 +65,7 @@ export function toStoreProductLike(favorite: ProductFavoriteRow): StoreProduct {
     variantId: '',
     variantTitle: null,
     availableForSale: false,
+    tags: [],
+    compareAtPrice: null,
   };
 }

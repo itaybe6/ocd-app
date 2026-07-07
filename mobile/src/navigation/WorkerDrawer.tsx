@@ -275,7 +275,7 @@ export function WorkerDrawer() {
             onMenuPress={() => (navigation as any).openDrawer()}
           />
         ),
-        sceneStyle: { backgroundColor: '#F6F7FB' },
+        sceneStyle: { backgroundColor: D.bg },
         drawerPosition: 'right',
         drawerType: 'front',
         drawerStyle: { backgroundColor: D.bg, width: 310 },

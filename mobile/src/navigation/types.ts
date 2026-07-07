@@ -18,6 +18,7 @@ export type RootStackParamList = {
       }
     | undefined;
   Login: undefined;
+  Register: undefined;
   StoreOcdPlus: undefined;
   StoreFavorites: undefined;
   StoreSearch: undefined;

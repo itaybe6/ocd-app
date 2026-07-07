@@ -17,30 +17,34 @@ import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } 
 import {
   AuthFooterLink,
   AuthLogo,
+  Field,
   MUTED,
   OTP_LENGTH,
   OtpInput,
   PhoneField,
   PrimaryButton,
   RESEND_SECONDS,
+  StepDots,
   TEXT,
 } from './authScreenUi';
 
-type LoginScreenProps = {
-  onGoToRegister: () => void;
+type RegisterScreenProps = {
+  onGoToLogin: () => void;
   onTabPress: (tabId: StoreBottomTabId) => void;
 };
 
-type Step = 'phone' | 'code';
+type Step = 'phone' | 'code' | 'details';
 
-export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
-  const { sendLoginOtp, verifyLoginOtp } = useAuth();
+export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps) {
+  const { sendRegisterOtp, verifyRegisterOtp } = useAuth();
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
   const [verifiedPhone, setVerifiedPhone] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -96,7 +100,7 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
     }
     try {
       setSubmitting(true);
-      const res = await sendLoginOtp({ phone: phoneTrim });
+      const res = await sendRegisterOtp({ phone: phoneTrim });
       setVerifiedPhone(res.phone);
       setCode('');
       lastAutoVerifiedCode.current = '';
@@ -108,14 +112,14 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
     } finally {
       setSubmitting(false);
     }
-  }, [phone, sendLoginOtp, startResendTimer]);
+  }, [phone, sendRegisterOtp, startResendTimer]);
 
   const onResendCode = useCallback(async () => {
     if (resendIn > 0 || submitting) return;
     try {
       setSubmitting(true);
       const target = verifiedPhone || phone.trim();
-      const res = await sendLoginOtp({ phone: target });
+      const res = await sendRegisterOtp({ phone: target });
       setVerifiedPhone(res.phone);
       setCode('');
       lastAutoVerifiedCode.current = '';
@@ -126,31 +130,42 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
     } finally {
       setSubmitting(false);
     }
-  }, [phone, resendIn, sendLoginOtp, startResendTimer, submitting, verifiedPhone]);
+  }, [phone, resendIn, sendRegisterOtp, startResendTimer, submitting, verifiedPhone]);
 
-  const doVerifyLogin = useCallback(
-    async (codeToVerify: string) => {
-      try {
-        setSubmitting(true);
-        await verifyLoginOtp({ phone: verifiedPhone || phone.trim(), code: codeToVerify });
-      } catch (e: any) {
+  const onCompleteSignup = useCallback(async () => {
+    const nameTrim = name.trim();
+    if (nameTrim.length < 2) {
+      Toast.show({ type: 'error', text1: 'נא להזין שם מלא' });
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await verifyRegisterOtp({
+        phone: verifiedPhone || phone.trim(),
+        code: code.trim(),
+        name: nameTrim,
+        address: address.trim() || null,
+      });
+    } catch (e: any) {
+      const message: string = e?.message ?? 'Unknown error';
+      Toast.show({ type: 'error', text1: 'שגיאה בהרשמה', text2: message });
+      if (/code|קוד|otp|expired|invalid/i.test(message)) {
         setCode('');
         lastAutoVerifiedCode.current = '';
-        Toast.show({ type: 'error', text1: 'שגיאה בהתחברות', text2: e?.message ?? 'Unknown error' });
-      } finally {
-        setSubmitting(false);
+        setStep('code');
       }
-    },
-    [phone, verifiedPhone, verifyLoginOtp]
-  );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [address, code, name, phone, verifiedPhone, verifyRegisterOtp]);
 
   useEffect(() => {
     if (step !== 'code' || submitting) return;
     if (code.length !== OTP_LENGTH) return;
     if (lastAutoVerifiedCode.current === code) return;
     lastAutoVerifiedCode.current = code;
-    void doVerifyLogin(code);
-  }, [code, doVerifyLogin, step, submitting]);
+    setStep('details');
+  }, [code, step, submitting]);
 
   const canSendCode = useMemo(
     () => !submitting && phone.trim().replace(/\D+/g, '').length >= 9,
@@ -158,12 +173,15 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
   );
 
   const displayPhone = verifiedPhone ? `0${verifiedPhone.replace(/^972/, '')}` : phone.trim();
+  const signupStepIndex = step === 'phone' ? 0 : step === 'code' ? 1 : 2;
 
-  const title = step === 'phone' ? 'ברוך שובך' : 'קוד אימות';
+  const title = step === 'phone' ? 'יצירת חשבון' : step === 'code' ? 'קוד אימות' : 'כמעט סיימנו';
   const subtitle =
     step === 'phone'
-      ? 'הזן מספר טלפון ונשלח לך קוד אימות ב-SMS'
-      : `שלחנו קוד בן 6 ספרות למספר ${displayPhone}`;
+      ? 'הזן מספר טלפון כדי להתחיל בהרשמה'
+      : step === 'code'
+        ? `שלחנו קוד בן 6 ספרות למספר ${displayPhone}`
+        : 'עוד כמה פרטים קטנים והחשבון שלך מוכן';
 
   return (
     <Screen padded={false} backgroundColor="#FFFFFF" safeAreaEdges={['top']}>
@@ -199,6 +217,9 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
             >
               {subtitle}
             </Text>
+            <View style={{ marginTop: 16 }}>
+              <StepDots total={3} current={signupStepIndex} />
+            </View>
           </Animated.View>
 
           {step === 'phone' && (
@@ -216,7 +237,11 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
                 disabled={!canSendCode}
               />
 
-              <AuthFooterLink prefix="עדיין לא רשום?" linkText="לחץ כאן להרשמה" onPress={onGoToRegister} />
+              <Text style={{ color: MUTED, fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                לאחר אימות הטלפון נמשיך להשלמת פרטי החשבון
+              </Text>
+
+              <AuthFooterLink prefix="כבר יש לך חשבון?" linkText="לחץ כאן להתחברות" onPress={onGoToLogin} />
             </Animated.View>
           )}
 
@@ -228,12 +253,6 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
               style={{ gap: 20 }}
             >
               <OtpInput value={code} onChange={setCode} disabled={submitting} />
-
-              <PrimaryButton
-                title={submitting ? 'מאמת…' : 'התחברות'}
-                onPress={() => doVerifyLogin(code)}
-                disabled={submitting || code.length < OTP_LENGTH}
-              />
 
               <View style={{ alignItems: 'center', gap: 14 }}>
                 <Pressable disabled={resendIn > 0 || submitting} onPress={onResendCode}>
@@ -253,6 +272,54 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
                   <Text style={{ color: MUTED, fontSize: 13, fontWeight: '700' }}>שינוי מספר טלפון</Text>
                 </Pressable>
               </View>
+            </Animated.View>
+          )}
+
+          {step === 'details' && (
+            <Animated.View
+              key="details"
+              entering={FadeInDown.duration(320).delay(40)}
+              exiting={FadeOut.duration(120)}
+              style={{ gap: 16 }}
+            >
+              <Field
+                label="שם מלא"
+                value={name}
+                onChangeText={setName}
+                placeholder="ישראל ישראלי"
+                textContentType="name"
+                autoComplete="name"
+                autoFocus
+                editable={!submitting}
+              />
+
+              <Field
+                label="כתובת (לא חובה)"
+                value={address}
+                onChangeText={setAddress}
+                placeholder="רחוב, עיר"
+                textContentType="fullStreetAddress"
+                autoComplete="street-address"
+                editable={!submitting}
+              />
+
+              <PrimaryButton
+                title={submitting ? 'יוצר חשבון…' : 'השלמת הרשמה'}
+                onPress={onCompleteSignup}
+                disabled={submitting || name.trim().length < 2}
+              />
+
+              <Pressable
+                disabled={submitting}
+                onPress={() => {
+                  setCode('');
+                  lastAutoVerifiedCode.current = '';
+                  setStep('code');
+                }}
+                style={{ alignItems: 'center' }}
+              >
+                <Text style={{ color: MUTED, fontSize: 13, fontWeight: '700' }}>חזרה לקוד האימות</Text>
+              </Pressable>
             </Animated.View>
           )}
           </ScrollView>

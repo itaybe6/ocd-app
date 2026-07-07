@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
 import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
-import { colors } from '../../theme/colors';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
@@ -132,9 +131,11 @@ function StatPill({ value, label }: { value: string; label: string }) {
 export function CustomerProfileScreen({
   onTabPress,
   onOpenOrders,
+  onOpenAddresses,
 }: {
   onTabPress: (tabId: StoreBottomTabId) => void;
   onOpenOrders: () => void;
+  onOpenAddresses: () => void;
 }) {
   const { user, signOut } = useAuth();
   const { favoriteCount } = useFavorites();
@@ -202,7 +203,7 @@ export function CustomerProfileScreen({
           <ListRow
             icon="location-outline"
             label="כתובות שמורות"
-            onPress={() => Toast.show({ type: 'info', text1: 'ניהול כתובות יתווסף בהמשך' })}
+            onPress={onOpenAddresses}
           />
         </View>
       </View>
@@ -333,9 +334,9 @@ const styles = StyleSheet.create({
 
   headerStack: { gap: 16, paddingTop: 0 },
 
-  /* top bar — dark slab with rounded bottom corners */
+  /* top bar — black slab with rounded bottom corners (matches store chrome) */
   headerBg: {
-    backgroundColor: colors.adminHeader,
+    backgroundColor: '#000000',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: 'hidden',

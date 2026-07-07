@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +13,8 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { LoadingProvider, useLoading } from './state/LoadingContext';
 import { registerForPushNotifications } from './lib/pushNotifications';
 import { safeNavigate } from './navigation/navigationRef';
+
+const queryClient = new QueryClient();
 
 function AppShell() {
   const { isLoading } = useLoading();
@@ -51,15 +54,17 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <LoadingProvider>
-          <AuthProvider>
-            <FavoritesProvider>
-              <CartProvider>
-                <AppShell />
-              </CartProvider>
-            </FavoritesProvider>
-          </AuthProvider>
-        </LoadingProvider>
+        <QueryClientProvider client={queryClient}>
+          <LoadingProvider>
+            <AuthProvider>
+              <FavoritesProvider>
+                <CartProvider>
+                  <AppShell />
+                </CartProvider>
+              </FavoritesProvider>
+            </AuthProvider>
+          </LoadingProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

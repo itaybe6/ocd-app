@@ -1,13 +1,67 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
+import { colors } from '../../theme/colors';
+import {
+  isCheckoutHttpErrorBlocking,
+  MOBILE_SAFARI_UA,
+  normalizeCheckoutUrl,
+  resolveCheckoutLaunchUrl,
+} from '../../lib/checkoutUrl';
 
 const RTL_TEXT = {
   textAlign: 'right' as const,
   writingDirection: 'rtl' as const,
 };
+
+/** Hide only Shopify's top checkout banner (store logo strip). Keep selectors narrow — broad rules blank the page. */
+const CHECKOUT_HIDE_SHOPIFY_HEADER_SCRIPT = `
+  (function() {
+    if (window.__ocdCheckoutHeaderHidden) return;
+    window.__ocdCheckoutHeaderHidden = true;
+
+    var styleId = 'ocd-checkout-hide-shopify-header';
+    var css =
+      '.banner{display:none !important;height:0 !important;min-height:0 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;border:0 !important;}' +
+      '.main{padding-top:0 !important;margin-top:0 !important;}';
+
+    function applyHide() {
+      if (!document.head) return false;
+      var style = document.getElementById(styleId);
+      if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        document.head.appendChild(style);
+      }
+      if (style.textContent !== css) {
+        style.textContent = css;
+      }
+      return true;
+    }
+
+    function scheduleRetries() {
+      var attempts = 0;
+      function tick() {
+        applyHide();
+        attempts += 1;
+        if (attempts < 6) {
+          setTimeout(tick, attempts < 2 ? 120 : 400);
+        }
+      }
+      tick();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', scheduleRetries, { once: true });
+    } else {
+      scheduleRetries();
+    }
+
+    true;
+  })();
+`;
 
 /**
  * Injected early so price strings stay LTR inside an RTL WebView host.
@@ -311,18 +365,37 @@ export type CheckoutScreenProps = {
 };
 
 export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: CheckoutScreenProps) {
-  const [pageTitle, setPageTitle] = useState('תשלום מאובטח');
-  // We only block the UI with a full-screen spinner for the *first* load.
-  // Shopify's checkout fires onLoadStart/onLoadEnd many times as the customer
-  // moves through information → shipping → payment, and on slower connections
-  // we observed the loader occasionally getting stuck because a later
-  // load event never resolved. Keeping the spinner scoped to the initial load
-  // means the worst case is a brief blank WebView, never a permanent block.
+  const insets = useSafeAreaInsets();
+  const [launchUrl, setLaunchUrl] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [webViewKey, setWebViewKey] = useState(0);
   const completeRef = useRef(false);
   const initialLoadResolvedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const prepareLaunchUrl = async () => {
+      setLaunchUrl(null);
+      setLoadError(null);
+      setInitialLoading(true);
+      initialLoadResolvedRef.current = false;
+
+      try {
+        const resolved = await resolveCheckoutLaunchUrl(checkoutUrl);
+        if (!cancelled) setLaunchUrl(resolved);
+      } catch {
+        if (!cancelled) setLaunchUrl(normalizeCheckoutUrl(checkoutUrl));
+      }
+    };
+
+    void prepareLaunchUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutUrl, webViewKey]);
 
   const resolveInitialLoad = useCallback(() => {
     if (initialLoadResolvedRef.current) return;
@@ -356,9 +429,6 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
     (state: WebViewNavigation) => {
       const trimmedTitle = state?.title?.trim();
       if (trimmedTitle) {
-        setPageTitle(trimmedTitle);
-        // The first time the WebView actually navigates somewhere with a real
-        // title, we know the page is alive — drop the spinner.
         resolveInitialLoad();
       }
       tryComplete(state?.url);
@@ -374,64 +444,62 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
     setWebViewKey((k) => k + 1);
   }, []);
 
+  const showWebViewLoader = initialLoading && !loadError && !!launchUrl;
+
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View style={{ backgroundColor: '#000000', paddingTop: insets.top }}>
+        <View style={{ paddingVertical: 7, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '600' }}>
+            משלוחים חינם בהזמנות מעל 299₪
+          </Text>
+        </View>
+      </View>
+
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingTop: 6,
-          paddingBottom: 12,
-          flexDirection: 'row-reverse',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          backgroundColor: colors.bg,
           borderBottomWidth: 1,
-          borderBottomColor: '#E2E8F0',
-          backgroundColor: '#FFFFFF',
+          borderBottomColor: '#F0F0F0',
         }}
       >
-        <Pressable
-          onPress={onBack}
-          hitSlop={8}
-          style={({ pressed }) => ({
-            width: 44,
-            height: 44,
-            minWidth: 44,
-            minHeight: 44,
-            maxWidth: 44,
-            maxHeight: 44,
-            borderRadius: 22,
-            alignSelf: 'flex-start',
-            flexShrink: 0,
-            overflow: 'hidden',
-            opacity: pressed ? 0.94 : 1,
-          })}
+        <View
+          style={{
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+          }}
         >
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#F8FAFC',
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
-              alignSelf: 'flex-start',
-              flexShrink: 0,
-            }}
-          >
-            <Ionicons name="close-outline" size={22} color="#0F172A" />
+          <View style={{ width: 44, alignItems: 'center' }}>
+            <Pressable
+              onPress={onBack}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="סגירת קופה"
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.72 : 1,
+              })}
+            >
+              <Ionicons name="close-outline" size={22} color="#111827" />
+            </Pressable>
           </View>
-        </Pressable>
 
-        <View style={{ flex: 1, alignItems: 'flex-end', marginRight: 12 }}>
-          <Text style={{ color: '#C18D39', fontSize: 11, fontWeight: '900', letterSpacing: 1.1, ...RTL_TEXT }}>
-            SHOPIFY CHECKOUT
-          </Text>
-          <Text style={{ marginTop: 6, color: '#0F172A', fontSize: 20, fontWeight: '900', ...RTL_TEXT }}>{pageTitle}</Text>
-          <Text style={{ marginTop: 4, color: '#64748B', fontSize: 12, ...RTL_TEXT }}>
-            התשלום והשילוח מתבצעים ישירות דרך עמוד הקופה המאובטח של Shopify.
-          </Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Image
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              source={require('../../../assets/logopng/OCDLOGO-04.png')}
+              style={{ width: 115, height: 42 }}
+              resizeMode="contain"
+            />
+          </View>
+
+          <View style={{ width: 44, height: 40 }} />
         </View>
       </View>
 
@@ -464,7 +532,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
       )}
 
       <View style={{ flex: 1 }}>
-        {initialLoading && !loadError && (
+        {(showWebViewLoader || !launchUrl) && !loadError && (
           <View
             style={{
               position: 'absolute',
@@ -485,38 +553,44 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
           </View>
         )}
 
-        <WebView
-          key={webViewKey}
-          source={{ uri: checkoutUrl }}
-          injectedJavaScriptBeforeContentLoaded={CHECKOUT_DIRECTION_FIX_SCRIPT}
-          injectedJavaScript={CHECKOUT_DIRECTION_FIX_SCRIPT}
-          onLoadStart={() => {
-            setLoadError(null);
-          }}
-          onLoadEnd={resolveInitialLoad}
-          onLoadProgress={({ nativeEvent }) => {
-            if (nativeEvent.progress >= 0.6) {
+        {launchUrl ? (
+          <WebView
+            key={webViewKey}
+            style={{ flex: 1, backgroundColor: '#FFFFFF' }}
+            source={{ uri: launchUrl }}
+            userAgent={MOBILE_SAFARI_UA}
+            sharedCookiesEnabled
+            thirdPartyCookiesEnabled
+            setSupportMultipleWindows={false}
+            injectedJavaScriptBeforeContentLoaded={CHECKOUT_DIRECTION_FIX_SCRIPT}
+            injectedJavaScript={`${CHECKOUT_DIRECTION_FIX_SCRIPT}\n${CHECKOUT_HIDE_SHOPIFY_HEADER_SCRIPT}`}
+            onLoadStart={() => {
+              setLoadError(null);
+            }}
+            onLoadEnd={resolveInitialLoad}
+            onLoadProgress={({ nativeEvent }) => {
+              if (nativeEvent.progress >= 0.6) {
+                resolveInitialLoad();
+              }
+            }}
+            onError={() => {
               resolveInitialLoad();
-            }
-          }}
-          onError={() => {
-            resolveInitialLoad();
-            setLoadError('לא הצלחנו לטעון את עמוד התשלום. בדוק את החיבור לאינטרנט ונסה שוב.');
-          }}
-          onHttpError={(e) => {
-            const status = e.nativeEvent.statusCode;
-            if (status >= 400) {
+              setLoadError('לא הצלחנו לטעון את עמוד התשלום. בדוק את החיבור לאינטרנט ונסה שוב.');
+            }}
+            onHttpError={(e) => {
+              const { statusCode, url } = e.nativeEvent;
+              if (!isCheckoutHttpErrorBlocking(statusCode, url)) return;
               resolveInitialLoad();
-              setLoadError(`שגיאת שרת (${status}) בטעינת הקופה.`);
-            }
-          }}
-          onNavigationStateChange={onNavigationStateChange}
-          onShouldStartLoadWithRequest={(req) => {
-            tryComplete(req.url);
-            return true;
-          }}
-        />
+              setLoadError(`שגיאת שרת (${statusCode}) בטעינת הקופה.`);
+            }}
+            onNavigationStateChange={onNavigationStateChange}
+            onShouldStartLoadWithRequest={(req) => {
+              tryComplete(req.url);
+              return true;
+            }}
+          />
+        ) : null}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

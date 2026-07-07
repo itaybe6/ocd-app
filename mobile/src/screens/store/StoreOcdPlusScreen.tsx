@@ -180,7 +180,7 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
             )}
           </ScrollView>
         </Screen>
-        <StoreFloatingTabBar activeTab={null} onTabPress={onBottomTabPress} />
+        <StoreFloatingTabBar activeTab="ocdPlus" onTabPress={onBottomTabPress} />
       </View>
     </SafeAreaView>
   );

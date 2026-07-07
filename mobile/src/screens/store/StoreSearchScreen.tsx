@@ -13,6 +13,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchProducts, searchProducts } from '../../lib/shopify';
+import { useBrands } from '../../hooks/useBrands';
+import { ProductBrandBadge } from '../../components/ProductBrandBadge';
 import {
   getStoreBottomBarMetrics,
   ProductImage,
@@ -22,6 +24,7 @@ import {
   type StoreProduct,
   type StoreSubcategory,
 } from './StoreHomeScreen';
+import { colors } from '../../theme/colors';
 
 export function StoreSearchScreen({
   onBack: _onBack,
@@ -45,6 +48,7 @@ export function StoreSearchScreen({
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { width: windowWidth } = useWindowDimensions();
+  const { data: remoteBrands = [] } = useBrands();
 
   const TILE_GAP = 2;
   const tileWidth = Math.floor((windowWidth - TILE_GAP * 2) / 3);
@@ -126,8 +130,8 @@ export function StoreSearchScreen({
   const showMainList = !initialLoading && !(error && displayed.length === 0);
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
-      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14, backgroundColor: '#FAFAFA' }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14, backgroundColor: colors.bg }}>
         <View
           style={{
             flexDirection: 'row-reverse',
@@ -220,15 +224,18 @@ export function StoreSearchScreen({
                 overflow: 'hidden',
               })}
             >
-              {product.imageUrl ? (
-                <Image
-                  source={{ uri: product.imageUrl }}
-                  resizeMode="cover"
-                  style={{ width: tileWidth, height: tileWidth }}
-                />
-              ) : (
-                <ProductImage product={product} height={tileWidth} />
-              )}
+              <View style={{ width: tileWidth, height: tileWidth }}>
+                {product.imageUrl ? (
+                  <Image
+                    source={{ uri: product.imageUrl }}
+                    resizeMode="cover"
+                    style={{ width: tileWidth, height: tileWidth }}
+                  />
+                ) : (
+                  <ProductImage product={product} height={tileWidth} />
+                )}
+                <ProductBrandBadge product={product} brands={remoteBrands} size={28} />
+              </View>
             </Pressable>
           )}
         />

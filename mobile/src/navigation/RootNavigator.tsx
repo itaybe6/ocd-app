@@ -15,6 +15,7 @@ import { CheckoutScreen } from '../screens/store/CheckoutScreen';
 import { OrderSuccessScreen } from '../screens/store/OrderSuccessScreen';
 import { StoreFavoritesScreen } from '../screens/store/StoreFavoritesScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
+import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { OcdPlusMark } from '../components/OcdPlusMark';
@@ -53,8 +54,8 @@ function handleStoreTabNavigation(
     return;
   }
 
-  if (tabId === 'cart') {
-    navigation.navigate('StoreCart');
+  if (tabId === 'ocdPlus') {
+    navigation.navigate('StoreOcdPlus');
     return;
   }
 
@@ -170,7 +171,23 @@ function StoreSearchRoute({ navigation }: NativeStackScreenProps<RootStackParamL
 }
 
 function LoginRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
-  return <LoginScreen onBackToStore={() => navigation.navigate('Main')} />;
+  const { user } = useAuth();
+  return (
+    <LoginScreen
+      onGoToRegister={() => navigation.navigate('Register')}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId, user)}
+    />
+  );
+}
+
+function RegisterRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'Register'>) {
+  const { user } = useAuth();
+  return (
+    <RegisterScreen
+      onGoToLogin={() => navigation.navigate('Login')}
+      onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId, user)}
+    />
+  );
 }
 
 function StoreCategoryRoute({
@@ -292,7 +309,12 @@ export function RootNavigator() {
       <OcdPlusSubscribeSheetProvider>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Main" component={MainEntryScreen} />
-        {!user && <Stack.Screen name="Login" component={LoginRoute} />}
+        {!user && (
+          <>
+            <Stack.Screen name="Login" component={LoginRoute} />
+            <Stack.Screen name="Register" component={RegisterRoute} />
+          </>
+        )}
         <Stack.Screen
           name="StoreCategory"
           component={StoreCategoryRoute}
