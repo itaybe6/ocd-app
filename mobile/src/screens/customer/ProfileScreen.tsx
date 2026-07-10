@@ -13,7 +13,7 @@ import Toast from '../../components/toast/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../lib/orders';
+import { formatOrderDate, formatOrderPrice } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
@@ -22,7 +22,7 @@ import type { CustomerOrderRow } from '../../types/database';
 
 /* ─── palette (minimal, monochrome) ───────────────────────────────────────── */
 const P = {
-  bg: '#F5F5F5',
+  bg: '#EEEEEE',
   card: '#FFFFFF',
   separator: '#ECECEC',
   label: '#111111',
@@ -181,10 +181,12 @@ function DeleteAccountDialog({
 export function CustomerProfileScreen({
   onTabPress,
   onOpenOrders,
+  onOpenOrder,
   onOpenAddresses,
 }: {
   onTabPress: (tabId: StoreBottomTabId) => void;
   onOpenOrders: () => void;
+  onOpenOrder: (orderId: string) => void;
   onOpenAddresses: () => void;
 }) {
   const { user, signOut, deleteCustomerAccount } = useAuth();
@@ -335,43 +337,44 @@ export function CustomerProfileScreen({
           contentContainerStyle={{ paddingBottom: contentPaddingBottom + 16, flexGrow: 1 }}
           ListHeaderComponent={listHeaderBelowHero}
           ListFooterComponent={listFooterSettings}
-          renderItem={({ item, index }) => (
-            <Pressable
-              onPress={onOpenOrders}
-              style={({ pressed }) => [
-                styles.orderRow,
-                index === 0 && styles.orderRowFirst,
-                index === recentOrders.length - 1 && styles.orderRowLast,
-                pressed && styles.rowPressed,
-              ]}
-            >
-              {/* icon — absolute, RIGHT */}
-              <View style={styles.orderIconSlot}>
-                <Ionicons
-                  name={item.status === 'confirmed' ? 'checkmark-circle-outline' : 'cube-outline'}
-                  size={22}
-                  color={P.iconColor}
-                />
-              </View>
+          renderItem={({ item }) => (
+            <View style={styles.orderCardOuter}>
+              <Pressable
+                onPress={() => onOpenOrder(item.id)}
+                style={({ pressed }) => [styles.orderCard, pressed && styles.rowPressed]}
+              >
+                <View style={styles.orderCardHeader}>
+                  <View style={styles.orderHeaderCopy}>
+                    <Text style={styles.orderEyebrow}>הזמנה שבוצעה</Text>
+                    <Text style={styles.orderNumber}>#{item.order_number}</Text>
+                  </View>
+                  <View style={styles.orderHeaderIcon}>
+                    <Ionicons name="arrow-back" size={17} color="#111111" />
+                  </View>
+                </View>
 
-              {/* main meta — flex-fills with padding */}
-              <View style={styles.orderMeta}>
-                <Text style={styles.orderTitle} numberOfLines={1}>
-                  {item.status === 'confirmed' ? 'בדרך אליך' : getOrderStatusLabel(item.status)}
-                </Text>
-                <Text style={styles.orderSub} numberOfLines={1}>
-                  {formatOrderDate(item.created_at)} · #{item.order_number}
-                </Text>
-              </View>
+                <View style={styles.orderCardBody}>
+                  <View style={styles.orderBodyCell}>
+                    <Text style={styles.orderColumnLabel}>תאריך ושעה</Text>
+                    <Text style={styles.orderDate} numberOfLines={1}>
+                      {formatOrderDate(item.created_at)}
+                    </Text>
+                  </View>
+                  <View style={styles.orderBodyDivider} />
+                  <View style={styles.orderBodyCell}>
+                    <Text style={styles.orderColumnLabel}>סה״כ לתשלום</Text>
+                    <Text style={styles.orderPrice}>
+                      {formatOrderPrice(item.total_amount, item.currency_code)}
+                    </Text>
+                  </View>
+                </View>
 
-              {/* end — absolute, LEFT */}
-              <View style={styles.orderEndSlot} pointerEvents="none">
-                <Text style={styles.orderPrice}>
-                  {formatOrderPrice(item.total_amount, item.currency_code)}
-                </Text>
-                <Ionicons name="chevron-back" size={16} color={P.tertiaryLabel} />
-              </View>
-            </Pressable>
+                <View style={styles.orderTapHint}>
+                  <Text style={styles.orderTapHintText}>לחץ לצפייה בפרטי ההזמנה</Text>
+                  <Ionicons name="chevron-back" size={14} color="#8A8A8A" />
+                </View>
+              </Pressable>
+            </View>
           )}
           ListEmptyComponent={
             loading ? (
@@ -544,48 +547,125 @@ const styles = StyleSheet.create({
     marginLeft: SIDE_PADDING,
   },
 
-  /* ── order rows (same absolute pattern, slightly larger) ── */
-  orderRow: {
-    position: 'relative',
-    minHeight: 68,
-    backgroundColor: P.card,
+  /* ── recent order cards ── */
+  orderCardOuter: {
     marginHorizontal: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: P.separator,
-    justifyContent: 'center',
+    marginBottom: 12,
+    backgroundColor: '#111111',
+    borderRadius: 22,
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 4,
+    overflow: 'hidden',
   },
-  orderRowFirst: { borderTopLeftRadius: 16, borderTopRightRadius: 16, marginTop: 0 },
-  orderRowLast: { borderBottomWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
-  orderIconSlot: {
-    position: 'absolute',
-    right: SIDE_PADDING,
-    top: (68 - 42) / 2,
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+  orderCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  orderCardHeader: {
+    minHeight: 78,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    backgroundColor: '#111111',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  orderHeaderIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: P.iconBg,
   },
-  orderMeta: {
-    paddingRight: SIDE_PADDING + 42 + 12,
-    paddingLeft: 90,
-    paddingVertical: 12,
+  orderHeaderCopy: {
+    flex: 1,
     alignItems: 'flex-end',
     gap: 2,
   },
-  orderTitle: { fontSize: 15, fontWeight: '600', color: P.label, textAlign: 'right' },
-  orderSub: { fontSize: 12, color: P.tertiaryLabel, textAlign: 'right' },
-  orderEndSlot: {
-    position: 'absolute',
-    left: SIDE_PADDING,
-    top: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  orderEyebrow: {
+    color: 'rgba(255,255,255,0.58)',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'right',
   },
-  orderPrice: { fontSize: 15, fontWeight: '600', color: P.label },
+  orderNumber: {
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textAlign: 'right',
+  },
+  orderBrandMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderBrandText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  orderCardBody: {
+    minHeight: 86,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+  },
+  orderBodyCell: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    gap: 7,
+  },
+  orderBodyDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 46,
+    backgroundColor: P.separator,
+  },
+  orderColumnLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#737373',
+    textAlign: 'center',
+  },
+  orderDate: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#111111',
+    textAlign: 'center',
+  },
+  orderPrice: {
+    fontSize: 19,
+    fontWeight: '900',
+    color: '#111111',
+    textAlign: 'center',
+  },
+  orderTapHint: {
+    minHeight: 40,
+    paddingHorizontal: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#F7F7F7',
+  },
+  orderTapHintText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8A8A8A',
+  },
 
   /* empty state */
   emptyCard: { alignItems: 'center', paddingVertical: 36, gap: 8, marginTop: 8 },

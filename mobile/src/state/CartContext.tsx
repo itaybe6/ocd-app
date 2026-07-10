@@ -284,19 +284,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearCart = useCallback(async () => {
-    if (!cart?.id || !items.length) return;
+    const currentCart = cartRef.current;
+    const lineIds = currentCart?.lines.map((item) => item.id) ?? [];
+
+    // Always drop local cart first — after checkout the Shopify cart is completed
+    // and can no longer be mutated, so API cleanup is best-effort only.
+    setOptimisticQuantities({});
+    setCart(null);
+    await persistCartId(null);
+
+    if (!currentCart?.id || !lineIds.length) return;
 
     try {
-      const nextCart = await runCartMutation(() => removeCartLines(cart.id, items.map((item) => item.id)));
-      await syncCart(nextCart);
-    } catch (error: any) {
-      Toast.show({
-        type: 'error',
-        text1: 'ניקוי העגלה נכשל',
-        text2: error?.message ?? 'נסה שוב בעוד רגע',
-      });
+      await removeCartLines(currentCart.id, lineIds);
+    } catch {
+      // Completed / expired carts fail here; local discard above is enough.
     }
-  }, [cart?.id, items, runCartMutation, syncCart]);
+  }, [persistCartId]);
 
   const getQuantity = useCallback(
     (productId: string) => {

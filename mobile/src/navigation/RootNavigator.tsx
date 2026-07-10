@@ -8,6 +8,7 @@ import {
 import { colors } from '../theme/colors';
 import { Screen } from '../components/Screen';
 import { useAuth, type AuthUser } from '../state/AuthContext';
+import { useCart } from '../state/CartContext';
 import { StoreCategoryScreen, StoreHomeScreen, type StoreBottomTabId } from '../screens/store/StoreHomeScreen';
 import { StoreSearchScreen } from '../screens/store/StoreSearchScreen';
 import { StoreCartScreen } from '../screens/store/StoreCartScreen';
@@ -20,6 +21,7 @@ import { ProductScreen } from '../screens/store/ProductScreen';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { OcdPlusMark } from '../components/OcdPlusMark';
 import { OcdPlusSubscribeSheetProvider } from '../context/OcdPlusSubscribeSheetContext';
+import { placeCustomerOrder } from '../lib/orders';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 import type { CustomerDrawerParamList } from './CustomerDrawer';
 import type { RootStackParamList } from './types';
@@ -259,11 +261,35 @@ function StoreCheckoutRoute({
   navigation,
   route,
 }: NativeStackScreenProps<RootStackParamList, 'StoreCheckout'>) {
+  const { user } = useAuth();
+  const { items, subtotal } = useCart();
+
   return (
     <CheckoutScreen
       checkoutUrl={route.params.checkoutUrl}
       onBack={() => navigation.goBack()}
-      onCheckoutComplete={() => navigation.replace('OrderSuccess')}
+      onCheckoutComplete={async (info) => {
+        let appOrderNumber = info?.orderNumber;
+
+        // Shopify checkout is external to the app. Mirror the successful
+        // purchase into the app's customer order history for logged-in users.
+        if (user?.role === 'customer' && items.length > 0) {
+          try {
+            const order = await placeCustomerOrder({
+              userId: user.id,
+              items,
+              subtotal,
+              shopifyOrderNumber: info?.orderNumber,
+            });
+            appOrderNumber = info?.orderNumber ?? String(order.order_number);
+          } catch {
+            // The Shopify payment succeeded; still show the success screen.
+            // The checkout order number remains available as a fallback.
+          }
+        }
+
+        navigation.replace('OrderSuccess', { orderNumber: appOrderNumber });
+      }}
     />
   );
 }

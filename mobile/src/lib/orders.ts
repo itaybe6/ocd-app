@@ -30,20 +30,104 @@ export function getOrderStatusLabel(status: CustomerOrderRow['status']) {
   return 'בטיפול';
 }
 
+export function getOrderStatusHeadline(status: CustomerOrderRow['status']) {
+  if (status === 'confirmed') return 'בדרך אליך';
+  if (status === 'cancelled') return 'ההזמנה בוטלה';
+  return 'ההזמנה בטיפול';
+}
+
+export type CustomerOrderWithItems = CustomerOrderRow & {
+  items: CustomerOrderItemRow[];
+};
+
+export async function fetchCustomerOrderWithItems(orderId: string): Promise<CustomerOrderWithItems | null> {
+  const { data: orderData, error: orderError } = await supabase
+    .from('customer_orders')
+    .select('id, order_number, user_id, status, total_amount, currency_code, item_count, created_at')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (orderError) throw orderError;
+  if (!orderData) return null;
+
+  const { data: itemsData, error: itemsError } = await supabase
+    .from('customer_order_items')
+    .select(
+      'id, order_id, product_id, product_handle, product_title, image_url, unit_price, quantity, line_total, created_at'
+    )
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+
+  if (itemsError) throw itemsError;
+
+  return {
+    ...(orderData as CustomerOrderRow),
+    items: (itemsData ?? []) as CustomerOrderItemRow[],
+  };
+}
+
+export async function fetchRecentCustomerOrdersWithItems(
+  userId: string,
+  limit = 3
+): Promise<CustomerOrderWithItems[]> {
+  const { data: ordersData, error: ordersError } = await supabase
+    .from('customer_orders')
+    .select('id, order_number, user_id, status, total_amount, currency_code, item_count, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (ordersError) throw ordersError;
+
+  const orders = (ordersData ?? []) as CustomerOrderRow[];
+  if (!orders.length) return [];
+
+  const orderIds = orders.map((order) => order.id);
+  const { data: itemsData, error: itemsError } = await supabase
+    .from('customer_order_items')
+    .select(
+      'id, order_id, product_id, product_handle, product_title, image_url, unit_price, quantity, line_total, created_at'
+    )
+    .in('order_id', orderIds)
+    .order('created_at', { ascending: true });
+
+  if (itemsError) throw itemsError;
+
+  const itemsByOrder = new Map<string, CustomerOrderItemRow[]>();
+  for (const item of (itemsData ?? []) as CustomerOrderItemRow[]) {
+    const list = itemsByOrder.get(item.order_id) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.order_id, list);
+  }
+
+  return orders.map((order) => ({
+    ...order,
+    items: itemsByOrder.get(order.id) ?? [],
+  }));
+}
+
 export async function placeCustomerOrder({
   userId,
   items,
   subtotal,
+  shopifyOrderNumber,
 }: {
   userId: string;
   items: CartItem[];
   subtotal: number;
+  shopifyOrderNumber?: string;
 }): Promise<CustomerOrderRow> {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const parsedShopifyOrderNumber = shopifyOrderNumber
+    ? Number(shopifyOrderNumber.replace(/\D/g, ''))
+    : null;
 
   const { data: orderData, error: orderError } = await supabase
     .from('customer_orders')
     .insert({
+      ...(parsedShopifyOrderNumber && Number.isSafeInteger(parsedShopifyOrderNumber)
+        ? { order_number: parsedShopifyOrderNumber }
+        : {}),
       user_id: userId,
       total_amount: subtotal,
       currency_code: 'ILS',

@@ -357,11 +357,77 @@ function isCheckoutSuccessUrl(url: string): boolean {
   );
 }
 
+/** Best-effort parse when the thank-you URL/query exposes a numeric order name. */
+function extractOrderNumberFromUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    for (const key of ['order_number', 'order_name', 'order', 'name'] as const) {
+      const raw = parsed.searchParams.get(key)?.trim();
+      if (!raw) continue;
+      const match = raw.match(/(\d{3,})/);
+      if (match?.[1]) return match[1];
+    }
+  } catch {
+    // ignore malformed URLs
+  }
+  const pathMatch = url.match(/\/orders\/(\d{3,})\b/i);
+  return pathMatch?.[1];
+}
+
+/**
+ * Scrapes the Shopify thank-you / order-status DOM for a human order number (#1234).
+ * Posts `{ type: 'ocdCheckoutSuccess', orderNumber }` back to React Native.
+ */
+const CHECKOUT_ORDER_NUMBER_SCRIPT = `
+  (function() {
+    function findOrderNumber() {
+      var selectors = [
+        '[data-order-id]',
+        '.os-order-number',
+        '[class*="order-number"]',
+        '[class*="OrderNumber"]',
+        '[data-testid*="order"]'
+      ];
+      for (var i = 0; i < selectors.length; i++) {
+        var el = document.querySelector(selectors[i]);
+        if (!el) continue;
+        var t = (el.getAttribute('data-order-id') || el.textContent || '').trim();
+        var m = t.match(/#?\\s*(\\d{3,})/);
+        if (m) return m[1];
+      }
+      var body = (document.body && document.body.innerText) || '';
+      var patterns = [
+        /#\\s*(\\d{3,})/,
+        /Order\\s+#?(\\d{3,})/i,
+        /הזמנה\\s+#?(\\d{3,})/,
+        /מספר הזמנה[:\\s]+#?(\\d{3,})/
+      ];
+      for (var j = 0; j < patterns.length; j++) {
+        var match = body.match(patterns[j]);
+        if (match) return match[1];
+      }
+      return null;
+    }
+    var n = findOrderNumber();
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'ocdCheckoutSuccess',
+        orderNumber: n
+      }));
+    }
+    true;
+  })();
+`;
+
+export type CheckoutCompleteInfo = {
+  orderNumber?: string;
+};
+
 export type CheckoutScreenProps = {
   checkoutUrl: string;
   onBack: () => void;
   /** Called once when the WebView reaches a thank-you or order URL after payment. */
-  onCheckoutComplete?: () => void;
+  onCheckoutComplete?: (info?: CheckoutCompleteInfo) => void;
 };
 
 export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: CheckoutScreenProps) {
@@ -371,6 +437,9 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
   const [loadError, setLoadError] = useState<string | null>(null);
   const [webViewKey, setWebViewKey] = useState(0);
   const completeRef = useRef(false);
+  const pendingSuccessUrlRef = useRef<string | null>(null);
+  const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const webViewRef = useRef<WebView>(null);
   const initialLoadResolvedRef = useRef(false);
 
   useEffect(() => {
@@ -415,14 +484,49 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
     return () => clearTimeout(timer);
   }, [initialLoading, resolveInitialLoad, webViewKey]);
 
+  const finishCheckout = useCallback(
+    (orderNumber?: string) => {
+      if (!onCheckoutComplete || completeRef.current) return;
+      completeRef.current = true;
+      if (completeTimeoutRef.current) {
+        clearTimeout(completeTimeoutRef.current);
+        completeTimeoutRef.current = null;
+      }
+      const fromUrl = pendingSuccessUrlRef.current
+        ? extractOrderNumberFromUrl(pendingSuccessUrlRef.current)
+        : undefined;
+      onCheckoutComplete({ orderNumber: orderNumber || fromUrl });
+    },
+    [onCheckoutComplete]
+  );
+
   const tryComplete = useCallback(
     (url: string | undefined) => {
       if (!url || !onCheckoutComplete || completeRef.current) return;
       if (!isCheckoutSuccessUrl(url)) return;
-      completeRef.current = true;
-      onCheckoutComplete();
+      if (pendingSuccessUrlRef.current === url) return;
+      pendingSuccessUrlRef.current = url;
+
+      // Give the thank-you page a moment to render, then scrape the order number.
+      const scrape = () => {
+        webViewRef.current?.injectJavaScript(CHECKOUT_ORDER_NUMBER_SCRIPT);
+      };
+      setTimeout(scrape, 350);
+      setTimeout(scrape, 900);
+
+      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+      completeTimeoutRef.current = setTimeout(() => {
+        finishCheckout(extractOrderNumberFromUrl(url));
+      }, 1600);
     },
-    [onCheckoutComplete]
+    [finishCheckout, onCheckoutComplete]
+  );
+
+  useEffect(
+    () => () => {
+      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+    },
+    []
   );
 
   const onNavigationStateChange = useCallback(
@@ -436,11 +540,32 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
     [resolveInitialLoad, tryComplete]
   );
 
+  const onWebViewMessage = useCallback(
+    (event: { nativeEvent: { data: string } }) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data) as {
+          type?: string;
+          orderNumber?: string | null;
+        };
+        if (data?.type !== 'ocdCheckoutSuccess') return;
+        finishCheckout(data.orderNumber ?? undefined);
+      } catch {
+        // ignore non-JSON messages from the page
+      }
+    },
+    [finishCheckout]
+  );
+
   const handleRetry = useCallback(() => {
     setLoadError(null);
     setInitialLoading(true);
     initialLoadResolvedRef.current = false;
     completeRef.current = false;
+    pendingSuccessUrlRef.current = null;
+    if (completeTimeoutRef.current) {
+      clearTimeout(completeTimeoutRef.current);
+      completeTimeoutRef.current = null;
+    }
     setWebViewKey((k) => k + 1);
   }, []);
 
@@ -555,6 +680,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
 
         {launchUrl ? (
           <WebView
+            ref={webViewRef}
             key={webViewKey}
             style={{ flex: 1, backgroundColor: '#FFFFFF' }}
             source={{ uri: launchUrl }}
@@ -583,6 +709,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
               resolveInitialLoad();
               setLoadError(`שגיאת שרת (${statusCode}) בטעינת הקופה.`);
             }}
+            onMessage={onWebViewMessage}
             onNavigationStateChange={onNavigationStateChange}
             onShouldStartLoadWithRequest={(req) => {
               tryComplete(req.url);

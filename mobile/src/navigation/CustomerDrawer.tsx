@@ -14,6 +14,7 @@ import { CustomerProfileScreen } from '../screens/customer/ProfileScreen';
 import { CustomerServicesScreen } from '../screens/customer/ServicesScreen';
 import { CustomerFavoritesScreen } from '../screens/customer/FavoritesScreen';
 import { CustomerOrdersScreen } from '../screens/customer/OrdersScreen';
+import { CustomerOrderDetailScreen } from '../screens/customer/OrderDetailScreen';
 import { CustomerAddressesScreen } from '../screens/customer/AddressesScreen';
 import { safeNavigate } from './navigationRef';
 import { StoreHomeScreen, type StoreBottomTabId, type StoreMainTabId } from '../screens/store/StoreHomeScreen';
@@ -27,6 +28,7 @@ export type CustomerDrawerParamList = {
     | undefined;
   Profile: undefined;
   Orders: undefined;
+  OrderDetail: { orderId: string; returnTo: 'Profile' | 'Orders' };
   Addresses: undefined;
   Services: undefined;
   Favorites: undefined;
@@ -100,6 +102,7 @@ function CustomerProfileRoute({ navigation }: DrawerScreenProps<CustomerDrawerPa
   return (
     <CustomerProfileScreen
       onOpenOrders={() => navigation.navigate('Orders')}
+      onOpenOrder={(orderId) => navigation.navigate('OrderDetail', { orderId, returnTo: 'Profile' })}
       onOpenAddresses={() => navigation.navigate('Addresses')}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
@@ -110,6 +113,20 @@ function CustomerOrdersRoute({ navigation }: DrawerScreenProps<CustomerDrawerPar
   return (
     <CustomerOrdersScreen
       onBack={() => navigation.navigate('Profile')}
+      onOpenOrder={(orderId) => navigation.navigate('OrderDetail', { orderId, returnTo: 'Orders' })}
+      onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
+    />
+  );
+}
+
+function CustomerOrderDetailRoute({
+  navigation,
+  route,
+}: DrawerScreenProps<CustomerDrawerParamList, 'OrderDetail'>) {
+  return (
+    <CustomerOrderDetailScreen
+      orderId={route.params.orderId}
+      onBack={() => navigation.navigate(route.params.returnTo)}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
   );
@@ -185,11 +202,19 @@ export function CustomerDrawer({ initialRouteName = 'Store' }: CustomerDrawerPro
         sceneStyle: { backgroundColor: colors.bg },
         drawerPosition: 'right',
         drawerType: 'front',
+        // The customer area uses the in-app bottom navigation; keep the side
+        // drawer locked so it cannot appear from an accidental edge swipe.
+        swipeEnabled: false,
       }}
     >
       <Drawer.Screen name="Store" options={{ title: 'חנות', headerShown: false }} component={CustomerStoreScreen} />
       <Drawer.Screen name="Profile" options={{ title: 'פרופיל', headerShown: false }} component={CustomerProfileRoute} />
       <Drawer.Screen name="Orders" options={{ title: 'רכישות', headerShown: false }} component={CustomerOrdersRoute} />
+      <Drawer.Screen
+        name="OrderDetail"
+        options={{ title: 'פרטי הזמנה', headerShown: false }}
+        component={CustomerOrderDetailRoute}
+      />
       <Drawer.Screen name="Addresses" options={{ title: 'כתובות', headerShown: false }} component={CustomerAddressesRoute} />
       <Drawer.Screen name="Favorites" options={{ title: 'אהבתי', headerShown: false }} component={CustomerFavoritesRoute} />
       <Drawer.Screen name="Services" options={{ title: 'שירותים' }} component={CustomerServicesScreen} />
