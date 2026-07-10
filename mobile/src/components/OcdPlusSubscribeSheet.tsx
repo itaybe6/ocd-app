@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
+import Toast from './toast/Toast';
 import { ModalSheet } from './ModalSheet';
 import { OcdPlusMark } from './OcdPlusMark';
 import { LavaLampDark } from './LavaLampDark';

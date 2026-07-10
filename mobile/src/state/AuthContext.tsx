@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import Toast from 'react-native-toast-message';
+import Toast from '../components/toast/Toast';
 import {
   deleteCustomerAccount as deleteCustomerAccountApi,
   sendLoginOtp as sendLoginOtpApi,

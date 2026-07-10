@@ -18,6 +18,16 @@ export type ShopifyImage = {
   altText: string | null;
 };
 
+/** פריט מדיה בגלריית מוצר — תמונה או סרטון מ־Shopify Media */
+export type ShopifyProductMediaItem = {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  altText: string | null;
+  /** תמונת תצוגה מקדימה לסרטון (poster) */
+  previewUrl: string | null;
+};
+
 export type ShopifyProductVariant = {
   id: string;
   title: string;
@@ -37,11 +47,17 @@ export type ShopifyProduct = {
   imageUrl: string | null;
   imageAltText: string | null;
   images: ShopifyImage[];
+  /** גלריה מסודרת מ־Shopify media (תמונות + סרטונים). ריק אם לא נטען. */
+  media: ShopifyProductMediaItem[];
   price: number;
   compareAtPrice: number | null;
   currencyCode: string;
   productType: string;
+  vendor: string | null;
   tags: string[];
+  /** Collection handles/titles used to resolve brand badges (e.g. סוסיטסא). */
+  collectionHandles: string[];
+  collectionTitles: string[];
   /** קולקציית Shopify ראשונה (מסודר ע״י Shopify) — לתווית קטגוריה בכרטיס מוצר */
   primaryCollectionTitle: string | null;
   variantId: string | null;
@@ -148,24 +164,48 @@ type ShopifyProductVariantNode = {
   image: ShopifyImage | null;
 };
 
+type ShopifyVideoSource = {
+  url: string;
+  mimeType: string;
+  format: string;
+  height: number;
+  width: number;
+};
+
+type ShopifyMediaNode = {
+  mediaContentType: string;
+  alt?: string | null;
+  id?: string;
+  image?: ShopifyImage | null;
+  previewImage?: ShopifyImage | null;
+  sources?: ShopifyVideoSource[];
+};
+
 type ShopifyProductNode = {
   id: string;
   title: string;
   description: string;
   handle: string;
   productType: string;
+  vendor?: string | null;
   tags?: string[];
   featuredImage: ShopifyImage | null;
   collections?: {
     edges: Array<{
       node: {
         title: string;
+        handle?: string;
       };
     }>;
   };
   images?: {
     edges: Array<{
       node: ShopifyImage;
+    }>;
+  };
+  media?: {
+    edges: Array<{
+      node: ShopifyMediaNode;
     }>;
   };
   variants?: {
@@ -367,11 +407,13 @@ const PRODUCT_FIELDS = `
   description
   handle
   productType
+  vendor
   tags
   collections(first: 8) {
     edges {
       node {
         title
+        handle
       }
     }
   }
@@ -412,6 +454,39 @@ const PRODUCT_FIELDS = `
     minVariantPrice {
       amount
       currencyCode
+    }
+  }
+`;
+
+/** מדיה מלאה (תמונות + סרטונים) — נטען רק במסך מוצר כדי לא להכביד על רשימות */
+const PRODUCT_MEDIA_FIELDS = `
+  media(first: 20) {
+    edges {
+      node {
+        mediaContentType
+        alt
+        ... on MediaImage {
+          id
+          image {
+            url
+            altText
+          }
+        }
+        ... on Video {
+          id
+          previewImage {
+            url
+            altText
+          }
+          sources {
+            url
+            mimeType
+            format
+            height
+            width
+          }
+        }
+      }
     }
   }
 `;
@@ -499,6 +574,71 @@ function getVariant(node: ShopifyProductNode) {
   return node.variants?.edges[0]?.node ?? null;
 }
 
+/**
+ * כתובות וידאו משופיפיי מגיעות לפעמים עם דומיין מותאם (למשל ocd-online.co.il)
+ * שמחזיר 404 ל־/cdn/shop/videos. מעבירים ל־cdn.shopify.com שעובד.
+ */
+function rewriteShopifyVideoUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/\/(?:cdn\/shop\/)?videos\/(.+)$/i);
+    if (!match) return url;
+    return `https://cdn.shopify.com/videos/${match[1]}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
+function pickVideoSourceUrl(sources: ShopifyVideoSource[] | undefined): string | null {
+  if (!sources?.length) return null;
+  const mp4 = sources.filter(
+    (source) => source.format?.toLowerCase() === 'mp4' || source.mimeType?.toLowerCase().includes('mp4'),
+  );
+  const pool = mp4.length ? mp4 : sources;
+  // Prefer ~720–1080p — מקורות 4K כבדים יותר ועלולים להיכשל בניגון במובייל
+  const ranked = [...pool].sort((a, b) => {
+    const score = (width: number) => Math.abs((width || 0) - 900);
+    return score(a.width) - score(b.width);
+  });
+  const rawUrl = ranked[0]?.url ?? null;
+  return rawUrl ? rewriteShopifyVideoUrl(rawUrl) : null;
+}
+
+function normalizeProductMedia(node: ShopifyProductNode): ShopifyProductMediaItem[] {
+  const edges = node.media?.edges ?? [];
+  const items: ShopifyProductMediaItem[] = [];
+
+  for (const edge of edges) {
+    const media = edge.node;
+    const contentType = media.mediaContentType?.toUpperCase();
+
+    if (contentType === 'IMAGE' && media.image?.url) {
+      items.push({
+        id: media.id ?? `image-${items.length}`,
+        type: 'image',
+        url: media.image.url,
+        altText: media.image.altText ?? media.alt ?? null,
+        previewUrl: null,
+      });
+      continue;
+    }
+
+    if (contentType === 'VIDEO') {
+      const videoUrl = pickVideoSourceUrl(media.sources);
+      if (!videoUrl) continue;
+      items.push({
+        id: media.id ?? `video-${items.length}`,
+        type: 'video',
+        url: videoUrl,
+        altText: media.alt ?? media.previewImage?.altText ?? null,
+        previewUrl: media.previewImage?.url ?? null,
+      });
+    }
+  }
+
+  return items;
+}
+
 function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
   const galleryImages = node.images?.edges.map((edge) => edge.node).filter((image) => !!image?.url) ?? [];
   const images = galleryImages.length
@@ -506,6 +646,7 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     : node.featuredImage?.url
       ? [node.featuredImage]
       : [];
+  const media = normalizeProductMedia(node);
   const variant = getVariant(node);
   const fallbackPrice = node.priceRange.minVariantPrice;
 
@@ -524,10 +665,15 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     ? toNumber(variant.compareAtPrice.amount)
     : null;
 
-  const primaryCollectionTitle =
+  const collectionTitles =
     node.collections?.edges
       ?.map((e) => e.node?.title?.trim())
-      .find((t): t is string => !!t && t.length > 0) ?? null;
+      .filter((t): t is string => !!t && t.length > 0) ?? [];
+  const collectionHandles =
+    node.collections?.edges
+      ?.map((e) => e.node?.handle?.trim())
+      .filter((t): t is string => !!t && t.length > 0) ?? [];
+  const primaryCollectionTitle = collectionTitles[0] ?? null;
 
   return {
     id: node.id,
@@ -537,11 +683,15 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     imageUrl: node.featuredImage?.url ?? null,
     imageAltText: node.featuredImage?.altText ?? null,
     images,
+    media,
     price: toNumber(variant?.price.amount ?? fallbackPrice.amount),
     compareAtPrice,
     currencyCode: variant?.price.currencyCode ?? fallbackPrice.currencyCode,
     productType: node.productType?.trim() || 'מוצרים',
+    vendor: node.vendor?.trim() || null,
     tags: node.tags ?? [],
+    collectionHandles,
+    collectionTitles,
     primaryCollectionTitle,
     variantId: variant?.id ?? null,
     variantTitle: variant?.title ?? null,
@@ -1107,6 +1257,7 @@ export async function fetchProductByHandle(handle: string): Promise<ShopifyProdu
     query GetProductByHandle($handle: String!) {
       productByHandle(handle: $handle) {
         ${PRODUCT_FIELDS}
+        ${PRODUCT_MEDIA_FIELDS}
       }
     }
   `;

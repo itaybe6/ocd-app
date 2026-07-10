@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import Toast from 'react-native-toast-message';
+import Toast from '../components/toast/Toast';
 import { safeNavigate } from '../navigation/navigationRef';
 import type { ProductFavoriteRow } from '../types/database';
 import { supabase } from '../lib/supabase';

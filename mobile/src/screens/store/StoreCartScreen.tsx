@@ -654,14 +654,13 @@ export function StoreCartScreen({
                       >
                         <View style={{ paddingHorizontal: 14, paddingVertical: 16 }}>
                           <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                            <View style={{ flexShrink: 0 }}>
-                              <CartQuantityPicker
-                                productId={item.product.id}
-                                quantity={item.quantity}
-                                disabled={isMutating}
-                                expanded={openQuantityLineId === item.id}
-                                onExpand={() => handleOpenQuantityLine(item.id)}
-                                onQuantityChange={handleCartQuantityChange}
+                            <View style={{ width: 76, height: 76 }}>
+                              <CartProductImage
+                                imageUrl={item.product.imageUrl}
+                                imageAltText={item.product.imageAltText}
+                                name={item.product.name}
+                                coverColor={item.product.coverColor}
+                                accentColor={item.product.accentColor}
                               />
                             </View>
 
@@ -701,13 +700,14 @@ export function StoreCartScreen({
                               </Text>
                             </View>
 
-                            <View style={{ width: 76, height: 76 }}>
-                              <CartProductImage
-                                imageUrl={item.product.imageUrl}
-                                imageAltText={item.product.imageAltText}
-                                name={item.product.name}
-                                coverColor={item.product.coverColor}
-                                accentColor={item.product.accentColor}
+                            <View style={{ flexShrink: 0 }}>
+                              <CartQuantityPicker
+                                productId={item.product.id}
+                                quantity={item.quantity}
+                                disabled={isMutating}
+                                expanded={openQuantityLineId === item.id}
+                                onExpand={() => handleOpenQuantityLine(item.id)}
+                                onQuantityChange={handleCartQuantityChange}
                               />
                             </View>
                           </View>

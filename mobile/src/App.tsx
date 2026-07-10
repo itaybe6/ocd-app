@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,6 +9,7 @@ import { AuthProvider, useAuth } from './state/AuthContext';
 import { CartProvider } from './state/CartContext';
 import { FavoritesProvider } from './state/FavoritesContext';
 import { LoadingOverlay } from './components/LoadingOverlay';
+import { ToastProvider } from './components/toast/Toast';
 import { LoadingProvider, useLoading } from './state/LoadingContext';
 import { registerForPushNotifications } from './lib/pushNotifications';
 import { safeNavigate } from './navigation/navigationRef';
@@ -45,7 +45,6 @@ function AppShell() {
     <View style={{ flex: 1 }}>
       <RootNavigator />
       <LoadingOverlay visible={isLoading} />
-      <Toast />
     </View>
   );
 }
@@ -54,19 +53,20 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <LoadingProvider>
-            <AuthProvider>
-              <FavoritesProvider>
-                <CartProvider>
-                  <AppShell />
-                </CartProvider>
-              </FavoritesProvider>
-            </AuthProvider>
-          </LoadingProvider>
-        </QueryClientProvider>
+        <ToastProvider>
+          <QueryClientProvider client={queryClient}>
+            <LoadingProvider>
+              <AuthProvider>
+                <FavoritesProvider>
+                  <CartProvider>
+                    <AppShell />
+                  </CartProvider>
+                </FavoritesProvider>
+              </AuthProvider>
+            </LoadingProvider>
+          </QueryClientProvider>
+        </ToastProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
-

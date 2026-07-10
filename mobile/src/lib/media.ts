@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import Toast from 'react-native-toast-message';
+import Toast from '../components/toast/Toast';
 
 type PickImageOptions = {
   /** 0–1; lower = smaller file from picker (upload path still recompresses in `uploadCompressedImage`). */

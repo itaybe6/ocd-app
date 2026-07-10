@@ -16,7 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Droplets,

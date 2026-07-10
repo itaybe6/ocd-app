@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../components/Screen';
 import { Card } from '../../components/ui/Card';

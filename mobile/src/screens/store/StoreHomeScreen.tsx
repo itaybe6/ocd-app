@@ -89,6 +89,9 @@ export type StoreSubcategory = {
   imageUrl?: string | null;
 };
 
+type SidebarMenuSection = StoreSideMenuSection;
+type SidebarChildItem = NonNullable<StoreSideMenuSection['children']>[number];
+
 /** Virtual strip chip: merged products from parent collection + every child */
 const STORE_CATEGORY_ALL_SUBS_ID = '__all_subcategories__';
 const EMPTY_SUBCATEGORIES: StoreSubcategory[] = [];
@@ -113,7 +116,10 @@ export type StoreProduct = {
   variantId: string;
   variantTitle: string | null;
   availableForSale: boolean;
+  vendor: string | null;
   tags: string[];
+  collectionHandles: string[];
+  collectionTitles: string[];
 };
 
 type CollectionCard = {
@@ -165,7 +171,7 @@ const HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT = 10;
 
 /* ─── Home banner video ────────────────────────────────────────────────────── */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const HOME_BANNER_VIDEO = require('../../../assets/brands/video/newvideo.mp4');
+const HOME_BANNER_VIDEO = require('../../../assets/brands/video/newvid2.mp4');
 const HOME_BANNER_VIDEO_WIDTH = 834;
 const HOME_BANNER_VIDEO_HEIGHT = 1112;
 
@@ -665,7 +671,10 @@ export function toStoreProduct(product: ShopifyProduct, index: number, subtitleO
     variantId: product.variantId ?? '',
     variantTitle: product.variantTitle,
     availableForSale: product.availableForSale,
+    vendor: product.vendor ?? null,
     tags: product.tags ?? [],
+    collectionHandles: product.collectionHandles ?? [],
+    collectionTitles: product.collectionTitles ?? [],
   };
 }
 
@@ -1094,7 +1103,6 @@ function buildSidebarSectionsFromMenu(menuItems: ShopifyMenuItem[]): SidebarMenu
               categoryId: item.collectionHandle,
               parentTitle: prefix,
               categoryDescription: item.collectionDescription,
-              categoryImageUrl: item.collectionImageUrl,
             },
           ]
         : [];
@@ -1344,7 +1352,7 @@ function StoreSubcategoryCircleStrip({
             justifyContent: 'flex-start',
             alignItems: 'flex-start',
             gap: 3,
-            paddingHorizontal: 0,
+            paddingHorizontal: 16,
             paddingBottom: 2,
           }}
         >
@@ -1450,7 +1458,7 @@ function renderBottomNavIcon(itemId: StoreBottomTabId, isActive: boolean, colorO
     return <Ionicons name={isActive ? 'home' : 'home-outline'} size={size} color={color} />;
   }
   if (itemId === 'ocdPlus') {
-    return <OcdPlusMark size={size} />;
+    return <OcdPlusMark size={size} variant="glyph" color={color} />;
   }
   const iconName =
     itemId === 'favorites'
@@ -1667,7 +1675,7 @@ export function StoreFloatingTabBar({
           compact
           focused={activeTab === 'ocdPlus'}
           onPress={() => onTabPress('ocdPlus')}
-          icon={renderBottomNavIcon('ocdPlus', activeTab === 'ocdPlus', activeTab === 'ocdPlus' ? '#FFFFFF' : '#9CA3AF', 28)}
+          icon={renderBottomNavIcon('ocdPlus', activeTab === 'ocdPlus', activeTab === 'ocdPlus' ? '#FFFFFF' : '#111111', 30)}
         />
       </View>
     </View>
@@ -1876,132 +1884,301 @@ function HomeBannerVideo({ screenWidth }: { screenWidth: number }) {
   );
 }
 
-/** שלושה כפתורים בשורה — סדר ויזואלי (ימין→שמאל): מבצעים · נמכרים · חדשים */
-const HOME_SEGMENT_ITEMS = [
-  { id: 'sale' as const, name: 'המבצעים שלנו' },
-  { id: 'recommended' as const, name: 'הכי נמכרים' },
-  { id: 'new' as const, name: 'הכי חדשים' },
+/** שלושה סקשנים של קרוסלות מוצרים בתחתית עמוד הבית — נמכרים · מבצעים · חדשים.
+ * בסגנון האתר: eyebrow קטן עם נקודה + כותרת גדולה.
+ */
+const HOME_HIGHLIGHT_SECTIONS = [
+  {
+    id: 'recommended' as const,
+    eyebrow: 'הכי נמכרים',
+    title: 'המוצרים שכולם אוהבים.',
+  },
+  {
+    id: 'sale' as const,
+    eyebrow: 'המבצעים שלנו',
+    title: 'הנחות ומחירים שחבל לפספס.',
+  },
+  {
+    id: 'new' as const,
+    eyebrow: 'חדש אצלנו',
+    title: 'המוצרים האחרונים שהצטרפו.',
+  },
 ] as const;
 
-const HOME_HIGHLIGHT_HEADLINES: Record<
-  'recommended' | 'sale' | 'new',
-  { title: string; subtitle: string }
-> = {
-  sale: {
-    title: 'המבצעים שלנו',
-    subtitle: 'הנחות ומחירים מיוחדים — עודכנו עכשיו',
-  },
-  recommended: {
-    title: 'הכי נמכרים',
-    subtitle: 'מה שהכי אוהבים אצלנו כרגע',
-  },
-  new: {
-    title: 'הכי חדשים',
-    subtitle: 'חידושים שהגיעו למדף לאחרונה',
-  },
-};
+type HomeHighlightSectionConfig = (typeof HOME_HIGHLIGHT_SECTIONS)[number];
 
-function HomeHighlightTabsStrip({
-  homeTab,
-  onTabChange,
+/** כרטיס מוצר אופקי לקרוסלות הסקשנים — אותו עיצוב כמו כרטיסי «מארזי ניקיון» */
+function HomeHighlightRailCard({
+  product,
+  remoteBrands,
+  isOcdPlusSubscriber,
+  favorite,
+  favoritePending,
+  onPress,
+  onToggleFavorite,
+  onOpenOcdPlusSheet,
 }: {
-  homeTab: 'recommended' | 'sale' | 'new';
-  onTabChange: (tab: 'recommended' | 'sale' | 'new') => void;
+  product: StoreProduct;
+  remoteBrands: RemoteBrand[];
+  isOcdPlusSubscriber: boolean;
+  favorite: boolean;
+  favoritePending: boolean;
+  onPress: () => void;
+  onToggleFavorite: () => void;
+  onOpenOcdPlusSheet: () => void;
 }) {
-  const { title, subtitle } = HOME_HIGHLIGHT_HEADLINES[homeTab];
+  /** אחוז הנחה לתגית הוורודה — כמו באתר */
+  const discountPct =
+    product.compareAtPrice && product.compareAtPrice > product.price
+      ? Math.round((1 - product.price / product.compareAtPrice) * 100)
+      : 0;
 
   return (
-    <View style={{ width: '100%', gap: 20 }}>
-      <View style={{ alignItems: 'center', paddingHorizontal: 4 }}>
-        <Text
-          style={{
-            color: '#111827',
-            fontSize: 22,
-            fontWeight: '900',
-            textAlign: 'center',
-            letterSpacing: 0.2,
-          }}
-        >
-          {title}
-        </Text>
-        <Text
-          style={{
-            color: '#9CA3AF',
-            fontSize: 13,
-            fontWeight: '600',
-            textAlign: 'center',
-            marginTop: 6,
-            lineHeight: 19,
-            paddingHorizontal: 8,
-          }}
-        >
-          {subtitle}
-        </Text>
-      </View>
+    <View
+      style={{
+        width: 160,
+        borderRadius: 18,
+        marginBottom: 6,
+        /* הקרוסלה גוללת ב-direction rtl — מחזירים ltr כדי שהטקסטים והמחירים יתיישרו כמו בגריד */
+        direction: 'ltr',
+        ...storeProductCardShadowStyle,
+      }}
+    >
+      <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', width: '100%' }}>
+        <Pressable onPress={onPress}>
+          <View style={{ height: 148, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
+            <ProductImage product={product} height={148} bottomRadius={0} />
+            <ProductBrandBadge product={product} brands={remoteBrands} />
+            <StoreProductCardQuantityControl product={product} closedSize={38} />
 
-      <View
-        style={{
-          width: '100%',
-          flexDirection: 'row-reverse',
-          direction: 'ltr',
-          gap: 6,
-          alignItems: 'stretch',
-        }}
-      >
-        {HOME_SEGMENT_ITEMS.map((item) => {
-          const isSelected = homeTab === item.id;
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isSelected }}
-              onPress={() => onTabChange(item.id)}
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              {({ pressed }) => (
+            <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+              <FavoriteToggleButton
+                active={favorite}
+                loading={favoritePending}
+                onPress={(event) => {
+                  event?.stopPropagation();
+                  onToggleFavorite();
+                }}
+                size={32}
+              />
+            </View>
+
+            {!!product.badge && (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 48,
+                  right: 10,
+                  backgroundColor: '#111827',
+                  borderRadius: 999,
+                  paddingHorizontal: 7,
+                  paddingVertical: 3,
+                  zIndex: 1,
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 8, fontWeight: '800' }}>
+                  {product.badge}
+                </Text>
+              </View>
+            )}
+
+            {discountPct > 0 && (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: product.badge ? 74 : 48,
+                  right: 10,
+                  backgroundColor: '#EC1A64',
+                  borderRadius: 999,
+                  paddingHorizontal: 7,
+                  paddingVertical: 3,
+                  zIndex: 1,
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 8, fontWeight: '800' }}>
+                  -{discountPct}%
+                </Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
+        <Pressable onPress={onPress}>
+          <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24, width: '100%', alignSelf: 'stretch' }}>
+            <View style={{ minHeight: STORE_BUNDLE_CARD_BODY_MIN_HEIGHT, width: '100%' }}>
+              <View style={{ width: '100%', alignItems: 'flex-end' }}>
                 <View
                   style={{
-                    minHeight: 36,
-                    flexGrow: 1,
-                    paddingVertical: 7,
-                    paddingHorizontal: 6,
-                    borderRadius: 999,
-                    overflow: 'visible',
-                    justifyContent: 'center',
+                    flexDirection: 'row-reverse',
                     alignItems: 'center',
-                    backgroundColor: isSelected ? '#000000' : '#FFFFFF',
-                    borderWidth: isSelected ? 0 : 1,
-                    borderColor: isSelected ? 'transparent' : '#E5E7EB',
-                    opacity: pressed ? 0.92 : 1,
-                    ...storeProductCardShadowStyle,
-                    shadowColor: '#0F172A',
-                    shadowOpacity: isSelected ? 0.28 : 0.2,
-                    shadowRadius: isSelected ? 14 : 12,
-                    shadowOffset: { width: 0, height: isSelected ? 5 : 4 },
-                    elevation: isSelected ? 8 : 6,
+                    gap: 6,
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-start',
+                    maxWidth: '100%',
                   }}
                 >
                   <Text
-                    numberOfLines={2}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.78}
                     style={{
-                      fontSize: 11,
-                      lineHeight: 14,
-                      fontWeight: isSelected ? '700' : '600',
-                      letterSpacing: 0.15,
-                      color: isSelected ? '#FFFFFF' : '#374151',
-                      textAlign: 'center',
+                      color: '#111827',
+                      fontSize: 14,
+                      fontWeight: '900',
+                      textAlign: 'right',
+                      writingDirection: 'rtl',
                     }}
                   >
-                    {item.name}
+                    {formatOcdPrice(product.price)}
                   </Text>
+                  {!!product.compareAtPrice && (
+                    <Text
+                      style={{
+                        color: '#9CA3AF',
+                        fontSize: 11,
+                        fontWeight: '600',
+                        textDecorationLine: 'line-through',
+                        writingDirection: 'rtl',
+                      }}
+                    >
+                      {formatOcdPrice(product.compareAtPrice)}
+                    </Text>
+                  )}
                 </View>
+              </View>
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: '#111827',
+                  fontSize: 12,
+                  lineHeight: 17,
+                  fontWeight: '700',
+                  textAlign: 'right',
+                  writingDirection: 'rtl',
+                  marginTop: 4,
+                }}
+              >
+                {product.name}
+              </Text>
+              {!!product.subtitle ? (
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: '#9AA3B2',
+                    fontSize: 10,
+                    textAlign: 'right',
+                    writingDirection: 'rtl',
+                    marginTop: 2,
+                  }}
+                >
+                  {product.subtitle}
+                </Text>
+              ) : (
+                <View style={{ marginTop: 2, height: 14 }} />
               )}
-            </Pressable>
-          );
-        })}
+            </View>
+          </View>
+        </Pressable>
       </View>
+      <View
+        style={{
+          position: 'absolute',
+          bottom: -14,
+          left: 0,
+          right: 0,
+          alignItems: 'center',
+          zIndex: 10,
+        }}
+      >
+        <OcdPlusFloatingBadge
+          regularPrice={product.price}
+          isSubscriber={isOcdPlusSubscriber}
+          onPress={onOpenOcdPlusSheet}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** סקשן שלם בסגנון האתר: eyebrow + כותרת גדולה + קרוסלה אופקית */
+function HomeHighlightRailSection({
+  section,
+  products,
+  remoteBrands,
+  isOcdPlusSubscriber,
+  onProductPress,
+  isFavorite,
+  isFavoritePending,
+  onToggleFavorite,
+  onOpenOcdPlusSheet,
+}: {
+  section: HomeHighlightSectionConfig;
+  products: StoreProduct[];
+  remoteBrands: RemoteBrand[];
+  isOcdPlusSubscriber: boolean;
+  onProductPress?: (handle: string) => void;
+  isFavorite: (productId: string) => boolean;
+  isFavoritePending: (productId: string) => boolean;
+  onToggleFavorite: (product: StoreProduct) => void;
+  onOpenOcdPlusSheet: () => void;
+}) {
+  if (!products.length) return null;
+
+  return (
+    <View style={{ marginTop: 36 }}>
+      <View style={{ marginBottom: 18, paddingHorizontal: 4 }}>
+        {/* Eyebrow — תגית קטנה עם נקודה, כמו באתר */}
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+          <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: '#111827' }} />
+          <Text
+            style={{
+              color: '#6B7280',
+              fontSize: 11,
+              fontWeight: '700',
+              letterSpacing: 2.5,
+              textAlign: 'right',
+            }}
+          >
+            {section.eyebrow}
+          </Text>
+        </View>
+
+        <Text
+          style={{
+            color: '#111827',
+            fontSize: 26,
+            lineHeight: 34,
+            fontWeight: '900',
+            textAlign: 'right',
+            letterSpacing: 0.2,
+            marginTop: 8,
+          }}
+        >
+          {section.title}
+        </Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginHorizontal: -12, direction: 'rtl' }}
+        contentContainerStyle={{
+          flexDirection: 'row',
+          gap: 12,
+          paddingHorizontal: 12,
+          paddingBottom: 40,
+        }}
+      >
+        {products.map((product) => (
+          <HomeHighlightRailCard
+            key={`${section.id}-${product.id}`}
+            product={product}
+            remoteBrands={remoteBrands}
+            isOcdPlusSubscriber={isOcdPlusSubscriber}
+            favorite={isFavorite(product.id)}
+            favoritePending={isFavoritePending(product.id)}
+            onPress={() => onProductPress?.(product.handle)}
+            onToggleFavorite={() => onToggleFavorite(product)}
+            onOpenOcdPlusSheet={onOpenOcdPlusSheet}
+          />
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -2009,6 +2186,23 @@ function HomeHighlightTabsStrip({
 /** Bento: חוזר 2 → 3 → 2 (בלי שורת full-width).
  * בשורות עם 2 כרטיסים — אחד צר (~40%) ואחד רחב (~60%); השורה השנייה במחזור משקפת.
  */
+const HOME_CATEGORY_HANDLE_OVERRIDES: Record<
+  string,
+  {
+    label: string;
+    localCover?: number;
+    subcategories?: ReadonlyArray<{ id: string; title: string }>;
+  }
+> = {
+  'בישום-חללים': { label: 'בישום חללים', localCover: require('../../../assets/cat-1.webp') },
+  'חומרי-ניקיון': { label: 'מוצרי ניקיון', localCover: require('../../../assets/cat-6.webp') },
+  'מרככי-כביסה-וטקסטיל': { label: 'מרככי כביסה וטקסטיל', localCover: require('../../../assets/cat-3.webp') },
+  'אביזרי-נקיון': { label: 'אביזרי ניקיון', localCover: require('../../../assets/cat-5.webp') },
+  'עיצוב-הבית': { label: 'עיצוב הבית', localCover: require('../../../assets/cat-4.webp') },
+  'מבצעי-פסח': { label: 'מארזים משתלמים', localCover: require('../../../assets/cat-2.webp') },
+  'מארזי-ניקיון-משתלמים-copy': { label: 'מוצרים לבית', localCover: require('../../../assets/cat-7.webp') },
+};
+
 const BENTO_PATTERN = [2, 3, 2] as const;
 
 /** גובה תמונה לפי גודל הכרטיס */
@@ -2354,7 +2548,6 @@ export function StoreHomeScreen({
   const { itemCount } = useCart();
   const { width: windowWidth } = useWindowDimensions();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
-  const { itemCount } = useCart();
   const [allProducts, setAllProducts] = useState<StoreProduct[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<StoreProduct[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<StoreProduct[]>([]);
@@ -2371,7 +2564,6 @@ export function StoreHomeScreen({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [bundleProducts, setBundleProducts] = useState<StoreProduct[]>([]);
   const [bundlesLoading, setBundlesLoading] = useState(false);
-  const [homeTab, setHomeTab] = useState<'recommended' | 'sale' | 'new'>('recommended');
   const [homeTabProducts, setHomeTabProducts] = useState<Record<'recommended' | 'sale' | 'new', StoreProduct[]>>({
     recommended: [],
     sale: [],
@@ -2383,6 +2575,12 @@ export function StoreHomeScreen({
   const [selectedHomeSubcategoryId, setSelectedHomeSubcategoryId] = useState<string>(STORE_CATEGORY_ALL_SUBS_ID);
   /** תתי־קטגוריות מהתפריט המרוחק */
   const [homeSubcategoryPreviewUrls, setHomeSubcategoryPreviewUrls] = useState<Record<string, string | undefined>>({});
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [homeStripSubcategoryPreviewUrls, setHomeStripSubcategoryPreviewUrls] = useState<
+    Record<string, string | undefined>
+  >({});
+  const [homeStripExpandedCategoryId, setHomeStripExpandedCategoryId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const homeSubcategoryTabsRef = useRef<ScrollView | null>(null);
   const searchInputRef = useRef<TextInput | null>(null);
@@ -2627,11 +2825,18 @@ export function StoreHomeScreen({
       `${selectedCategory}\0${STORE_CATEGORY_ALL_SUBS_ID}\0${effectiveHomeDirectSubcategories.map((s) => s.id).join('\0')}`,
     [selectedCategory, effectiveHomeDirectSubcategories],
   );
-  const homeHighlightProducts = useMemo(() => {
-    const list = homeTabProducts[homeTab];
-    if (list.length > 0) return list.slice(0, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT);
-    return allProducts.slice(0, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT);
-  }, [homeTab, homeTabProducts, allProducts]);
+  /** מוצרים לשלושת סקשני הקרוסלות; «הכי נמכרים» נופל חזרה לקטלוג הכללי אם הטעינה הייעודית נכשלה */
+  const homeSectionProducts = useMemo(
+    () => ({
+      recommended: (homeTabProducts.recommended.length ? homeTabProducts.recommended : allProducts).slice(
+        0,
+        HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT,
+      ),
+      sale: homeTabProducts.sale.slice(0, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT),
+      new: homeTabProducts.new.slice(0, HOME_HIGHLIGHT_TAB_PRODUCT_LIMIT),
+    }),
+    [homeTabProducts, allProducts],
+  );
 
   useEffect(() => {
     setSelectedHomeSubcategoryId(STORE_CATEGORY_ALL_SUBS_ID);
@@ -3106,7 +3311,7 @@ export function StoreHomeScreen({
                 }}
               >
                 <ActivityIndicator color="#111827" />
-                <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים מ-Shopify...</Text>
+                <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים...</Text>
               </View>
             )}
 
@@ -3128,7 +3333,7 @@ export function StoreHomeScreen({
               <>
                 <View style={{ alignItems: 'flex-end', gap: 4, marginTop: 8 }}>
                   <Text style={{ color: '#111827', fontSize: 24, fontWeight: '900' }}>כל המוצרים</Text>
-                  <Text style={{ color: '#B1B6C1', fontSize: 11 }}>all products from your Shopify store</Text>
+                  <Text style={{ color: '#B1B6C1', fontSize: 11 }}>כל המוצרים בחנות</Text>
                 </View>
 
             <View style={{ gap: 12 }}>
@@ -3417,31 +3622,38 @@ export function StoreHomeScreen({
               );
             })()}
 
-            {/* ─── Bundles section — visible on all home tab regardless of categories ── */}
+            {/* ─── Bundles section — אותו סגנון כותרת כמו סקשני ההיילייט ── */}
             {!loading && (bundlesLoading || displayBundleProducts.length > 0) && (
-              <View style={{ marginTop: 32 }}>
-                <Text
-                  style={{
-                    color: '#111827',
-                    fontSize: 22,
-                    fontWeight: '900',
-                    textAlign: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  מארזי ניקיון משתלמים
-                </Text>
-                <Text
-                  style={{
-                    color: '#9CA3AF',
-                    fontSize: 13,
-                    fontWeight: '500',
-                    textAlign: 'center',
-                    marginBottom: 20,
-                  }}
-                >
-                  הכנו לכם מארזי ניקיון שווים במיוחד
-                </Text>
+              <View style={{ marginTop: 36 }}>
+                <View style={{ marginBottom: 18, paddingHorizontal: 4 }}>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+                    <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: '#111827' }} />
+                    <Text
+                      style={{
+                        color: '#6B7280',
+                        fontSize: 11,
+                        fontWeight: '700',
+                        letterSpacing: 2.5,
+                        textAlign: 'right',
+                      }}
+                    >
+                      המארזים שלנו
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      color: '#111827',
+                      fontSize: 26,
+                      lineHeight: 34,
+                      fontWeight: '900',
+                      textAlign: 'right',
+                      letterSpacing: 0.2,
+                      marginTop: 8,
+                    }}
+                  >
+                    מארזים משתלמים, מוכנים להזמנה.
+                  </Text>
+                </View>
 
                 {bundlesLoading ? (
                   <View style={{ paddingVertical: 24, alignItems: 'center' }}>
@@ -3460,348 +3672,62 @@ export function StoreHomeScreen({
                     }}
                   >
                     {displayBundleProducts.map((product) => (
-                      <View
+                      <HomeHighlightRailCard
                         key={`bundle-${product.id}`}
-                        style={{
-                          width: 160,
-                          borderRadius: 18,
-                          marginBottom: 6,
-                          /* ScrollView uses direction 'rtl' for swipe — reset card layout so prices/text match grid cards */
-                          direction: 'ltr',
-                          ...storeProductCardShadowStyle,
+                        product={product}
+                        remoteBrands={remoteBrands}
+                        isOcdPlusSubscriber={isOcdPlusSubscriber}
+                        favorite={isFavorite(product.id)}
+                        favoritePending={isFavoritePending(product.id)}
+                        onPress={() => onProductPress?.(product.handle)}
+                        onToggleFavorite={() => {
+                          void toggleFavorite(favoriteInputFromStoreProduct(product));
                         }}
-                      >
-                        <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', width: '100%' }}>
-                          <Pressable onPress={() => onProductPress?.(product.handle)}>
-                            <View style={{ height: 148, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
-                              <ProductImage product={product} height={148} bottomRadius={0} />
-                              <ProductBrandBadge product={product} brands={remoteBrands} />
-                              <StoreProductCardQuantityControl product={product} closedSize={38} />
-
-                              <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
-                                <FavoriteToggleButton
-                                  active={isFavorite(product.id)}
-                                  loading={isFavoritePending(product.id)}
-                                  onPress={(event) => {
-                                    event?.stopPropagation();
-                                    void toggleFavorite(favoriteInputFromStoreProduct(product));
-                                  }}
-                                  size={32}
-                                />
-                              </View>
-
-                              {!!product.badge && (
-                                <View
-                                  style={{
-                                    position: 'absolute',
-                                    top: 48,
-                                    right: 10,
-                                    backgroundColor: '#111827',
-                                    borderRadius: 999,
-                                    paddingHorizontal: 7,
-                                    paddingVertical: 3,
-                                    zIndex: 1,
-                                  }}
-                                >
-                                  <Text style={{ color: '#FFFFFF', fontSize: 8, fontWeight: '800' }}>
-                                    {product.badge}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </Pressable>
-                          <Pressable onPress={() => onProductPress?.(product.handle)}>
-                            <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24, width: '100%', alignSelf: 'stretch' }}>
-                              <View style={{ minHeight: STORE_BUNDLE_CARD_BODY_MIN_HEIGHT, width: '100%' }}>
-                                <View style={{ width: '100%', alignItems: 'flex-end' }}>
-                                  <View
-                                    style={{
-                                      flexDirection: 'row-reverse',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      flexWrap: 'wrap',
-                                      justifyContent: 'flex-start',
-                                      maxWidth: '100%',
-                                    }}
-                                  >
-                                    <Text
-                                      style={{
-                                        color: '#111827',
-                                        fontSize: 14,
-                                        fontWeight: '900',
-                                        textAlign: 'right',
-                                        writingDirection: 'rtl',
-                                      }}
-                                    >
-                                      {formatOcdPrice(product.price)}
-                                    </Text>
-                                    {!!product.compareAtPrice && (
-                                      <Text
-                                        style={{
-                                          color: '#9CA3AF',
-                                          fontSize: 11,
-                                          fontWeight: '600',
-                                          textDecorationLine: 'line-through',
-                                          writingDirection: 'rtl',
-                                        }}
-                                      >
-                                        {formatOcdPrice(product.compareAtPrice)}
-                                      </Text>
-                                    )}
-                                  </View>
-                                </View>
-                                <Text
-                                  numberOfLines={2}
-                                  style={{
-                                    color: '#111827',
-                                    fontSize: 12,
-                                    lineHeight: 17,
-                                    fontWeight: '700',
-                                    textAlign: 'right',
-                                    writingDirection: 'rtl',
-                                    marginTop: 4,
-                                  }}
-                                >
-                                  {product.name}
-                                </Text>
-                                {!!product.subtitle ? (
-                                  <Text
-                                    numberOfLines={1}
-                                    style={{
-                                      color: '#9AA3B2',
-                                      fontSize: 10,
-                                      textAlign: 'right',
-                                      writingDirection: 'rtl',
-                                      marginTop: 2,
-                                    }}
-                                  >
-                                    {product.subtitle}
-                                  </Text>
-                                ) : (
-                                  <View style={{ marginTop: 2, height: 14 }} />
-                                )}
-                              </View>
-                            </View>
-                          </Pressable>
-                        </View>
-                        <View
-                          style={{
-                            position: 'absolute',
-                            bottom: -14,
-                            left: 0,
-                            right: 0,
-                            alignItems: 'center',
-                            zIndex: 10,
-                          }}
-                        >
-                          <OcdPlusFloatingBadge
-                            regularPrice={product.price}
-                            isSubscriber={isOcdPlusSubscriber}
-                            onPress={openOcdPlusSubscribeSheet}
-                          />
-                        </View>
-                      </View>
+                        onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
+                      />
                     ))}
                   </ScrollView>
                 )}
               </View>
             )}
 
-            {/* טאבי המבצעים / הכי נמכרים / חדשים + גריד מוצרים — מתחת למארזי ניקיון, בתחתית התוכן */}
-            <View style={{ marginTop: 28 }}>
-              <HomeHighlightTabsStrip homeTab={homeTab} onTabChange={setHomeTab} />
+            {/* שלושה סקשנים של קרוסלות — הכי נמכרים / המבצעים שלנו / הכי חדשים */}
+            {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
 
-              {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
-
-              {homeTabLoading ? (
-                <View
-                  style={{
-                    backgroundColor: '#F8F8F8',
-                    borderRadius: 16,
-                    padding: 18,
-                    flexDirection: 'row-reverse',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    marginTop: 12,
+            {homeTabLoading ? (
+              <View
+                style={{
+                  backgroundColor: '#F8F8F8',
+                  borderRadius: 16,
+                  padding: 18,
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  marginTop: 32,
+                }}
+              >
+                <ActivityIndicator color="#111827" />
+                <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים...</Text>
+              </View>
+            ) : (
+              HOME_HIGHLIGHT_SECTIONS.map((section) => (
+                <HomeHighlightRailSection
+                  key={section.id}
+                  section={section}
+                  products={homeSectionProducts[section.id]}
+                  remoteBrands={remoteBrands}
+                  isOcdPlusSubscriber={isOcdPlusSubscriber}
+                  onProductPress={onProductPress}
+                  isFavorite={isFavorite}
+                  isFavoritePending={isFavoritePending}
+                  onToggleFavorite={(product) => {
+                    void toggleFavorite(favoriteInputFromStoreProduct(product));
                   }}
-                >
-                  <ActivityIndicator color="#111827" />
-                  <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים...</Text>
-                </View>
-              ) : !!homeHighlightProducts.length ? (
-                <View style={{ gap: 14, marginTop: 12 }}>
-                  <View
-                    style={{
-                      flexDirection: 'row-reverse',
-                      flexWrap: 'wrap',
-                      alignItems: 'stretch',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    {homeHighlightProducts.map((product) => (
-                      <View
-                        key={`home-highlight-${homeTab}-${product.id}`}
-                        style={{
-                          width: '48%',
-                          alignSelf: 'stretch',
-                          marginBottom: 18,
-                          borderRadius: 18,
-                          ...storeProductCardShadowStyle,
-                        }}
-                      >
-                        <View
-                          style={{
-                            flex: 1,
-                            borderRadius: 18,
-                            overflow: 'hidden',
-                            backgroundColor: '#FFFFFF',
-                          }}
-                        >
-                          <Pressable onPress={() => onProductPress?.(product.handle)}>
-                            {/* Image area */}
-                            <View
-                              style={{
-                                height: 160,
-                                backgroundColor: '#F4F6FA',
-                                overflow: 'hidden',
-                              }}
-                            >
-                              <ProductImage product={product} height={160} bottomRadius={0} />
-                              <ProductBrandBadge product={product} brands={remoteBrands} />
-
-                              <StoreProductCardQuantityControl product={product} closedSize={44} />
-
-                              {/* Favorite — כמו בעמוד קטגוריה */}
-                              <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
-                                <FavoriteToggleButton
-                                  active={isFavorite(product.id)}
-                                  loading={isFavoritePending(product.id)}
-                                  onPress={(event) => {
-                                    event?.stopPropagation();
-                                    void toggleFavorite(favoriteInputFromStoreProduct(product));
-                                  }}
-                                  size={32}
-                                />
-                              </View>
-
-                              {/* Badge — מתחת ללב */}
-                              {!!product.badge && (
-                                <View
-                                  style={{
-                                    position: 'absolute',
-                                    top: 48,
-                                    right: 10,
-                                    backgroundColor: '#111827',
-                                    borderRadius: 999,
-                                    paddingHorizontal: 8,
-                                    paddingVertical: 4,
-                                    zIndex: 1,
-                                  }}
-                                >
-                                  <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
-                                    {product.badge}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </Pressable>
-
-                          <View style={{ flex: 1, minHeight: 0 }}>
-                            <Pressable
-                              onPress={() => onProductPress?.(product.handle)}
-                              style={{ flex: 1 }}
-                            >
-                              <View
-                                style={{
-                                  flex: 1,
-                                  paddingHorizontal: 12,
-                                  paddingTop: 10,
-                                  paddingBottom: 26,
-                                  justifyContent: 'flex-start',
-                                }}
-                              >
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <Text
-                                    style={{
-                                      color: '#111827',
-                                      fontSize: 16,
-                                      fontWeight: '900',
-                                      textAlign: 'right',
-                                    }}
-                                  >
-                                    {formatOcdPrice(product.price)}
-                                  </Text>
-                                  {!!product.compareAtPrice && (
-                                    <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', textDecorationLine: 'line-through' }}>
-                                      {formatOcdPrice(product.compareAtPrice)}
-                                    </Text>
-                                  )}
-                                </View>
-                                <Text
-                                  numberOfLines={2}
-                                  style={{
-                                    color: '#111827',
-                                    fontSize: 13,
-                                    lineHeight: 18,
-                                    fontWeight: '700',
-                                    textAlign: 'right',
-                                    marginTop: 4,
-                                  }}
-                                >
-                                  {product.name}
-                                </Text>
-                                {!!product.subtitle ? (
-                                  <Text
-                                    numberOfLines={1}
-                                    style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
-                                  >
-                                    {product.subtitle}
-                                  </Text>
-                                ) : (
-                                  <View style={{ marginTop: 2, height: 14 }} />
-                                )}
-                              </View>
-                            </Pressable>
-                          </View>
-                        </View>
-
-                        {/* ── Floating OCD+ badge ── */}
-                        <View
-                          style={{
-                            position: 'absolute',
-                            bottom: -16,
-                            left: 0,
-                            right: 0,
-                            alignItems: 'center',
-                            zIndex: 10,
-                          }}
-                        >
-                          <OcdPlusFloatingBadge
-                            regularPrice={product.price}
-                            isSubscriber={isOcdPlusSubscriber}
-                            onPress={openOcdPlusSubscribeSheet}
-                          />
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ) : !loading ? (
-                <View
-                  style={{
-                    backgroundColor: '#F8F8F8',
-                    borderRadius: 16,
-                    padding: 16,
-                    alignItems: 'flex-end',
-                    marginTop: 12,
-                  }}
-                >
-                  <Text style={{ color: '#111827', fontWeight: '800' }}>לא נמצאו מוצרים להצגה כאן כרגע</Text>
-                </View>
-              ) : null}
-            </View>
+                  onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
+                />
+              ))
+            )}
 
             {selectedCategory === 'all' && !loading && !categoryLoading && !visibleProducts.length && (
               <View
@@ -3952,6 +3878,17 @@ export function StoreCategoryScreen({
         setLoading(true);
         setError(null);
 
+        /* מזהים לוגיים מהסקשנים בעמוד הבית — לא קולקציות אמיתיות ב-Shopify */
+        if (categoryId === HOME_TAB_RECOMMENDED_HANDLE || categoryId === HOME_TAB_NEW_HANDLE) {
+          const pseudoProducts =
+            categoryId === HOME_TAB_RECOMMENDED_HANDLE
+              ? await fetchProducts()
+              : await fetchNewestProducts();
+          if (!isMounted) return;
+          setProducts(pseudoProducts.map((product, index) => toStoreProduct(product, index, categoryTitle, categoryId)));
+          return;
+        }
+
         if (!subcategories?.length) {
           const collectionProducts = await fetchCollectionProducts(categoryId);
           if (!isMounted) return;
@@ -4017,191 +3954,115 @@ export function StoreCategoryScreen({
     });
   }, [normalizedQuery, products]);
 
-  const categoryHeaderScrollY = useSharedValue(0);
-  const [categoryStickyInteractive, setCategoryStickyInteractive] = useState(false);
-
-  const setStickyFromScroll = useCallback((stuck: boolean) => {
-    setCategoryStickyInteractive(stuck);
-  }, []);
-
-  useAnimatedReaction(
-    () => categoryHeaderScrollY.value > 20,
-    (isStuck, prev) => {
-      if (prev !== isStuck) {
-        runOnJS(setStickyFromScroll)(isStuck);
-      }
-    },
-  );
-
-  const categoryScrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      categoryHeaderScrollY.value = e.contentOffset.y;
-    },
-  });
-
-  const categoryStickyHeaderShellStyle = useAnimatedStyle(() => {
-    const bg = interpolateColor(
-      categoryHeaderScrollY.value,
-      [0, 28, 52],
-      ['rgba(255,255,255,0)', 'rgba(255,255,255,0.92)', '#FFFFFF'],
-    );
-    const borderRgba = interpolateColor(
-      categoryHeaderScrollY.value,
-      [24, 48],
-      ['rgba(232,236,242,0)', 'rgba(232,236,242,1)'],
-    );
-    return {
-      backgroundColor: bg,
-      borderBottomColor: borderRgba,
-      borderBottomWidth: interpolate(
-        categoryHeaderScrollY.value,
-        [28, 48],
-        [0, 1],
-        Extrapolation.CLAMP,
-      ),
-      shadowOpacity: interpolate(
-        categoryHeaderScrollY.value,
-        [36, 58],
-        [0, 0.09],
-        Extrapolation.CLAMP,
-      ),
-      elevation: interpolate(categoryHeaderScrollY.value, [36, 58], [0, 5], Extrapolation.CLAMP),
-    };
-  });
-
-  const categoryStickyHeaderInnerStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(categoryHeaderScrollY.value, [6, 32], [0, 1], Extrapolation.CLAMP),
-    transform: [
-      {
-        translateY: interpolate(
-          categoryHeaderScrollY.value,
-          [6, 28],
-          [10, 0],
-          Extrapolation.CLAMP,
-        ),
-      },
-    ],
-  }));
-
-  const renderCategoryHeaderRow = useCallback(
-    () => (
-      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 2 }}>
-        <View style={{ width: 44, alignItems: 'center' }}>
-          {onOpenCart ? (
-            <Pressable
-              onPress={onOpenCart}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                backgroundColor: '#FFFFFF',
-                borderWidth: 1,
-                borderColor: '#E8ECF2',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <ShoppingCart size={17} color="#111827" />
-              {itemCount > 0 && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: -3,
-                    right: -3,
-                    minWidth: 17,
-                    height: 17,
-                    borderRadius: 9,
-                    paddingHorizontal: 4,
-                    backgroundColor: '#111827',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '900' }}>{itemCount}</Text>
-                </View>
-              )}
-            </Pressable>
-          ) : (
-            <View style={{ width: 40, height: 40 }} />
-          )}
-        </View>
-
-        <Text
-          numberOfLines={2}
-          style={{
-            flex: 1,
-            color: '#0F172A',
-            fontSize: 19,
-            fontWeight: '800',
-            lineHeight: 24,
-            textAlign: 'center',
-            paddingHorizontal: 8,
-          }}
-        >
-          {categoryTitle}
-        </Text>
-
-        <View style={{ width: 44, alignItems: 'center' }}>
-          <Pressable
-            onPress={onBack}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: '#FFFFFF',
-              borderWidth: 1,
-              borderColor: '#E8ECF2',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text style={{ color: '#111827', fontSize: 17, fontWeight: '700' }}>←</Text>
-          </Pressable>
-        </View>
-      </View>
-    ),
-    [categoryTitle, itemCount, onOpenCart, onBack],
-  );
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <Animated.View
-          pointerEvents={categoryStickyInteractive ? 'box-none' : 'none'}
-          style={[
-            {
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 20,
-              paddingTop: insets.top,
-              shadowColor: '#0F172A',
-              shadowRadius: 14,
-              shadowOffset: { width: 0, height: 4 },
-            },
-            categoryStickyHeaderShellStyle,
-          ]}
+        <View
+          style={{
+            backgroundColor: colors.bg,
+            paddingTop: insets.top,
+            borderBottomWidth: 1,
+            borderBottomColor: '#F0F0F0',
+          }}
         >
-          <Animated.View style={[{ paddingHorizontal: 16, paddingBottom: 6 }, categoryStickyHeaderInnerStyle]}>
-            {renderCategoryHeaderRow()}
-          </Animated.View>
-        </Animated.View>
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+            }}
+          >
+            <View style={{ width: 44, alignItems: 'flex-end' }}>
+              <Pressable
+                onPress={onBack}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="חזרה"
+                style={({ pressed }) => ({
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.72 : 1,
+                })}
+              >
+                <Ionicons name="chevron-forward" size={22} color="#111827" />
+              </Pressable>
+            </View>
 
-        <Animated.ScrollView
+            <Text
+              numberOfLines={2}
+              style={{
+                flex: 1,
+                color: '#111827',
+                fontSize: 17,
+                fontWeight: '900',
+                lineHeight: 22,
+                textAlign: 'center',
+                paddingHorizontal: 8,
+              }}
+            >
+              {categoryTitle}
+            </Text>
+
+            <View style={{ width: 44, alignItems: 'flex-start' }}>
+              {onOpenCart ? (
+                <Pressable
+                  onPress={onOpenCart}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="עגלת קניות"
+                  style={({ pressed }) => ({
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.72 : 1,
+                  })}
+                >
+                  <View style={{ position: 'relative' }}>
+                    <ShoppingCart size={22} color="#111827" strokeWidth={2} />
+                    {itemCount > 0 ? (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          top: -6,
+                          right: -8,
+                          minWidth: 16,
+                          height: 16,
+                          borderRadius: 8,
+                          paddingHorizontal: 4,
+                          backgroundColor: '#111827',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '900' }}>{itemCount}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ) : (
+                <View style={{ width: 40, height: 40 }} />
+              )}
+            </View>
+          </View>
+        </View>
+
+        <ScrollView
           style={{ flex: 1, backgroundColor: colors.bg }}
           contentContainerStyle={{
             paddingHorizontal: 16,
-            paddingTop: insets.top + 4,
+            paddingTop: 16,
             paddingBottom: contentPaddingBottom,
           }}
           showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onScroll={categoryScrollHandler}
         >
           <View style={{ gap: 16 }}>
-            {renderCategoryHeaderRow()}
-
             <View style={{ gap: 12 }}>
               <View
                 style={{
@@ -4213,10 +4074,8 @@ export function StoreCategoryScreen({
                 <View
                   style={{
                     flex: 1,
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: '#F3F4F6',
                     borderRadius: 22,
-                    borderWidth: 1,
-                    borderColor: '#E2E8F0',
                     paddingHorizontal: 14,
                     paddingVertical: 12,
                     flexDirection: 'row-reverse',
@@ -4231,7 +4090,7 @@ export function StoreCategoryScreen({
                     onChangeText={setQuery}
                     placeholder="חיפוש בתוך תת הקטגוריה"
                     placeholderTextColor="#B7BDC8"
-                    style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13, backgroundColor: 'transparent' }}
+                    style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 13, backgroundColor: '#F3F4F6' }}
                   />
                 </View>
                 {subcategoriesWithAll.length > 0 ? (
@@ -4250,12 +4109,10 @@ export function StoreCategoryScreen({
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: '#F3F4F6',
-                      borderWidth: 1,
-                      borderColor: subcategoryStripOpen ? '#D1D5DB' : '#E8ECF2',
                     }}
                   >
                     <Ionicons
-                      name="funnel-outline"
+                      name={subcategoryStripOpen ? 'chevron-up' : 'chevron-down'}
                       size={22}
                       color="#111827"
                     />
@@ -4471,7 +4328,7 @@ export function StoreCategoryScreen({
             </View>
           )}
           </View>
-        </Animated.ScrollView>
+        </ScrollView>
         <StoreFloatingTabBar activeTab={null} onTabPress={onTabPress} />
       </View>
     </View>
@@ -4688,7 +4545,7 @@ export function StoreProductScreen({
                   paddingVertical: 8,
                 }}
               >
-                <Text style={{ color: '#9A6B16', fontWeight: '800', fontSize: 11 }}>קטלוג Shopify</Text>
+                <Text style={{ color: '#9A6B16', fontWeight: '800', fontSize: 11 }}>קטלוג החנות</Text>
               </View>
               <View
                 style={{

@@ -11,7 +11,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarDays, Droplets, Eye, Play, Search } from 'lucide-react-native';
 import { Entypo } from '@expo/vector-icons';

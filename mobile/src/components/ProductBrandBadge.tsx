@@ -3,7 +3,12 @@ import { Image, Text, View } from 'react-native';
 import { findProductBrand, normalizeBrandImageUrl, resolveBrandTone, type RemoteBrand } from '../lib/brands';
 
 type ProductBrandBadgeProps = {
-  product: { name: string; tags?: string[] };
+  product: {
+    name?: string;
+    tags?: string[];
+    collectionHandles?: string[];
+    collectionTitles?: string[];
+  };
   brands: RemoteBrand[];
   size?: number;
   bottom?: number;
@@ -38,8 +43,16 @@ export function ProductBrandBadge({
   zIndex = 3,
 }: ProductBrandBadgeProps) {
   const brand = useMemo(
-    () => findProductBrand({ title: product.name, tags: product.tags }, brands),
-    [brands, product.name, product.tags],
+    () =>
+      findProductBrand(
+        {
+          tags: product.tags,
+          collectionHandles: product.collectionHandles,
+          collectionTitles: product.collectionTitles,
+        },
+        brands,
+      ),
+    [brands, product.tags, product.collectionHandles, product.collectionTitles],
   );
 
   if (!brand) return null;

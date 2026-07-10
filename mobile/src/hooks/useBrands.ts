@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { normalizeRemoteBrand, type RemoteBrand } from '../lib/brands';
-import { getFallbackBrands, getLocalBrandImageByHandle } from '../lib/brandsFallback';
+import {
+  getFallbackBrands,
+  getLocalBrandImageByHandle,
+  mergeWithSupplementalBrands,
+} from '../lib/brandsFallback';
 
 const BRANDS_URL = 'https://www.ocd-online.co.il/api/public/brands';
 
-export const REMOTE_BRANDS_QUERY_KEY = ['remote-brands', 'v3'] as const;
+export const REMOTE_BRANDS_QUERY_KEY = ['remote-brands', 'v5'] as const;
 
 function normalizeBrands(brands: RemoteBrand[]): RemoteBrand[] {
   return brands.map((brand) =>
@@ -21,9 +25,9 @@ async function fetchRemoteBrands(): Promise<RemoteBrand[]> {
     const json = await res.json();
     const brands = json.brands as RemoteBrand[];
     if (!Array.isArray(brands) || !brands.length) throw new Error('brands empty');
-    return normalizeBrands(brands);
+    return mergeWithSupplementalBrands(normalizeBrands(brands));
   } catch {
-    return getFallbackBrands();
+    return mergeWithSupplementalBrands(getFallbackBrands());
   }
 }
 
@@ -31,7 +35,7 @@ export function useBrands() {
   return useQuery({
     queryKey: REMOTE_BRANDS_QUERY_KEY,
     queryFn: fetchRemoteBrands,
-    placeholderData: getFallbackBrands,
+    placeholderData: () => mergeWithSupplementalBrands(getFallbackBrands()),
     staleTime: 1000 * 60 * 30,
   });
 }

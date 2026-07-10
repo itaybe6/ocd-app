@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import Toast from 'react-native-toast-message';
+import Toast from '../components/toast/Toast';
 import { supabase } from './supabase';
 
 function getEasProjectId(): string | undefined {

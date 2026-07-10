@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Pressable, Share, StatusBar, Text, View } from 'react-native';
-import Toast from 'react-native-toast-message';
+import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Pressable, Share, StatusBar, StyleSheet, Text, View } from 'react-native';
+import Toast from '../../components/toast/Toast';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { ResizeMode, Video } from 'expo-av';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -14,10 +15,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { favoriteInputFromShopify } from '../../lib/favorites';
 import { fetchProductByHandle, type ShopifyProduct, type ShopifyProductVariant } from '../../lib/shopify';
 import type { RootStackParamList } from '../../navigation/types';
-import { computeOcdPlusPrice, formatOcdPrice } from '../../components/OcdPlusProductPriceBlock';
-import { OcdPlusMark } from '../../components/OcdPlusMark';
-import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
-import { useAuth } from '../../state/AuthContext';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { createCheckout } from '../../services/shopify';
@@ -28,8 +25,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
 
 type ProductGalleryItem = {
   id: string;
+  type: 'image' | 'video';
   url: string | null;
   altText: string | null;
+  previewUrl: string | null;
 };
 
 const RTL_TEXT = {
@@ -73,11 +72,23 @@ function normalizeDescription(description: string) {
 function buildGalleryItems(product: ShopifyProduct | null): ProductGalleryItem[] {
   if (!product) return [];
 
+  if (product.media.length) {
+    return product.media.map((item) => ({
+      id: item.id,
+      type: item.type,
+      url: item.url,
+      altText: item.altText,
+      previewUrl: item.previewUrl,
+    }));
+  }
+
   if (product.images.length) {
     return product.images.map((image, index) => ({
       id: `${product.id}-image-${index}`,
+      type: 'image' as const,
       url: image.url,
       altText: image.altText,
+      previewUrl: null,
     }));
   }
 
@@ -85,13 +96,192 @@ function buildGalleryItems(product: ShopifyProduct | null): ProductGalleryItem[]
     return [
       {
         id: `${product.id}-featured`,
+        type: 'image',
         url: product.imageUrl,
         altText: product.imageAltText,
+        previewUrl: null,
       },
     ];
   }
 
-  return [{ id: `${product.id}-placeholder`, url: null, altText: null }];
+  return [{ id: `${product.id}-placeholder`, type: 'image', url: null, altText: null, previewUrl: null }];
+}
+
+function galleryUrlsMatch(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return false;
+  const strip = (url: string) => url.split('?')[0];
+  return strip(a) === strip(b);
+}
+
+/** אינדקס בגלריה לתמונת וריאציה; אם אין תמונה לוריאציה — חוזרים לתמונה הראשית (0) */
+function findGalleryIndexForVariant(
+  galleryItems: ProductGalleryItem[],
+  variantImageUrl: string | null | undefined,
+): number {
+  if (!variantImageUrl || galleryItems.length === 0) return 0;
+  const index = galleryItems.findIndex(
+    (item) => item.type === 'image' && galleryUrlsMatch(item.url, variantImageUrl),
+  );
+  return index >= 0 ? index : 0;
+}
+
+/** תצוגת סרטון בגלריה — תמונת preview + play (ניגון אמיתי בלייטבוקס; transform על ההורה שובר Video ב־iOS) */
+function GalleryVideoPreview({
+  previewUrl,
+  altText,
+  width,
+  height,
+}: {
+  previewUrl: string | null;
+  altText: string | null;
+  width: number;
+  height: number;
+}) {
+  return (
+    <View style={{ width, height, backgroundColor: '#0F172A' }}>
+      {previewUrl ? (
+        <Image
+          source={{ uri: previewUrl }}
+          resizeMode="cover"
+          accessibilityLabel={altText ?? 'סרטון מוצר'}
+          style={{ width: '100%', height: '100%' }}
+        />
+      ) : (
+        <View style={{ flex: 1, backgroundColor: '#E8ECF0' }} />
+      )}
+      <View
+        pointerEvents="none"
+        style={{
+          ...StyleSheet.absoluteFillObject,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(15,23,42,0.28)',
+        }}
+      >
+        <View
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 32,
+            backgroundColor: 'rgba(255,255,255,0.94)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#0F172A',
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 4,
+          }}
+        >
+          <Ionicons name="play" size={28} color="#0F172A" style={{ marginLeft: 3 }} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** נגן סרטון בלייטבוקס — בלי poster של expo-av (חוסם אינטראקציה) ובלי transform על ההורה */
+function LightboxVideoPlayer({
+  url,
+  previewUrl,
+  altText,
+  isActive,
+  width,
+}: {
+  url: string;
+  previewUrl: string | null;
+  altText: string | null;
+  isActive: boolean;
+  width: number;
+}) {
+  const videoRef = useRef<Video>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+    setHasStarted(false);
+    setIsPlaying(false);
+  }, [url]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (!isActive) {
+          await videoRef.current?.pauseAsync();
+          if (!cancelled) setIsPlaying(false);
+          return;
+        }
+        await videoRef.current?.playAsync();
+        if (!cancelled) {
+          setHasStarted(true);
+          setIsPlaying(true);
+        }
+      } catch {
+        // playAsync יכול להיכשל לפני שהקובץ נטען — לא מסמנים שגיאה כאן
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, url]);
+
+  return (
+    <View style={{ width, height: '100%', justifyContent: 'center', backgroundColor: '#000000' }}>
+      <Video
+        key={url}
+        ref={videoRef}
+        source={{ uri: url }}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode={ResizeMode.CONTAIN}
+        isLooping
+        shouldPlay={isActive}
+        useNativeControls
+        onPlaybackStatusUpdate={(status) => {
+          if (!status.isLoaded) {
+            if ('error' in status && status.error) setLoadError(true);
+            return;
+          }
+          setLoadError(false);
+          setIsPlaying(status.isPlaying);
+          if (status.isPlaying) setHasStarted(true);
+        }}
+        onError={() => setLoadError(true)}
+        accessibilityLabel={altText ?? 'סרטון מוצר'}
+      />
+      {(!hasStarted || loadError) && previewUrl ? (
+        <Image
+          source={{ uri: previewUrl }}
+          resizeMode="contain"
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            opacity: isPlaying ? 0 : 1,
+          }}
+        />
+      ) : null}
+      {loadError ? (
+        <View
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            gap: 8,
+            paddingHorizontal: 24,
+          }}
+        >
+          <Ionicons name="alert-circle-outline" size={36} color="#FFFFFF" />
+          <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+            לא ניתן לנגן את הסרטון
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function getCartProduct(product: ShopifyProduct, activeVariant: ShopifyProductVariant | null) {
@@ -158,10 +348,6 @@ function FloatingCircleButton({
 
 export function ProductScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
-
-  const { user } = useAuth();
-  const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
   const { addItem, getQuantity, updateQuantity, isMutating } = useCart();
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
   const { data: remoteBrands = [] } = useBrands();
@@ -231,7 +417,25 @@ export function ProductScreen({ navigation, route }: Props) {
   useEffect(() => {
     setPendingQty(1);
     setActiveVariantIndex(0);
+    setActiveGalleryIndex(0);
   }, [product?.id]);
+
+  // מעבר לתמונת הוריאציה בגלריה — רק אם לוריאציה יש תמונה משלה; אחרת נשארים על הראשית
+  useEffect(() => {
+    if (!product || galleryItems.length === 0) return;
+
+    const targetIndex = activeVariant?.imageUrl
+      ? findGalleryIndexForVariant(galleryItems, activeVariant.imageUrl)
+      : 0;
+
+    setActiveGalleryIndex(targetIndex);
+    requestAnimationFrame(() => {
+      galleryScrollRef.current?.scrollToIndex({
+        index: targetIndex,
+        animated: true,
+      });
+    });
+  }, [activeVariant?.id, activeVariant?.imageUrl, galleryItems, product]);
 
   // סנכרון pendingQty עם העגלה לאחר שינוי חיצוני
   useEffect(() => {
@@ -465,6 +669,14 @@ export function ProductScreen({ navigation, route }: Props) {
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
                   keyExtractor={(item) => item.id}
+                  onScrollToIndexFailed={(info) => {
+                    setTimeout(() => {
+                      galleryScrollRef.current?.scrollToIndex({
+                        index: info.index,
+                        animated: true,
+                      });
+                    }, 80);
+                  }}
                   onMomentumScrollEnd={(e) => {
                     const index = Math.round(e.nativeEvent.contentOffset.x / imageHeight);
                     setActiveGalleryIndex(index);
@@ -477,7 +689,14 @@ export function ProductScreen({ navigation, route }: Props) {
                       }}
                       style={{ width: imageHeight, height: imageHeight }}
                     >
-                      {item.url ? (
+                      {item.type === 'video' && item.url ? (
+                        <GalleryVideoPreview
+                          previewUrl={item.previewUrl}
+                          altText={item.altText}
+                          width={imageHeight}
+                          height={imageHeight}
+                        />
+                      ) : item.url ? (
                         <Image
                           source={{ uri: item.url }}
                           resizeMode="cover"
@@ -494,31 +713,6 @@ export function ProductScreen({ navigation, route }: Props) {
                   )}
                 />
               </Animated.View>
-
-              {/* תג מבצע על התמונה */}
-              {displayIsOnSale && discountPercent > 0 && (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    top: insets.top + 62,
-                    right: 16,
-                    backgroundColor: PALETTE.danger,
-                    borderRadius: 999,
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    shadowColor: PALETTE.danger,
-                    shadowOpacity: 0.35,
-                    shadowRadius: 8,
-                    shadowOffset: { width: 0, height: 3 },
-                    elevation: 5,
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '900', writingDirection: 'rtl' }}>
-                    {discountPercent}%- מבצע
-                  </Text>
-                </View>
-              )}
 
               {/* מונה תמונות + נקודות אינדיקטור */}
               {galleryItems.length > 1 && (
@@ -545,16 +739,22 @@ export function ProductScreen({ navigation, route }: Props) {
                       paddingVertical: 7,
                     }}
                   >
-                    {galleryItems.map((_, i) => (
+                    {galleryItems.map((item, i) => (
                       <View
-                        key={i}
+                        key={item.id}
                         style={{
-                          width: i === activeGalleryIndex ? 18 : 7,
-                          height: 7,
+                          width: i === activeGalleryIndex ? (item.type === 'video' ? 22 : 18) : 7,
+                          height: i === activeGalleryIndex && item.type === 'video' ? 14 : 7,
                           borderRadius: 4,
                           backgroundColor: i === activeGalleryIndex ? '#0F172A' : 'rgba(15,23,42,0.25)',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
-                      />
+                      >
+                        {i === activeGalleryIndex && item.type === 'video' ? (
+                          <Ionicons name="play" size={8} color="#FFFFFF" style={{ marginLeft: 1 }} />
+                        ) : null}
+                      </View>
                     ))}
                   </View>
                 </View>
@@ -619,21 +819,43 @@ export function ProductScreen({ navigation, route }: Props) {
                 const index = Math.round(e.nativeEvent.contentOffset.x / Dimensions.get('window').width);
                 setLightboxIndex(index);
               }}
-              renderItem={({ item }) => (
-                <View style={{ width: Dimensions.get('window').width, height: '100%', justifyContent: 'center' }}>
-                  {item.url ? (
-                    <Image
-                      source={{ uri: item.url }}
-                      resizeMode="contain"
-                      style={{ width: '100%', height: '100%' }}
-                    />
-                  ) : (
-                    <View style={{ alignItems: 'center', gap: 8 }}>
-                      <Ionicons name="image-outline" size={64} color="#64748B" />
-                    </View>
-                  )}
-                </View>
-              )}
+              renderItem={({ item, index }) => {
+                const slideWidth = Dimensions.get('window').width;
+                const isNearActive = Math.abs(index - lightboxIndex) <= 1;
+                return (
+                  <View style={{ width: slideWidth, height: '100%', justifyContent: 'center' }}>
+                    {item.type === 'video' && item.url ? (
+                      isNearActive ? (
+                        <LightboxVideoPlayer
+                          url={item.url}
+                          previewUrl={item.previewUrl}
+                          altText={item.altText}
+                          isActive={lightboxVisible && index === lightboxIndex}
+                          width={slideWidth}
+                        />
+                      ) : item.previewUrl ? (
+                        <Image
+                          source={{ uri: item.previewUrl }}
+                          resizeMode="contain"
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      ) : (
+                        <View style={{ flex: 1, backgroundColor: '#000000' }} />
+                      )
+                    ) : item.url ? (
+                      <Image
+                        source={{ uri: item.url }}
+                        resizeMode="contain"
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    ) : (
+                      <View style={{ alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="image-outline" size={64} color="#64748B" />
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
             />
 
             {/* נקודות אינדיקטור במודל */}
@@ -666,7 +888,11 @@ export function ProductScreen({ navigation, route }: Props) {
         >
           {product ? (
             <ProductBrandBadge
-              product={{ name: product.title, tags: product.tags }}
+              product={{
+                tags: product.tags,
+                collectionHandles: product.collectionHandles,
+                collectionTitles: product.collectionTitles,
+              }}
               brands={remoteBrands}
               size={42}
               top={-21}
@@ -753,89 +979,57 @@ export function ProductScreen({ navigation, route }: Props) {
               {product.title}
             </Text>
 
-            {/* כרטיס מחיר */}
-            <View
-              style={{
-                marginTop: 16,
-                borderRadius: 20,
-                backgroundColor: PALETTE.surfaceMuted,
-                borderWidth: 1,
-                borderColor: PALETTE.divider,
-                padding: 16,
-              }}
-            >
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* מחיר — תגית הנחה מעל, מחירים בשורה מתחת */}
+            <View style={{ marginTop: 16, alignItems: 'flex-end', gap: 8 }}>
+              {displayIsOnSale && discountPercent > 0 && (
+                <View
+                  style={{
+                    backgroundColor: PALETTE.danger,
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800', writingDirection: 'rtl' }}>
+                    {discountPercent}% הנחה
+                  </Text>
+                </View>
+              )}
+              <View
+                style={{
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}
+              >
                 <Text
                   style={{
                     color: PALETTE.text,
-                    fontSize: 28,
+                    fontSize: 30,
                     fontWeight: '900',
-                    letterSpacing: -0.6,
+                    letterSpacing: -0.8,
+                    lineHeight: 34,
                     ...RTL_TEXT,
                   }}
                 >
                   {formatPrice(displayPrice, displayCurrencyCode)}
                 </Text>
                 {displayIsOnSale && (
-                  <>
-                    <Text
-                      style={{
-                        color: PALETTE.softText,
-                        fontSize: 16,
-                        fontWeight: '500',
-                        textDecorationLine: 'line-through',
-                        ...RTL_TEXT,
-                      }}
-                    >
-                      {formatPrice(displayCompareAtPrice!, displayCurrencyCode)}
-                    </Text>
-                    <View
-                      style={{
-                        backgroundColor: '#FEE2E2',
-                        borderRadius: 999,
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                      }}
-                    >
-                      <Text style={{ color: PALETTE.danger, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' }}>
-                        חיסכון {discountPercent}%
-                      </Text>
-                    </View>
-                  </>
+                  <Text
+                    style={{
+                      color: PALETTE.softText,
+                      fontSize: 15,
+                      fontWeight: '600',
+                      textDecorationLine: 'line-through',
+                      ...RTL_TEXT,
+                    }}
+                  >
+                    {formatPrice(displayCompareAtPrice!, displayCurrencyCode)}
+                  </Text>
                 )}
               </View>
             </View>
-
-            {/* OCD+ — באנר מחיר חבר (נפרד מכרטיס המחיר כדי שלא ייחתך) */}
-            {displayCurrencyCode === 'ILS' && (
-              <Pressable
-                onPress={openOcdPlusSubscribeSheet}
-                style={{
-                  marginTop: 10,
-                  minHeight: 48,
-                  flexDirection: 'row-reverse',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: '#000000',
-                  borderRadius: 16,
-                  paddingVertical: 12,
-                  paddingHorizontal: 14,
-                }}
-              >
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexShrink: 1 }}>
-                  <OcdPlusMark size={22} />
-                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '500', flexShrink: 1, ...RTL_TEXT }}>
-                    עם <Text style={{ fontWeight: '800' }}>OCD+</Text> המחיר הוא רק{' '}
-                    <Text style={{ fontSize: 15.5, fontWeight: '900' }}>
-                      {formatOcdPrice(computeOcdPlusPrice(displayPrice))}
-                    </Text>
-                  </Text>
-                </View>
-                {!isOcdPlusSubscriber && (
-                  <Ionicons name="chevron-back" size={16} color="rgba(255,255,255,0.6)" />
-                )}
-              </Pressable>
-            )}
           </View>
 
           {/* ── וריאציות ── */}

@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { formatOrderDate, formatOrderPrice, getOrderStatusLabel } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../state/AuthContext';

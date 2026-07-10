@@ -15,7 +15,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { WorkerDrawerParamList } from '../../navigation/WorkerDrawer';
 import Animated, {

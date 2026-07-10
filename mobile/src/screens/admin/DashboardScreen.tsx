@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { endOfDay, endOfMonth, format, startOfDay, startOfMonth } from 'date-fns';
 import { useFocusEffect } from '@react-navigation/native';
 import { ClipboardList, Coins, UserRound, Users } from 'lucide-react-native';

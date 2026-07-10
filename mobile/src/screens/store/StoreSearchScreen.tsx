@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchProducts, searchProducts } from '../../lib/shopify';
+import { findProductBrand, type RemoteBrand } from '../../lib/brands';
 import { useBrands } from '../../hooks/useBrands';
 import { ProductBrandBadge } from '../../components/ProductBrandBadge';
 import {
@@ -25,6 +26,56 @@ import {
   type StoreSubcategory,
 } from './StoreHomeScreen';
 import { colors } from '../../theme/colors';
+
+function brandMatchesQuery(brand: RemoteBrand, q: string): boolean {
+  const needle = q.toLowerCase();
+  if (brand.label.toLowerCase().includes(needle)) return true;
+  if (brand.short.toLowerCase().includes(needle)) return true;
+  if (brand.handle.toLowerCase().includes(needle)) return true;
+  return brand.keywords.some((k) => k.toLowerCase().includes(needle) || needle.includes(k.toLowerCase()));
+}
+
+function productMatchesQuery(product: StoreProduct, q: string, brands: RemoteBrand[]): boolean {
+  const needle = q.toLowerCase();
+  if (product.name.toLowerCase().includes(needle)) return true;
+  if (product.subtitle.toLowerCase().includes(needle)) return true;
+  if (product.description.toLowerCase().includes(needle)) return true;
+  if ((product.tags ?? []).some((t) => t.toLowerCase().includes(needle))) return true;
+
+  const productBrand = findProductBrand(
+    {
+      tags: product.tags,
+      collectionHandles: product.collectionHandles,
+      collectionTitles: product.collectionTitles,
+    },
+    brands,
+  );
+  if (productBrand && brandMatchesQuery(productBrand, needle)) return true;
+
+  return brands.some(
+    (b) =>
+      brandMatchesQuery(b, needle) &&
+      findProductBrand(
+        {
+          tags: product.tags,
+          collectionHandles: product.collectionHandles,
+          collectionTitles: product.collectionTitles,
+        },
+        [b],
+      ),
+  );
+}
+
+function mergeUniqueProducts(primary: StoreProduct[], secondary: StoreProduct[]): StoreProduct[] {
+  const seen = new Set<string>();
+  const out: StoreProduct[] = [];
+  for (const product of [...primary, ...secondary]) {
+    if (seen.has(product.id)) continue;
+    seen.add(product.id);
+    out.push(product);
+  }
+  return out;
+}
 
 export function StoreSearchScreen({
   onBack: _onBack,
@@ -61,17 +112,19 @@ export function StoreSearchScreen({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchGenRef = useRef(0);
 
-  const displayed = query.trim() ? results : browsing;
+  const trimmedQuery = query.trim();
+  const isSearchingMode = trimmedQuery.length > 0;
+  const displayed = isSearchingMode ? results : browsing;
+  const pageBg = isSearchingMode ? '#F3F4F6' : colors.bg;
 
   const doLoad = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       setError(null);
       const raw = await fetchProducts();
-      const mapped = raw
-        .map((p, i) => toStoreProduct(p, i))
-        .sort(() => Math.random() - 0.5);
+      const mapped = raw.map((p, i) => toStoreProduct(p, i)).sort(() => Math.random() - 0.5);
       setBrowsing(mapped);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה בטעינת מוצרים');
@@ -92,52 +145,76 @@ export function StoreSearchScreen({
       setSearching(false);
       return;
     }
+
     setSearching(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const gen = ++searchGenRef.current;
     debounceRef.current = setTimeout(async () => {
+      const localMatches = browsing.filter((p) => productMatchesQuery(p, q, remoteBrands));
+
+      let remoteMatches: StoreProduct[] = [];
       try {
-        const raw = await searchProducts(q);
-        setResults(raw.map((p, i) => toStoreProduct(p, i)));
+        const raw = await searchProducts(q, 48);
+        remoteMatches = raw.map((p, i) => toStoreProduct(p, i));
       } catch {
-        setResults([]);
-      } finally {
-        setSearching(false);
+        // Keep local matches if Shopify search fails.
       }
+
+      if (searchGenRef.current !== gen) return;
+
+      setResults(mergeUniqueProducts(localMatches, remoteMatches));
+      setSearching(false);
     }, 400);
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, browsing, remoteBrands]);
+
+  const resultsHeader = useMemo(() => {
+    if (!isSearchingMode) return null;
+    if (searching) return 'מחפש…';
+    return `${displayed.length} תוצאות עבור "${trimmedQuery}"`;
+  }, [isSearchingMode, searching, displayed.length, trimmedQuery]);
 
   const renderListEmpty = useCallback(() => {
     if (searching) {
       return (
-        <View style={{ paddingVertical: 36, alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#555" />
+        <View style={{ paddingVertical: 48, alignItems: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color="#111827" />
+          <Text style={{ color: '#8A8F98', fontWeight: '600', fontSize: 14 }}>מחפש מוצרים…</Text>
         </View>
       );
     }
     return (
-      <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
+      <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: 28, gap: 10 }}>
         <Ionicons name="search-outline" size={48} color="#C7C7CC" />
-        <Text style={{ color: '#8E8E93', fontWeight: '700', marginTop: 12, fontSize: 16 }}>
-          {query.trim() ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
+        <Text style={{ color: '#111827', fontWeight: '800', fontSize: 16, textAlign: 'center' }}>
+          {isSearchingMode ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
         </Text>
+        {isSearchingMode ? (
+          <Text style={{ color: '#8A8F98', fontWeight: '600', fontSize: 14, textAlign: 'center', lineHeight: 21 }}>
+            נסה שם מוצר או מותג אחר
+          </Text>
+        ) : null}
       </View>
     );
-  }, [searching, query]);
+  }, [searching, isSearchingMode]);
 
   const showMainList = !initialLoading && !(error && displayed.length === 0);
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14, backgroundColor: colors.bg }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: pageBg }}>
+      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12, backgroundColor: pageBg }}>
         <View
           style={{
             flexDirection: 'row-reverse',
             alignItems: 'center',
-            backgroundColor: '#EFEFEF',
+            backgroundColor: isSearchingMode ? '#FFFFFF' : '#EFEFEF',
             borderRadius: 14,
+            borderWidth: isSearchingMode ? 1 : 0,
+            borderColor: '#E5E7EB',
             paddingHorizontal: 12,
             height: 42,
           }}
@@ -150,9 +227,10 @@ export function StoreSearchScreen({
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="חיפוש מוצרים..."
+            placeholder="חיפוש לפי שם מוצר או מותג..."
             placeholderTextColor="#AEAEB2"
             returnKeyType="search"
+            autoCorrect={false}
             style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
           />
           {query.length > 0 && (
@@ -161,6 +239,20 @@ export function StoreSearchScreen({
             </Pressable>
           )}
         </View>
+
+        {!!resultsHeader && (
+          <Text
+            style={{
+              marginTop: 12,
+              color: '#6B7280',
+              fontSize: 13,
+              fontWeight: '700',
+              textAlign: 'right',
+            }}
+          >
+            {resultsHeader}
+          </Text>
+        )}
       </View>
 
       {initialLoading && (
@@ -195,11 +287,15 @@ export function StoreSearchScreen({
           data={displayed}
           keyExtractor={(item) => item.id}
           numColumns={3}
-          style={{ flex: 1, zIndex: 0 }}
+          style={{ flex: 1, backgroundColor: pageBg }}
           contentContainerStyle={
-            displayed.length === 0 ? { flexGrow: 1, paddingBottom: contentPaddingBottom } : { paddingBottom: contentPaddingBottom }
+            displayed.length === 0
+              ? { flexGrow: 1, paddingBottom: contentPaddingBottom }
+              : { paddingBottom: contentPaddingBottom }
           }
-          columnWrapperStyle={displayed.length > 0 ? { gap: TILE_GAP } : undefined}
+          columnWrapperStyle={
+            displayed.length > 0 ? { flexDirection: 'row-reverse', gap: TILE_GAP } : undefined
+          }
           ItemSeparatorComponent={displayed.length > 0 ? () => <View style={{ height: TILE_GAP }} /> : undefined}
           ListEmptyComponent={renderListEmpty}
           showsVerticalScrollIndicator={false}
@@ -219,7 +315,7 @@ export function StoreSearchScreen({
               style={({ pressed }) => ({
                 width: tileWidth,
                 height: tileWidth,
-                backgroundColor: '#D1D5DB',
+                backgroundColor: isSearchingMode ? '#FFFFFF' : '#D1D5DB',
                 opacity: pressed ? 0.82 : 1,
                 overflow: 'hidden',
               })}

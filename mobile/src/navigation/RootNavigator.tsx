@@ -374,6 +374,7 @@ export function RootNavigator() {
           component={StoreSearchRoute}
           options={{
             headerShown: false,
+            animation: 'none',
             contentStyle: { backgroundColor: colors.bg },
           }}
         />

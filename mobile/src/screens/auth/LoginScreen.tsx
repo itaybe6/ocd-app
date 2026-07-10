@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -10,7 +10,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { Screen } from '../../components/Screen';
 import { useAuth } from '../../state/AuthContext';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
@@ -171,7 +171,6 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
   return (
     <Screen padded={false} backgroundColor="#FFFFFF" safeAreaEdges={['top']}>
       <View style={{ flex: 1 }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{
@@ -183,6 +182,7 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            automaticallyAdjustKeyboardInsets
           >
           <Animated.View style={headerStyle}>
             <AuthLogo />
@@ -259,7 +259,6 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
             </Animated.View>
           )}
           </ScrollView>
-        </KeyboardAvoidingView>
         <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
       </View>
     </Screen>

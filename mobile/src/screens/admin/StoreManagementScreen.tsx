@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { addMonths, endOfWeek, startOfWeek } from 'date-fns';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Button } from '../../components/ui/Button';

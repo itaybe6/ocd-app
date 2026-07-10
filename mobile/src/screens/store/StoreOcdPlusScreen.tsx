@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
+import Toast from '../../components/toast/Toast';
 import { Screen } from '../../components/Screen';
 import { useAuth } from '../../state/AuthContext';
 import type { RootStackParamList } from '../../navigation/types';
