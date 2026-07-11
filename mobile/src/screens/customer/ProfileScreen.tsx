@@ -15,8 +15,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatOrderDate, formatOrderPrice } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
+import type { OcdPlusStatus } from '../../lib/ocdPlus';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
 import type { CustomerOrderRow } from '../../types/database';
 
@@ -118,6 +120,21 @@ function StatPill({ value, label }: { value: string; label: string }) {
   );
 }
 
+function ocdPlusStatusLabel(status: OcdPlusStatus): string {
+  switch (status) {
+    case 'active':
+      return 'פעיל';
+    case 'pending':
+      return 'ממתין לתשלום';
+    case 'past_due':
+      return 'תשלום נכשל';
+    case 'cancelled':
+      return 'בוטל';
+    default:
+      return 'לא פעיל';
+  }
+}
+
 function DeleteAccountDialog({
   visible,
   deleting,
@@ -191,6 +208,8 @@ export function CustomerProfileScreen({
 }) {
   const { user, signOut, deleteCustomerAccount } = useAuth();
   const { favoriteCount } = useFavorites();
+  const { status: ocdPlusStatus, loading: ocdPlusLoading } = useOcdPlusMembership();
+  const isCustomer = user?.role === 'customer';
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const [recentOrders, setRecentOrders] = useState<CustomerOrderRow[]>([]);
@@ -271,6 +290,17 @@ export function CustomerProfileScreen({
       {/* ── orders + addresses — single card (no split sections) ── */}
       <View>
         <View style={styles.listCard}>
+          {isCustomer ? (
+            <>
+              <ListRow
+                icon="ribbon-outline"
+                label="מנוי OCD+"
+                value={ocdPlusLoading ? '…' : ocdPlusStatusLabel(ocdPlusStatus)}
+                chevron={false}
+              />
+              <RowDivider />
+            </>
+          ) : null}
           <ListRow
             icon="bag-outline"
             label="היסטוריית הזמנות"

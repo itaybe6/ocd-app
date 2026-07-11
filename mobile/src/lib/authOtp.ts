@@ -15,6 +15,11 @@ function describeEnvForUser(): string {
 
 export type AuthOtpUser = Omit<UserRow, 'password'>;
 
+export type SessionTokens = {
+  session?: { accessToken: string; expiresAt: string };
+  refresh?: { token: string; expiresAt: string };
+};
+
 type SendOtpResult = {
   ok: true;
   phone: string;
@@ -26,7 +31,7 @@ type SendOtpResult = {
 type VerifyOtpResult = {
   ok: true;
   user: AuthOtpUser;
-};
+} & SessionTokens;
 
 type CheckPulseemResult = {
   ok: true;
@@ -123,6 +128,15 @@ export async function deleteCustomerAccount(args: { userId: string; phone: strin
     userId: args.userId,
     phone: args.phone,
   });
+}
+
+/** Best-effort server-side revocation of a refresh token (used on sign-out). */
+export async function revokeSession(refreshToken: string): Promise<void> {
+  try {
+    await callOtpFunction<{ ok: true }>({ action: 'revoke_session', refreshToken });
+  } catch {
+    // Non-fatal: the client clears its tokens regardless.
+  }
 }
 
 export async function checkPulseem(): Promise<CheckPulseemResult> {

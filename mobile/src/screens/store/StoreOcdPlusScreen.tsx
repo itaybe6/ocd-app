@@ -1,10 +1,9 @@
-import React, { useCallback, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from '../../components/toast/Toast';
 import { Screen } from '../../components/Screen';
-import { useAuth } from '../../state/AuthContext';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 import type { RootStackParamList } from '../../navigation/types';
 import { colors } from '../../theme/colors';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from './StoreHomeScreen';
@@ -17,7 +16,13 @@ import {
   OcdPlusChecklistSummary,
 } from '../../components/ocdPlusBenefits';
 
-const OCD_PLUS_SUBSCRIBE_URL = process.env.EXPO_PUBLIC_OCD_PLUS_SUBSCRIBE_URL?.trim() ?? '';
+/** he-IL date for the next billing line (e.g. "3 באוגוסט 2026"). */
+function formatBillingDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'> & {
   onBottomTabPress: (tabId: StoreBottomTabId) => void;
@@ -26,34 +31,22 @@ type Props = NativeStackScreenProps<RootStackParamList, 'StoreOcdPlus'> & {
 export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
-  const { user } = useAuth();
-  const isSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
-  const [opening, setOpening] = useState(false);
+  const { status, subscription, busy, startPurchase, cancel } = useOcdPlusMembership();
+  const isSubscriber = status === 'active';
+  const nextBillingLabel = useMemo(
+    () => formatBillingDate(subscription?.next_billing_at ?? subscription?.current_period_end),
+    [subscription?.next_billing_at, subscription?.current_period_end],
+  );
+  const statusNote =
+    status === 'pending'
+      ? 'ההצטרפות ממתינה להשלמת התשלום.'
+      : status === 'past_due'
+        ? 'התשלום האחרון נכשל. אפשר לנסות שוב כדי לחדש את ההטבות.'
+        : status === 'cancelled'
+          ? 'המנוי בוטל. אפשר להצטרף מחדש בכל עת.'
+          : null;
 
-  const handlePurchase = useCallback(async () => {
-    if (OCD_PLUS_SUBSCRIBE_URL) {
-      try {
-        setOpening(true);
-        const supported = await Linking.canOpenURL(OCD_PLUS_SUBSCRIBE_URL);
-        if (supported) {
-          await Linking.openURL(OCD_PLUS_SUBSCRIBE_URL);
-        } else {
-          Toast.show({ type: 'error', text1: 'לא ניתן לפתוח את עמוד הרכישה' });
-        }
-      } catch {
-        Toast.show({ type: 'error', text1: 'שגיאה בפתיחת הקישור' });
-      } finally {
-        setOpening(false);
-      }
-      return;
-    }
-
-    Toast.show({
-      type: 'info',
-      text1: 'בקרוב',
-      text2: 'עמוד התשלום יתחבר כאן. בינתיים אפשר ליצור קשר עם השירות להשלמת הרכישה.',
-    });
-  }, []);
+  const handlePurchase = startPurchase;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -117,6 +110,13 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                 <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 24, textAlign: 'right' }}>
                   תודה שאתם איתנו. תהנו מההנחות וההטבות — ואם משהו חסר, אנחנו כאן.
                 </Text>
+                {nextBillingLabel ? (
+                  <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'right', alignSelf: 'stretch' }}>
+                    {subscription?.cancel_at_period_end
+                      ? `המנוי יסתיים ב־${nextBillingLabel}`
+                      : `החיוב הבא: ${nextBillingLabel}`}
+                  </Text>
+                ) : null}
                 <Pressable
                   onPress={() => navigation.navigate('Main', { initialTab: 'home', initialTabRequestId: Date.now() })}
                   style={({ pressed }) => ({
@@ -130,6 +130,18 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                 >
                   <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900' }}>חזרה לחנות</Text>
                 </Pressable>
+                {!subscription?.cancel_at_period_end ? (
+                  <Pressable
+                    onPress={cancel}
+                    disabled={busy}
+                    hitSlop={8}
+                    style={{ alignSelf: 'flex-end', paddingVertical: 6, opacity: busy ? 0.6 : 1 }}
+                  >
+                    <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' }}>
+                      ביטול המנוי
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : (
               <>
@@ -139,16 +151,22 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
 
                 <OcdPlusChecklistSummary />
 
+                {statusNote ? (
+                  <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'right', marginTop: 4 }}>
+                    {statusNote}
+                  </Text>
+                ) : null}
+
                 <Pressable
                   onPress={handlePurchase}
-                  disabled={opening}
+                  disabled={busy}
                   style={({ pressed }) => ({
                     marginTop: 8,
                     backgroundColor: '#FFFFFF',
                     borderRadius: 999,
                     borderWidth: 1,
                     borderColor: colors.border,
-                    opacity: pressed || opening ? 0.88 : 1,
+                    opacity: pressed || busy ? 0.88 : 1,
                     overflow: 'hidden',
                   })}
                 >

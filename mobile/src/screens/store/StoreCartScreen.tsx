@@ -5,7 +5,10 @@ import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { ArrowLeft, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { computeOcdPlusPrice } from '../../components/OcdPlusProductPriceBlock';
+import { OcdPlusMark } from '../../components/OcdPlusMark';
 import { useCart } from '../../state/CartContext';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 
 const RTL_TEXT = {
   textAlign: 'right' as const,
@@ -303,9 +306,11 @@ export function StoreCartScreen({
   onOpenCheckout,
 }: {
   onBack: () => void;
-  onOpenCheckout: (checkoutUrl: string) => void;
+  onOpenCheckout: (checkoutUrl: string) => Promise<void>;
 }) {
   const insets = useSafeAreaInsets();
+  const { isActiveMember } = useOcdPlusMembership();
+  const isMember = isActiveMember;
   const {
     checkoutUrl,
     items,
@@ -316,11 +321,25 @@ export function StoreCartScreen({
     updateQuantity,
     removeItem,
   } = useCart();
+  const [isCheckoutPreparing, setIsCheckoutPreparing] = useState(false);
+
+  const displaySubtotal = useMemo(
+    () => (isMember ? computeOcdPlusPrice(subtotal) : subtotal),
+    [isMember, subtotal],
+  );
+
+  const memberSavings = useMemo(
+    () => (isMember ? Math.max(0, subtotal - displaySubtotal) : 0),
+    [displaySubtotal, isMember, subtotal],
+  );
 
   const handleCheckout = () => {
-    if (!items.length || !checkoutUrl || isMutating) return;
-    onOpenCheckout(checkoutUrl);
+    if (!items.length || !checkoutUrl || isMutating || isCheckoutPreparing) return;
+    setIsCheckoutPreparing(true);
+    void onOpenCheckout(checkoutUrl).finally(() => setIsCheckoutPreparing(false));
   };
+
+  const checkoutDisabled = isMutating || isCheckoutPreparing || !checkoutUrl;
 
   const totalItemCount = useMemo(
     () => items.reduce((sum, line) => sum + line.quantity, 0),
@@ -686,18 +705,49 @@ export function StoreCartScreen({
                                   {subtextLine}
                                 </Text>
                               )}
-                              <Text
-                                style={{
-                                  color: COLORS.text,
-                                  fontSize: 17,
-                                  fontWeight: '800',
-                                  letterSpacing: -0.3,
-                                  marginTop: 2,
-                                  ...RTL_TEXT,
-                                }}
-                              >
-                                {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
-                              </Text>
+                              <View style={{ alignItems: 'flex-end', gap: 2, marginTop: 2 }}>
+                                {isMember ? (
+                                  <>
+                                    <Text
+                                      style={{
+                                        color: COLORS.softText,
+                                        fontSize: 13,
+                                        fontWeight: '600',
+                                        textDecorationLine: 'line-through',
+                                        ...RTL_TEXT,
+                                      }}
+                                    >
+                                      {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        color: COLORS.text,
+                                        fontSize: 17,
+                                        fontWeight: '800',
+                                        letterSpacing: -0.3,
+                                        ...RTL_TEXT,
+                                      }}
+                                    >
+                                      {formatPrice(
+                                        computeOcdPlusPrice(item.cost.totalAmount),
+                                        item.cost.currencyCode,
+                                      )}
+                                    </Text>
+                                  </>
+                                ) : (
+                                  <Text
+                                    style={{
+                                      color: COLORS.text,
+                                      fontSize: 17,
+                                      fontWeight: '800',
+                                      letterSpacing: -0.3,
+                                      ...RTL_TEXT,
+                                    }}
+                                  >
+                                    {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
+                                  </Text>
+                                )}
+                              </View>
                             </View>
 
                             <View style={{ flexShrink: 0 }}>
@@ -750,10 +800,38 @@ export function StoreCartScreen({
                   <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>
                     סכום ביניים
                   </Text>
-                  <Text style={{ color: COLORS.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
-                    {formatPrice(subtotal, currencyCode)}
-                  </Text>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                    {isMember ? (
+                      <Text
+                        style={{
+                          color: COLORS.softText,
+                          fontSize: 13,
+                          fontWeight: '600',
+                          textDecorationLine: 'line-through',
+                        }}
+                      >
+                        {formatPrice(subtotal, currencyCode)}
+                      </Text>
+                    ) : null}
+                    <Text style={{ color: COLORS.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
+                      {formatPrice(displaySubtotal, currencyCode)}
+                    </Text>
+                  </View>
                 </View>
+
+                {isMember && memberSavings > 0 ? (
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                      <OcdPlusMark size={16} />
+                      <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>
+                        הנחת OCD+ (13%)
+                      </Text>
+                    </View>
+                    <Text style={{ color: '#059669', fontSize: 15, fontWeight: '700' }}>
+                      −{formatPrice(memberSavings, currencyCode)}
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>משלוח</Text>
@@ -769,7 +847,7 @@ export function StoreCartScreen({
                     סך הכל
                   </Text>
                   <Text style={{ color: COLORS.text, fontSize: 19, fontWeight: '900', letterSpacing: -0.4 }}>
-                    {formatPrice(subtotal, currencyCode)}
+                    {formatPrice(displaySubtotal, currencyCode)}
                   </Text>
                 </View>
               </View>
@@ -787,7 +865,7 @@ export function StoreCartScreen({
                 bottom: Math.max(10, insets.bottom + 8),
                 zIndex: 9999,
                 borderRadius: 18,
-                backgroundColor: isMutating || !checkoutUrl ? '#4B5563' : COLORS.checkoutBar,
+                backgroundColor: checkoutDisabled ? '#4B5563' : COLORS.checkoutBar,
                 shadowColor: '#0B1220',
                 shadowOffset: { width: 0, height: 10 },
                 shadowOpacity: 0.22,
@@ -798,16 +876,16 @@ export function StoreCartScreen({
             >
               <Pressable
                 onPress={handleCheckout}
-                disabled={isMutating || !checkoutUrl}
+                disabled={checkoutDisabled}
                 accessibilityRole="button"
-                accessibilityLabel={`מעבר לתשלום, סה״כ ${totalItemCount} פריטים, ${formatPrice(subtotal, currencyCode)}`}
+                accessibilityLabel={`מעבר לתשלום, סה״כ ${totalItemCount} פריטים, ${formatPrice(displaySubtotal, currencyCode)}`}
                 style={({ pressed }) => ({
                   flex: 1,
                   minHeight: 62,
                   width: '100%',
                   justifyContent: 'center',
                   backgroundColor: 'transparent',
-                  opacity: pressed && !isMutating && checkoutUrl ? 0.9 : 1,
+                  opacity: pressed && !checkoutDisabled ? 0.9 : 1,
                 })}
               >
                 <View
@@ -831,7 +909,7 @@ export function StoreCartScreen({
                       includeFontPadding: false,
                     }}
                   >
-                    {formatPrice(subtotal, currencyCode)}
+                    {formatPrice(displaySubtotal, currencyCode)}
                   </Text>
                   <View
                     style={{

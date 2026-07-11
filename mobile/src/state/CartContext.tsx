@@ -33,6 +33,8 @@ type CartContextValue = {
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
+  /** Replace local cart state with a Shopify cart payload (e.g. after discount apply). */
+  setCartSnapshot: (cart: ShopifyCart | null) => Promise<void>;
   getQuantity: (productId: string) => number;
 };
 
@@ -162,6 +164,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, [cart?.id, runCartMutation, syncCart]);
+
+  const setCartSnapshot = useCallback(
+    async (nextCart: ShopifyCart | null) => {
+      await syncCart(nextCart);
+    },
+    [syncCart],
+  );
 
   const addItem = useCallback(
     async (product: CartProduct, quantity = 1) => {
@@ -325,6 +334,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       updateQuantity,
       clearCart,
       refreshCart,
+      setCartSnapshot,
       getQuantity,
     }),
     [
@@ -340,6 +350,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       items,
       refreshCart,
       removeItem,
+      setCartSnapshot,
       subtotal,
       updateQuantity,
     ]

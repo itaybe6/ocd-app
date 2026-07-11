@@ -8,6 +8,22 @@ const CHECKOUT_SITE_HOST = 'www.ocd-online.co.il';
 const MOBILE_SAFARI_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
+/** Append a discount code so Shopify checkout applies it on landing (cart permalink). */
+export function appendCheckoutDiscountCode(checkoutUrl: string, discountCode: string): string {
+  const normalized = normalizeCheckoutUrl(checkoutUrl);
+  const code = discountCode.trim();
+  if (!code) return normalized;
+
+  try {
+    const parsed = new URL(normalized);
+    parsed.searchParams.set('discount', code);
+    return parsed.toString();
+  } catch {
+    const separator = normalized.includes('?') ? '&' : '?';
+    return `${normalized}${separator}discount=${encodeURIComponent(code)}`;
+  }
+}
+
 /** Storefront carts return checkout on the bare domain; Lovable route lives on www. */
 export function normalizeCheckoutUrl(checkoutUrl: string): string {
   const trimmed = checkoutUrl.trim();
@@ -39,6 +55,13 @@ function isShopifyCheckoutDestination(url: string): boolean {
  */
 export async function resolveCheckoutLaunchUrl(checkoutUrl: string): Promise<string> {
   const normalized = normalizeCheckoutUrl(checkoutUrl);
+  let discountCode: string | null = null;
+  try {
+    discountCode = new URL(normalized).searchParams.get('discount');
+  } catch {
+    discountCode = null;
+  }
+
   let current = normalized;
 
   for (let hop = 0; hop < 12; hop++) {
@@ -57,20 +80,21 @@ export async function resolveCheckoutLaunchUrl(checkoutUrl: string): Promise<str
 
       const next = new URL(location, current).href;
       if (isShopifyCheckoutDestination(next)) {
-        return next;
+        return discountCode ? appendCheckoutDiscountCode(next, discountCode) : next;
       }
       current = next;
       continue;
     }
 
     if (response.status === 403 && isShopifyCheckoutDestination(current)) {
-      return current;
+      return discountCode ? appendCheckoutDiscountCode(current, discountCode) : current;
     }
 
     break;
   }
 
-  return normalized;
+  const fallback = isShopifyCheckoutDestination(current) ? current : normalized;
+  return discountCode ? appendCheckoutDiscountCode(fallback, discountCode) : fallback;
 }
 
 export function isCheckoutHttpErrorBlocking(statusCode: number, url?: string | null): boolean {

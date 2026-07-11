@@ -10,6 +10,8 @@ export type UserRow = {
   price?: number | null;
   /** When true, store shows club member pricing without the join call-to-action. */
   ocd_plus_subscriber?: boolean | null;
+  /** Linked Shopify customer GID (server-managed; used for OCD+ tagging). */
+  shopify_customer_id?: string | null;
   avatar_url?: string | null;
   created_at?: string;
 };
@@ -158,6 +160,23 @@ export type CustomerOrderItemRow = {
   quantity: number;
   line_total: number;
   created_at?: string;
+};
+
+export type OcdPlusSubscriptionStatus = 'pending' | 'active' | 'past_due' | 'cancelled';
+
+/** OCD+ paid membership row. Never contains payment-instrument data. */
+export type OcdPlusSubscriptionRow = {
+  id: string;
+  user_id: string;
+  shopify_customer_id?: string | null;
+  status: OcdPlusSubscriptionStatus;
+  hyp_subscription_id?: string | null;
+  current_period_end?: string | null;
+  next_billing_at?: string | null;
+  cancel_at_period_end: boolean;
+  last_payment_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export const BATTERY_TYPES = ['AA', 'DC'] as const;

@@ -3,11 +3,13 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import Toast from '../components/toast/Toast';
 import {
   deleteCustomerAccount as deleteCustomerAccountApi,
+  revokeSession as revokeSessionApi,
   sendLoginOtp as sendLoginOtpApi,
   sendRegisterOtp as sendRegisterOtpApi,
   verifyLoginOtp as verifyLoginOtpApi,
   verifyRegisterOtp as verifyRegisterOtpApi,
 } from '../lib/authOtp';
+import { clearSession, getRefreshToken, restoreSession, storeSession } from '../lib/appSession';
 import { navigationRef } from '../navigation/navigationRef';
 import type { UserRole, UserRow } from '../types/database';
 
@@ -95,7 +97,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const u = await loadPersistedUser();
       if (!alive) return;
-      setUserState(u);
+
+      if (u) {
+        // Refresh the server session on cold start so access tokens work and the
+        // cached user row (incl. ocd_plus_subscriber) is brought up to date.
+        const restored = await restoreSession();
+        if (!alive) return;
+        if (restored?.user) {
+          const fresh = restored.user as AuthUser;
+          setUserState(fresh);
+          await persistUser(fresh);
+        } else {
+          setUserState(u);
+        }
+      }
+
       setIsBootstrapping(false);
     })().catch(() => {
       if (!alive) return;
@@ -112,6 +128,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    try {
+      const refresh = await getRefreshToken();
+      if (refresh) await revokeSessionApi(refresh);
+    } catch {
+      // ignore — we clear local tokens regardless
+    }
+    await clearSession();
     await setUser(null);
     scheduleResetToLogin();
   }, [setUser]);
@@ -121,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('לא נמצא משתמש מחובר');
     }
     await deleteCustomerAccountApi({ userId: user.id, phone: user.phone });
+    await clearSession();
     await setUser(null);
     Toast.show({ type: 'success', text1: 'החשבון נמחק' });
     scheduleResetToLogin();
@@ -135,7 +159,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyLoginOtp = useCallback(
     async ({ phone, code }: { phone: string; code: string }) => {
-      const { user: authedUser } = await verifyLoginOtpApi({ phone: phone.trim(), code: code.trim() });
+      const { user: authedUser, session, refresh } = await verifyLoginOtpApi({
+        phone: phone.trim(),
+        code: code.trim(),
+      });
+      await storeSession(session, refresh);
       await setUser(authedUser as AuthUser);
       Toast.show({ type: 'success', text1: 'התחברת בהצלחה' });
       scheduleResetMain();
@@ -150,12 +178,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyRegisterOtp = useCallback(
     async ({ phone, code, name, address }: { phone: string; code: string; name: string; address?: string | null }) => {
-      const { user: authedUser } = await verifyRegisterOtpApi({
+      const { user: authedUser, session, refresh } = await verifyRegisterOtpApi({
         phone: phone.trim(),
         code: code.trim(),
         name: name.trim(),
         address: address?.trim() || null,
       });
+      await storeSession(session, refresh);
       await setUser(authedUser as AuthUser);
       Toast.show({ type: 'success', text1: 'נרשמת בהצלחה' });
       scheduleResetMainToCustomerProfile();

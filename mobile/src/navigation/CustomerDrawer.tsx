@@ -10,6 +10,7 @@ import {
 import { Heart, Receipt, ShoppingBag, User, Wrench } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useAuth } from '../state/AuthContext';
+import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
 import { CustomerProfileScreen } from '../screens/customer/ProfileScreen';
 import { CustomerServicesScreen } from '../screens/customer/ServicesScreen';
 import { CustomerFavoritesScreen } from '../screens/customer/FavoritesScreen';
@@ -71,14 +72,13 @@ function handleCustomerTabPress(
 }
 
 function CustomerStoreScreen({ navigation, route }: DrawerScreenProps<CustomerDrawerParamList, 'Store'>) {
-  const { user } = useAuth();
-  const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
+  const { isActiveMember } = useOcdPlusMembership();
 
   return (
     <StoreHomeScreen
       onProfilePress={() => navigation.navigate('Profile')}
       onFavoritesPress={() => navigation.navigate('Favorites')}
-      isOcdPlusSubscriber={isOcdPlusSubscriber}
+      isOcdPlusSubscriber={isActiveMember}
       onSearchPress={() => safeNavigate('StoreSearch')}
       onProductPress={(handle) => safeNavigate('Product', { handle })}
       onOpenCart={() => safeNavigate('StoreCart')}

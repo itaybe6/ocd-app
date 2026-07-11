@@ -1,5 +1,5 @@
 import React, { createContext, Suspense, useCallback, useContext, useMemo, useState } from 'react';
-import { useAuth } from '../state/AuthContext';
+import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
 
 /** Dynamic import avoids circular init where navigation imports StoreHomeScreen → context → sheet before export settles */
 const OcdPlusSubscribeSheetLazy = React.lazy(async () => {
@@ -15,8 +15,7 @@ const OcdPlusSubscribeSheetContext = createContext<OcdPlusSubscribeSheetContextV
 
 export function OcdPlusSubscribeSheetProvider({ children }: { children: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
-  const { user } = useAuth();
-  const isSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
+  const { isActiveMember } = useOcdPlusMembership();
 
   const openOcdPlusSubscribeSheet = useCallback(() => {
     setVisible(true);
@@ -38,7 +37,7 @@ export function OcdPlusSubscribeSheetProvider({ children }: { children: React.Re
         <OcdPlusSubscribeSheetLazy
           visible={visible}
           onClose={closeOcdPlusSubscribeSheet}
-          isSubscriber={isSubscriber}
+          isSubscriber={isActiveMember}
         />
       </Suspense>
     </OcdPlusSubscribeSheetContext.Provider>

@@ -495,6 +495,14 @@ const CART_FIELDS = `
   id
   checkoutUrl
   totalQuantity
+  buyerIdentity {
+    phone
+    email
+  }
+  discountCodes {
+    code
+    applicable
+  }
   cost {
     subtotalAmount {
       amount
@@ -1375,6 +1383,83 @@ export async function removeCartLines(cartId: string, lineIds: string[]): Promis
 
   const payload = await storefrontRequest<ShopifyCartLinesRemoveResponse>(query, { cartId, lineIds });
   return assertCartMutation(payload.data?.cartLinesRemove, payload.errors);
+}
+
+type ShopifyCartBuyerIdentityUpdateResponse = {
+  data?: {
+    cartBuyerIdentityUpdate: ShopifyCartMutationPayload;
+  };
+  errors?: Array<{ message: string }>;
+};
+
+type ShopifyCartDiscountCodesUpdateResponse = {
+  data?: {
+    cartDiscountCodesUpdate: ShopifyCartMutationPayload;
+  };
+  errors?: Array<{ message: string }>;
+};
+
+export type ShopifyCartBuyerIdentityInput = {
+  /** E.164 phone (e.g. +972501234567). Pass null to clear a previously set phone. */
+  phone?: string | null;
+  email?: string | null;
+  countryCode?: string;
+};
+
+/**
+ * Associate the cart with the logged-in buyer. Storefront can only set
+ * email/phone/country without a customerAccessToken — this pre-fills identity
+ * at checkout but does NOT authenticate the customer.
+ */
+export async function updateCartBuyerIdentity(
+  cartId: string,
+  buyerIdentity: ShopifyCartBuyerIdentityInput,
+): Promise<ShopifyCart> {
+  const query = `
+    mutation UpdateCartBuyerIdentity($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+      cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
+        cart {
+          ${CART_FIELDS}
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyCartBuyerIdentityUpdateResponse>(query, {
+    cartId,
+    buyerIdentity,
+  });
+  return assertCartMutation(payload.data?.cartBuyerIdentityUpdate, payload.errors);
+}
+
+/** Apply discount code(s) to the cart (empty array clears them). */
+export async function updateCartDiscountCodes(
+  cartId: string,
+  discountCodes: string[],
+): Promise<ShopifyCart> {
+  const query = `
+    mutation UpdateCartDiscountCodes($cartId: ID!, $discountCodes: [String!]!) {
+      cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
+        cart {
+          ${CART_FIELDS}
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<ShopifyCartDiscountCodesUpdateResponse>(query, {
+    cartId,
+    discountCodes,
+  });
+  return assertCartMutation(payload.data?.cartDiscountCodesUpdate, payload.errors);
 }
 
 /** Public Storefront GraphQL helper (Lovable / shop menu pipeline) */

@@ -1,7 +1,6 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   Dimensions,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -9,10 +8,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from './toast/Toast';
 import { ModalSheet } from './ModalSheet';
 import { OcdPlusMark } from './OcdPlusMark';
 import { LavaLampDark } from './LavaLampDark';
+import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
 import {
   OCD_PLUS_HEADLINE,
   OCD_PLUS_SUBSCRIBE_BUTTON_LABEL,
@@ -21,7 +20,6 @@ import {
   OcdPlusChecklistSummary,
 } from './ocdPlusBenefits';
 
-const OCD_PLUS_SUBSCRIBE_URL = process.env.EXPO_PUBLIC_OCD_PLUS_SUBSCRIBE_URL?.trim() ?? '';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 type Props = {
@@ -32,35 +30,15 @@ type Props = {
 
 export function OcdPlusSubscribeSheet({ visible, onClose, isSubscriber }: Props) {
   const insets = useSafeAreaInsets();
-  const [opening, setOpening] = useState(false);
+  const { busy, startPurchase } = useOcdPlusMembership();
+  const opening = busy;
   const sheetMaxH = Math.round(SCREEN_H * 0.92);
   const scrollMaxH = Math.round(SCREEN_H * 0.80);
 
   const handlePurchase = useCallback(async () => {
-    if (OCD_PLUS_SUBSCRIBE_URL) {
-      try {
-        setOpening(true);
-        const supported = await Linking.canOpenURL(OCD_PLUS_SUBSCRIBE_URL);
-        if (supported) {
-          await Linking.openURL(OCD_PLUS_SUBSCRIBE_URL);
-          onClose();
-        } else {
-          Toast.show({ type: 'error', text1: 'לא ניתן לפתוח את עמוד הרכישה' });
-        }
-      } catch {
-        Toast.show({ type: 'error', text1: 'שגיאה בפתיחת הקישור' });
-      } finally {
-        setOpening(false);
-      }
-      return;
-    }
-
-    Toast.show({
-      type: 'info',
-      text1: 'בקרוב',
-      text2: 'עמוד התשלום יתחבר כאן. בינתיים אפשר ליצור קשר עם השירות להשלמת הרכישה.',
-    });
-  }, [onClose]);
+    await startPurchase();
+    onClose();
+  }, [onClose, startPurchase]);
 
   return (
     <ModalSheet

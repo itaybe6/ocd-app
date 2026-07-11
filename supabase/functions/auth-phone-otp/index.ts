@@ -27,6 +27,12 @@
 //   AUTH_OTP_DEBUG_RETURN_CODE='1'  return the OTP in the response (DEV ONLY!)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import {
+  generateRefreshToken,
+  hashRefreshToken,
+  REFRESH_TTL_SECONDS,
+  signAppSession,
+} from '../_shared/appSession.ts';
 
 const PULSEEM_REST_URL = 'https://api.pulseem.com/api/v1/SmsApi/SendSms';
 const PULSEEM_ASMX_URL = 'https://www.pulseem.com/PublicService/PublicService.asmx';
@@ -38,6 +44,8 @@ type Action =
   | 'verify_login_otp'
   | 'send_register_otp'
   | 'verify_register_otp'
+  | 'refresh_session'
+  | 'revoke_session'
   | 'delete_customer_account';
 
 type Payload = {
@@ -47,7 +55,36 @@ type Payload = {
   code?: string;
   name?: string;
   address?: string | null;
+  refreshToken?: string;
 };
+
+type IssuedSession = {
+  session: { accessToken: string; expiresAt: string };
+  refresh: { token: string; expiresAt: string };
+};
+
+/**
+ * Issue an app session (access JWT + rotating refresh token).
+ *
+ * This is MANDATORY: a successful login/registration must always come with a
+ * session. If it cannot be issued (e.g. APP_JWT_SECRET missing, or the session
+ * row fails to persist) this throws and the caller returns an error — we never
+ * authenticate a user without a verifiable session token.
+ */
+async function issueSession(supabase: SupabaseAdmin, userId: string): Promise<IssuedSession> {
+  const access = await signAppSession(userId); // throws if APP_JWT_SECRET is missing
+  const refreshToken = generateRefreshToken();
+  const refresh_token_hash = await hashRefreshToken(refreshToken);
+  const expiresAt = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000).toISOString();
+  const { error } = await supabase
+    .from('app_auth_sessions')
+    .insert({ user_id: userId, refresh_token_hash, expires_at: expiresAt });
+  if (error) throw new Error(`failed to persist session: ${error.message}`);
+  return {
+    session: { accessToken: access.token, expiresAt: access.expiresAt },
+    refresh: { token: refreshToken, expiresAt },
+  };
+}
 
 type PulseemCreds = {
   apiKey: string;
@@ -514,14 +551,21 @@ Deno.serve(async (req) => {
         if (!user) return jsonResponse({ ok: false, error: 'המשתמש לא נמצא' }, { status: 404 });
 
         const { password, ...userWithoutPassword } = user;
-        if (password && codeOrPassword === String(password).trim()) {
-          return jsonResponse({ ok: true, user: userWithoutPassword });
+        const passwordMatch = !!password && codeOrPassword === String(password).trim();
+
+        if (!passwordMatch) {
+          const result = await verifyOtp(supabase, phone, 'login', codeOrPassword);
+          if (!result.ok) return jsonResponse({ ok: false, error: result.error }, { status: result.status });
         }
 
-        const result = await verifyOtp(supabase, phone, 'login', codeOrPassword);
-        if (!result.ok) return jsonResponse({ ok: false, error: result.error }, { status: result.status });
-
-        return jsonResponse({ ok: true, user: userWithoutPassword });
+        let issued: IssuedSession;
+        try {
+          issued = await issueSession(supabase, (userWithoutPassword as { id: string }).id);
+        } catch (e) {
+          console.error('[auth-phone-otp] login issueSession failed:', e instanceof Error ? e.message : 'unknown');
+          return jsonResponse({ ok: false, error: 'שגיאת שרת בהנפקת החיבור. נסו שוב.' }, { status: 500 });
+        }
+        return jsonResponse({ ok: true, user: userWithoutPassword, session: issued.session, refresh: issued.refresh });
       }
 
       case 'send_register_otp': {
@@ -597,7 +641,71 @@ Deno.serve(async (req) => {
           .single();
         if (insertErr) return jsonResponse({ ok: false, error: insertErr.message }, { status: 500 });
 
-        return jsonResponse({ ok: true, user: created });
+        let issued: IssuedSession;
+        try {
+          issued = await issueSession(supabase, (created as { id: string }).id);
+        } catch (e) {
+          console.error('[auth-phone-otp] register issueSession failed:', e instanceof Error ? e.message : 'unknown');
+          return jsonResponse({ ok: false, error: 'שגיאת שרת בהנפקת החיבור. נסו שוב.' }, { status: 500 });
+        }
+        return jsonResponse({ ok: true, user: created, session: issued.session, refresh: issued.refresh });
+      }
+
+      case 'refresh_session': {
+        const refreshToken = (payload.refreshToken ?? '').trim();
+        if (!refreshToken) return jsonResponse({ ok: false, error: 'refresh token חסר' }, { status: 400 });
+
+        const refresh_token_hash = await hashRefreshToken(refreshToken);
+        const { data: rows, error: sessErr } = await supabase
+          .from('app_auth_sessions')
+          .select('id, user_id, expires_at, revoked_at')
+          .eq('refresh_token_hash', refresh_token_hash)
+          .limit(1);
+        if (sessErr) return jsonResponse({ ok: false, error: sessErr.message }, { status: 500 });
+
+        const sessionRow = (rows ?? [])[0] as
+          | { id: string; user_id: string; expires_at: string; revoked_at: string | null }
+          | undefined;
+        if (!sessionRow || sessionRow.revoked_at || new Date(sessionRow.expires_at).getTime() < Date.now()) {
+          return jsonResponse({ ok: false, error: 'session לא תקין' }, { status: 401 });
+        }
+
+        // Rotate the refresh token in place.
+        const newRefresh = generateRefreshToken();
+        const newHash = await hashRefreshToken(newRefresh);
+        const newExpires = new Date(Date.now() + REFRESH_TTL_SECONDS * 1000).toISOString();
+        const { error: rotErr } = await supabase
+          .from('app_auth_sessions')
+          .update({ refresh_token_hash: newHash, expires_at: newExpires, last_used_at: new Date().toISOString() })
+          .eq('id', sessionRow.id);
+        if (rotErr) return jsonResponse({ ok: false, error: rotErr.message }, { status: 500 });
+
+        const access = await signAppSession(sessionRow.user_id);
+
+        const { data: users } = await supabase
+          .from('users')
+          .select(USER_COLUMNS)
+          .eq('id', sessionRow.user_id)
+          .limit(1);
+
+        return jsonResponse({
+          ok: true,
+          user: (users ?? [])[0] ?? null,
+          session: { accessToken: access.token, expiresAt: access.expiresAt },
+          refresh: { token: newRefresh, expiresAt: newExpires },
+        });
+      }
+
+      case 'revoke_session': {
+        const refreshToken = (payload.refreshToken ?? '').trim();
+        if (refreshToken) {
+          const refresh_token_hash = await hashRefreshToken(refreshToken);
+          await supabase
+            .from('app_auth_sessions')
+            .update({ revoked_at: new Date().toISOString() })
+            .eq('refresh_token_hash', refresh_token_hash);
+        }
+        return jsonResponse({ ok: true });
       }
 
       case 'delete_customer_account': {

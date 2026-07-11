@@ -1,12 +1,23 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { normalizeCheckoutUrl } from '../lib/checkoutUrl';
+import { appendCheckoutDiscountCode, normalizeCheckoutUrl } from '../lib/checkoutUrl';
 import {
   createCart,
+  updateCartBuyerIdentity,
+  updateCartDiscountCodes,
+  type ShopifyCart,
   type ShopifyCartAttributeInput,
   type ShopifyCreateCartOptions,
   type ShopifyCartLineInput,
 } from '../lib/shopify';
+
+/** 13% member discount code (Shopify Admin). Env overrides; default matches store setup. */
+const OCD_PLUS_DISCOUNT_CODE =
+  process.env.EXPO_PUBLIC_OCD_PLUS_DISCOUNT_CODE?.trim() || 'OCDPLUS13';
+
+export function getOcdPlusDiscountCode(): string {
+  return OCD_PLUS_DISCOUNT_CODE;
+}
 
 /**
  * Line item for creating a hosted checkout session.
@@ -102,4 +113,38 @@ export async function createCheckout(lineItems: CheckoutLineItem[]): Promise<Cre
   }
 
   return { checkoutUrl, cartId: cart.id };
+}
+
+/**
+ * Apply OCD+ member discount on the live cart.
+ * Clears any stored buyer phone first — a phone-linked cart makes OCDPLUS13
+ * inapplicable for identified Shopify customers (persisted carts from older builds).
+ */
+export async function prepareMemberCart(args: {
+  cartId: string;
+}): Promise<ShopifyCart | null> {
+  try {
+    await updateCartBuyerIdentity(args.cartId, { phone: null });
+  } catch {
+    // best effort — discount may still apply on carts without identity
+  }
+
+  try {
+    return await updateCartDiscountCodes(args.cartId, [OCD_PLUS_DISCOUNT_CODE]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prepare a cart for an ACTIVE OCD+ member before opening checkout.
+ * Returns a fresh checkoutUrl (with discount when Shopify accepts the code).
+ */
+export async function applyOcdPlusMemberCheckout(args: {
+  cartId: string;
+  fallbackCheckoutUrl: string;
+}): Promise<string> {
+  const cart = await prepareMemberCart({ cartId: args.cartId });
+  const url = cart?.checkoutUrl?.trim() || args.fallbackCheckoutUrl;
+  return appendCheckoutDiscountCode(normalizeCheckoutUrl(url), OCD_PLUS_DISCOUNT_CODE);
 }

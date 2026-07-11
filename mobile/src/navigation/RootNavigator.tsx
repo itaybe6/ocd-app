@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { NavigationContainer, DefaultTheme, type Theme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, type Theme, useFocusEffect } from '@react-navigation/native';
 import {
   createNativeStackNavigator,
   type NativeStackScreenProps,
@@ -22,6 +22,8 @@ import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { OcdPlusMark } from '../components/OcdPlusMark';
 import { OcdPlusSubscribeSheetProvider } from '../context/OcdPlusSubscribeSheetContext';
 import { placeCustomerOrder } from '../lib/orders';
+import { applyOcdPlusMemberCheckout, prepareMemberCart } from '../services/shopify';
+import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
 import { flushPendingNavigation, navigationRef } from './navigationRef';
 import type { CustomerDrawerParamList } from './CustomerDrawer';
 import type { RootStackParamList } from './types';
@@ -197,7 +199,7 @@ function StoreCategoryRoute({
   route,
 }: NativeStackScreenProps<RootStackParamList, 'StoreCategory'>) {
   const { user } = useAuth();
-  const isOcdPlusSubscriber = user?.role === 'customer' && !!user.ocd_plus_subscriber;
+  const { isActiveMember } = useOcdPlusMembership();
   const params = route.params as RootStackParamList['StoreCategory'] & {
     id?: string;
     title?: string;
@@ -221,7 +223,7 @@ function StoreCategoryRoute({
         })
       }
       onTabPress={(tabId) => handleStoreTabNavigation(navigation, tabId, user)}
-      isOcdPlusSubscriber={isOcdPlusSubscriber}
+      isOcdPlusSubscriber={isActiveMember}
       categoryId={categoryId}
       categoryTitle={categoryTitle}
       categoryDescription={categoryDescription}
@@ -249,12 +251,42 @@ function StoreProductRoute({
 }
 
 function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreCart'>) {
-  return (
-    <StoreCartScreen
-      onBack={() => navigation.goBack()}
-      onOpenCheckout={(checkoutUrl) => navigation.navigate('StoreCheckout', { checkoutUrl })}
-    />
+  const { isActiveMember } = useOcdPlusMembership();
+  const { cartId, itemCount, setCartSnapshot } = useCart();
+
+  const syncMemberDiscount = useCallback(() => {
+    if (!isActiveMember || !cartId || itemCount === 0) return;
+    void prepareMemberCart({ cartId }).then((cart) => {
+      if (cart) void setCartSnapshot(cart);
+    });
+  }, [cartId, isActiveMember, itemCount, setCartSnapshot]);
+
+  // Keep the Shopify cart in sync whenever the cart screen is focused or lines change.
+  useFocusEffect(
+    useCallback(() => {
+      syncMemberDiscount();
+    }, [syncMemberDiscount]),
   );
+
+  useEffect(() => {
+    syncMemberDiscount();
+  }, [syncMemberDiscount]);
+
+  const handleOpenCheckout = useCallback(
+    async (checkoutUrl: string) => {
+      let url = checkoutUrl;
+      if (isActiveMember && cartId) {
+        url = await applyOcdPlusMemberCheckout({
+          cartId,
+          fallbackCheckoutUrl: checkoutUrl,
+        });
+      }
+      navigation.navigate('StoreCheckout', { checkoutUrl: url });
+    },
+    [cartId, isActiveMember, navigation],
+  );
+
+  return <StoreCartScreen onBack={() => navigation.goBack()} onOpenCheckout={handleOpenCheckout} />;
 }
 
 function StoreCheckoutRoute({
