@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FavoriteToggleButton } from './FavoriteToggleButton';
 import { formatFavoritePrice } from '../lib/favorites';
 import type { ProductFavoriteRow } from '../types/database';
+import { STORE_GRID_CARD_BODY_HEIGHT } from '../theme/storeProductCardLayout';
 
 /** Matches store category grid cards (`StoreCategoryScreen`). */
 const storeProductCardShadowStyle = {
@@ -84,53 +85,53 @@ function FavoriteProductCard({
           </View>
         </Pressable>
 
-        <View style={{ flex: 1, minHeight: 0 }}>
-          <Pressable onPress={() => onOpenProduct(favorite.product_handle)} style={{ flex: 1 }}>
-            <View
+        <Pressable onPress={() => onOpenProduct(favorite.product_handle)}>
+          <View
+            style={{
+              height: STORE_GRID_CARD_BODY_HEIGHT,
+              paddingHorizontal: 12,
+              paddingTop: 10,
+              paddingBottom: 14,
+            }}
+          >
+            <Text
+              numberOfLines={1}
               style={{
-                flex: 1,
-                paddingHorizontal: 12,
-                paddingTop: 10,
-                paddingBottom: 14,
-                justifyContent: 'flex-start',
+                color: '#111827',
+                fontSize: 16,
+                fontWeight: '900',
+                textAlign: 'right',
+                height: 20,
               }}
             >
+              {formatFavoritePrice(favorite.price, favorite.currency_code)}
+            </Text>
+            <Text
+              numberOfLines={2}
+              style={{
+                color: '#111827',
+                fontSize: 13,
+                lineHeight: 18,
+                fontWeight: '700',
+                textAlign: 'right',
+                marginTop: 4,
+                height: 36,
+              }}
+            >
+              {favorite.product_title}
+            </Text>
+            {!!favorite.product_type?.trim() ? (
               <Text
-                style={{
-                  color: '#111827',
-                  fontSize: 16,
-                  fontWeight: '900',
-                  textAlign: 'right',
-                }}
+                numberOfLines={1}
+                style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2, height: 14 }}
               >
-                {formatFavoritePrice(favorite.price, favorite.currency_code)}
+                {favorite.product_type.trim()}
               </Text>
-              <Text
-                numberOfLines={2}
-                style={{
-                  color: '#111827',
-                  fontSize: 13,
-                  lineHeight: 18,
-                  fontWeight: '700',
-                  textAlign: 'right',
-                  marginTop: 4,
-                }}
-              >
-                {favorite.product_title}
-              </Text>
-              {!!favorite.product_type?.trim() ? (
-                <Text
-                  numberOfLines={1}
-                  style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
-                >
-                  {favorite.product_type.trim()}
-                </Text>
-              ) : (
-                <View style={{ marginTop: 2, height: 14 }} />
-              )}
-            </View>
-          </Pressable>
-        </View>
+            ) : (
+              <View style={{ marginTop: 2, height: 14 }} />
+            )}
+          </View>
+        </Pressable>
       </View>
     </View>
   );

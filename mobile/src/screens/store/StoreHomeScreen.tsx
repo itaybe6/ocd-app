@@ -61,7 +61,7 @@ import { StoreSideMenu, type StoreSideMenuSection } from '../../components/Store
 import { favoriteInputFromStoreProduct } from '../../lib/favorites';
 import {
   OcdPlusProductPriceBlock,
-  OcdPlusFloatingBadge,
+  OcdPlusCardPriceBar,
   OcdPlusJoinBannerButton,
   formatOcdPrice,
 } from '../../components/OcdPlusProductPriceBlock';
@@ -70,7 +70,10 @@ import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetCon
 import { safeNavigate } from '../../navigation/navigationRef';
 import { useAuth } from '../../state/AuthContext';
 import { colors } from '../../theme/colors';
-import { STORE_BUNDLE_CARD_BODY_MIN_HEIGHT } from '../../theme/storeProductCardLayout';
+import {
+  STORE_GRID_CARD_BODY_HEIGHT,
+  STORE_RAIL_CARD_BODY_HEIGHT,
+} from '../../theme/storeProductCardLayout';
 import { useCart } from '../../state/CartContext';
 import { useFavorites } from '../../state/FavoritesContext';
 
@@ -451,7 +454,7 @@ function StoreProductCardQuantityControl({
     const targetW = tw > 0 ? tw : startW;
     const w = interpolate(openProgress.value, [0, 1], [startW, targetW], Extrapolation.CLAMP);
     const br = interpolate(openProgress.value, [0, 1], [cs, 12], Extrapolation.CLAMP);
-    const tl = interpolate(openProgress.value, [0, 1], [0, r], Extrapolation.CLAMP);
+    const tl = interpolate(openProgress.value, [0, 1], [r, 12], Extrapolation.CLAMP);
     return {
       width: w,
       height: cs + 4,
@@ -1944,9 +1947,17 @@ function HomeHighlightRailCard({
         ...storeProductCardShadowStyle,
       }}
     >
-      <View style={{ borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', width: '100%' }}>
+      <View style={{ borderRadius: 18, overflow: 'visible', backgroundColor: '#FFFFFF', width: '100%' }}>
         <Pressable onPress={onPress}>
-          <View style={{ height: 148, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
+          <View
+            style={{
+              height: 148,
+              backgroundColor: '#F4F6FA',
+              overflow: 'hidden',
+              borderTopLeftRadius: 18,
+              borderTopRightRadius: 18,
+            }}
+          >
             <ProductImage product={product} height={148} bottomRadius={0} />
             <ProductBrandBadge product={product} brands={remoteBrands} />
             <StoreProductCardQuantityControl product={product} closedSize={38} />
@@ -2003,20 +2014,19 @@ function HomeHighlightRailCard({
           </View>
         </Pressable>
         <Pressable onPress={onPress}>
-          <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24, width: '100%', alignSelf: 'stretch' }}>
-            <View style={{ minHeight: STORE_BUNDLE_CARD_BODY_MIN_HEIGHT, width: '100%' }}>
-              <View style={{ width: '100%', alignItems: 'flex-end' }}>
+          <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, width: '100%', alignSelf: 'stretch' }}>
+            <View style={{ height: STORE_RAIL_CARD_BODY_HEIGHT, width: '100%' }}>
+              <View style={{ width: '100%', alignItems: 'flex-end', height: 18 }}>
                 <View
                   style={{
                     flexDirection: 'row-reverse',
                     alignItems: 'center',
                     gap: 6,
-                    flexWrap: 'wrap',
-                    justifyContent: 'flex-start',
                     maxWidth: '100%',
                   }}
                 >
                   <Text
+                    numberOfLines={1}
                     style={{
                       color: '#111827',
                       fontSize: 14,
@@ -2029,6 +2039,7 @@ function HomeHighlightRailCard({
                   </Text>
                   {!!product.compareAtPrice && (
                     <Text
+                      numberOfLines={1}
                       style={{
                         color: '#9CA3AF',
                         fontSize: 11,
@@ -2052,6 +2063,7 @@ function HomeHighlightRailCard({
                   textAlign: 'right',
                   writingDirection: 'rtl',
                   marginTop: 4,
+                  height: 34,
                 }}
               >
                 {product.name}
@@ -2065,6 +2077,7 @@ function HomeHighlightRailCard({
                     textAlign: 'right',
                     writingDirection: 'rtl',
                     marginTop: 2,
+                    height: 14,
                   }}
                 >
                   {product.subtitle}
@@ -2075,22 +2088,15 @@ function HomeHighlightRailCard({
             </View>
           </View>
         </Pressable>
-      </View>
-      <View
-        style={{
-          position: 'absolute',
-          bottom: -14,
-          left: 0,
-          right: 0,
-          alignItems: 'center',
-          zIndex: 10,
-        }}
-      >
-        <OcdPlusFloatingBadge
-          regularPrice={product.price}
-          isSubscriber={isOcdPlusSubscriber}
-          onPress={onOpenOcdPlusSheet}
-        />
+
+        {/* ── פס מחיר OCD+ — חלק מתחתית הכרטיס ── */}
+        <View style={{ zIndex: 100, elevation: 100 }}>
+          <OcdPlusCardPriceBar
+            regularPrice={product.price}
+            isSubscriber={isOcdPlusSubscriber}
+            onPress={onOpenOcdPlusSheet}
+          />
+        </View>
       </View>
     </View>
   );
@@ -3102,10 +3108,6 @@ export function StoreHomeScreen({
     if (itemId === 'ocdPlus') {
       setMenuOpen(false);
       searchInputRef.current?.blur();
-      if (isOcdPlusSubscriber) {
-        safeNavigate('StoreOcdPlus');
-        return;
-      }
       openOcdPlusSubscribeSheet();
       return;
     }
@@ -3563,7 +3565,7 @@ export function StoreHomeScreen({
                       </Text>
                     </View>
                   )}
-                  {/* Relative box: floating CTA sits half on image / half below — same idea as OcdPlusFloatingBadge on cards */}
+                  {/* Relative box: floating CTA sits half on image / half below the banner */}
                   <View
                     style={{
                       width: cardW,
@@ -3580,9 +3582,7 @@ export function StoreHomeScreen({
                       }}
                     >
                       <Pressable
-                        onPress={() => {
-                          if (!isOcdPlusSubscriber) openOcdPlusSubscribeSheet();
-                        }}
+                        onPress={() => openOcdPlusSubscribeSheet()}
                         style={({ pressed }) => ({
                           borderRadius: bannerRadius,
                           overflow: 'hidden',
@@ -4179,7 +4179,7 @@ export function StoreCategoryScreen({
                   style={{
                     width: '48%',
                     alignSelf: 'stretch',
-                    marginBottom: 18,
+                    marginBottom: 6,
                     borderRadius: 18,
                     ...storeProductCardShadowStyle,
                   }}
@@ -4188,13 +4188,21 @@ export function StoreCategoryScreen({
                     style={{
                       flex: 1,
                       borderRadius: 18,
-                      overflow: 'hidden',
+                      overflow: 'visible',
                       backgroundColor: '#FFFFFF',
                     }}
                   >
                     <Pressable onPress={() => onOpenProduct?.(product)}>
                       {/* Image area */}
-                      <View style={{ height: 160, backgroundColor: '#F4F6FA', overflow: 'hidden' }}>
+                      <View
+                        style={{
+                          height: 160,
+                          backgroundColor: '#F4F6FA',
+                          overflow: 'hidden',
+                          borderTopLeftRadius: 18,
+                          borderTopRightRadius: 18,
+                        }}
+                      >
                         <ProductImage product={product} height={160} bottomRadius={0} />
                         <ProductBrandBadge product={product} brands={remoteBrands} />
 
@@ -4235,78 +4243,71 @@ export function StoreCategoryScreen({
                       </View>
                     </Pressable>
 
-                    <View style={{ flex: 1, minHeight: 0 }}>
-                      <Pressable onPress={() => onOpenProduct?.(product)} style={{ flex: 1 }}>
-                        <View
-                          style={{
-                            flex: 1,
-                            paddingHorizontal: 12,
-                            paddingTop: 10,
-                            paddingBottom: 26,
-                            justifyContent: 'flex-start',
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <Text
-                              style={{
-                                color: '#111827',
-                                fontSize: 16,
-                                fontWeight: '900',
-                                textAlign: 'right',
-                              }}
-                            >
-                              {formatOcdPrice(product.price)}
-                            </Text>
-                            {!!product.compareAtPrice && (
-                              <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', textDecorationLine: 'line-through' }}>
-                                {formatOcdPrice(product.compareAtPrice)}
-                              </Text>
-                            )}
-                          </View>
+                    <Pressable onPress={() => onOpenProduct?.(product)}>
+                      <View
+                        style={{
+                          height: STORE_GRID_CARD_BODY_HEIGHT,
+                          paddingHorizontal: 12,
+                          paddingTop: 10,
+                          paddingBottom: 12,
+                        }}
+                      >
+                        <View style={{ height: 20, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
                           <Text
-                            numberOfLines={2}
+                            numberOfLines={1}
                             style={{
                               color: '#111827',
-                              fontSize: 13,
-                              lineHeight: 18,
-                              fontWeight: '700',
+                              fontSize: 16,
+                              fontWeight: '900',
                               textAlign: 'right',
-                              marginTop: 4,
                             }}
                           >
-                            {product.name}
+                            {formatOcdPrice(product.price)}
                           </Text>
-                          {!!product.subtitle ? (
+                          {!!product.compareAtPrice && (
                             <Text
                               numberOfLines={1}
-                              style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2 }}
+                              style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', textDecorationLine: 'line-through' }}
                             >
-                              {product.subtitle}
+                              {formatOcdPrice(product.compareAtPrice)}
                             </Text>
-                          ) : (
-                            <View style={{ marginTop: 2, height: 14 }} />
                           )}
                         </View>
-                      </Pressable>
-                    </View>
-                  </View>
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            color: '#111827',
+                            fontSize: 13,
+                            lineHeight: 18,
+                            fontWeight: '700',
+                            textAlign: 'right',
+                            marginTop: 4,
+                            height: 36,
+                          }}
+                        >
+                          {product.name}
+                        </Text>
+                        {!!product.subtitle ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: '#9AA3B2', fontSize: 10, textAlign: 'right', marginTop: 2, height: 14 }}
+                          >
+                            {product.subtitle}
+                          </Text>
+                        ) : (
+                          <View style={{ marginTop: 2, height: 14 }} />
+                        )}
+                      </View>
+                    </Pressable>
 
-                  {/* ── Floating OCD+ badge ── */}
-                  <View
-                    style={{
-                      position: 'absolute',
-                      bottom: -16,
-                      left: 0,
-                      right: 0,
-                      alignItems: 'center',
-                      zIndex: 10,
-                    }}
-                  >
-                    <OcdPlusFloatingBadge
-                      regularPrice={product.price}
-                      isSubscriber={isOcdPlusSubscriber}
-                      onPress={openOcdPlusSubscribeSheet}
-                    />
+                    {/* ── פס מחיר OCD+ — חלק מתחתית הכרטיס ── */}
+                    <View style={{ zIndex: 100, elevation: 100 }}>
+                      <OcdPlusCardPriceBar
+                        regularPrice={product.price}
+                        isSubscriber={isOcdPlusSubscriber}
+                        onPress={openOcdPlusSubscribeSheet}
+                      />
+                    </View>
                   </View>
                 </View>
               ))}

@@ -200,11 +200,13 @@ export function CustomerProfileScreen({
   onOpenOrders,
   onOpenOrder,
   onOpenAddresses,
+  onOpenOcdPlus,
 }: {
   onTabPress: (tabId: StoreBottomTabId) => void;
   onOpenOrders: () => void;
   onOpenOrder: (orderId: string) => void;
   onOpenAddresses: () => void;
+  onOpenOcdPlus: () => void;
 }) {
   const { user, signOut, deleteCustomerAccount } = useAuth();
   const { favoriteCount } = useFavorites();
@@ -296,7 +298,7 @@ export function CustomerProfileScreen({
                 icon="ribbon-outline"
                 label="מנוי OCD+"
                 value={ocdPlusLoading ? '…' : ocdPlusStatusLabel(ocdPlusStatus)}
-                chevron={false}
+                onPress={onOpenOcdPlus}
               />
               <RowDivider />
             </>

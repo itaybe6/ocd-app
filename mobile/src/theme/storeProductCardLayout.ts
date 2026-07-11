@@ -1,8 +1,12 @@
 /**
- * כרטיסי מוצר בגריד (בית / קטגוריה / מועדפים): בשורה — `alignItems: 'stretch'` + `flex: 1` באזור הטקסט
- * מאזנים גובה ותגית OCD+ צפה.
- *
- * קרוסלת מארזים (בלי stretch לשורה): minHeight לאזור התוכן בלבד (בלי padding).
+ * גובה קבוע לאזור מחיר + כותרת + משנה (בלי padding של הכרטיס).
+ * מונע כרטיסים בגבהים שונים כשהכותרת תופסת שורה אחת או שתיים.
  */
-/** כותרת עד 2 שורות (lineHeight 17) + מקום לשורת משנה — רק תוכן, ללא padding של הכרטיס */
-export const STORE_BUNDLE_CARD_BODY_MIN_HEIGHT = 52;
+/** כרטיסי קרוסלה (מארזים / מומלצים / חדש) — fontSize 12/14 */
+export const STORE_RAIL_CARD_BODY_HEIGHT = 72;
+
+/** כרטיסי גריד (קטגוריה / מועדפים) — fontSize 13/16 */
+export const STORE_GRID_CARD_BODY_HEIGHT = 76;
+
+/** @deprecated Use STORE_RAIL_CARD_BODY_HEIGHT */
+export const STORE_BUNDLE_CARD_BODY_MIN_HEIGHT = STORE_RAIL_CARD_BODY_HEIGHT;

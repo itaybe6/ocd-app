@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, Platform, Pressable, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { ArrowLeft, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
@@ -14,9 +15,6 @@ const RTL_TEXT = {
   textAlign: 'right' as const,
   writingDirection: 'rtl' as const,
 };
-
-/** סגירה אוטומטית של בורר הכמות (+/−) לאחר כמה שניות ללא פעולה — כמו במסך מוצר */
-const CART_QUANTITY_STEPPER_AUTO_CLOSE_MS = 3200;
 
 const COLORS = {
   /** רקע ראשי — אוף-וייט עדין שמרים את האפליקציה אווירירית */
@@ -32,14 +30,10 @@ const COLORS = {
   accent: '#00C2A8',
   danger: '#DC2626',
   pill: '#F1F5F9',
-  /** בורר כמות פתוח — רקע אפור בהיר, לא ירוק/טורקיז */
-  quantityStepperTrack: '#EEF1F5',
-  quantityStepperBorder: '#D1D5DB',
-  /** תיבת כמות סגורה — מסגרת עדינה */
-  quantityChipBorder: '#D5D9E0',
-  quantityCircleBorder: '#E2E8F0',
-  /** בר תשלום צף תחתון */
-  checkoutBar: '#0B1220',
+  /** רקע בורר הכמות — אפור בהיר עדין */
+  quantityStepperTrack: '#F3F5F8',
+  /** בר תשלום צף תחתון — שחור מלא */
+  checkoutBar: '#000000',
 };
 
 function formatPrice(price: number, currencyCode: string) {
@@ -75,11 +69,9 @@ function CartProductImage({
         style={{
           width: '100%',
           height: '100%',
-          borderRadius: 16,
+          borderRadius: 18,
           overflow: 'hidden',
           backgroundColor: '#F4F6F9',
-          borderWidth: 1,
-          borderColor: '#EEF1F5',
         }}
       >
         <Image
@@ -152,10 +144,12 @@ function CartLineSwipeable({
               alignSelf: 'stretch',
               justifyContent: 'center',
               alignItems: 'center',
+              gap: 5,
               opacity: pressed || disabled ? 0.75 : 1,
             })}
           >
-            <Trash2 size={24} color="#FFFFFF" strokeWidth={2} />
+            <Trash2 size={22} color="#FFFFFF" strokeWidth={2.1} />
+            <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700', letterSpacing: -0.1 }}>הסרה</Text>
           </Pressable>
         </View>
       )}
@@ -165,118 +159,13 @@ function CartLineSwipeable({
   );
 }
 
-function CartQuantityPicker({
-  productId,
-  quantity,
-  disabled,
-  expanded,
-  onExpand,
-  onQuantityChange,
-}: {
-  productId: string;
-  quantity: number;
-  disabled?: boolean;
-  expanded: boolean;
-  onExpand: () => void;
-  onQuantityChange: (productId: string, nextQty: number) => void;
-}) {
-  if (!expanded) {
-    return (
-      <Pressable
-        disabled={disabled}
-        onPress={onExpand}
-        accessibilityRole="button"
-        accessibilityLabel={`כמות ${quantity}, לחיצה לשינוי`}
-        hitSlop={6}
-        style={({ pressed }) => ({
-          opacity: pressed || disabled ? 0.65 : 1,
-          flexShrink: 0,
-        })}
-      >
-        <View
-          style={{
-            minWidth: 40,
-            height: 40,
-            paddingHorizontal: 8,
-            borderRadius: 9,
-            borderWidth: 1,
-            borderColor: COLORS.quantityChipBorder,
-            backgroundColor: COLORS.surface,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 15, fontWeight: '600', color: COLORS.text, letterSpacing: -0.2 }}>{quantity}</Text>
-        </View>
-      </Pressable>
-    );
-  }
-
-  return (
-    <View
-      style={{
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 6,
-        flexShrink: 0,
-        backgroundColor: COLORS.quantityStepperTrack,
-        borderRadius: 999,
-        paddingVertical: 5,
-        paddingHorizontal: 6,
-        borderWidth: 1,
-        borderColor: COLORS.quantityStepperBorder,
-      }}
-    >
-      <SurfaceIconButton
-        onPress={() => {
-          onQuantityChange(productId, quantity + 1);
-        }}
-        size={30}
-        backgroundColor={COLORS.surface}
-        borderColor={COLORS.quantityCircleBorder}
-        disabled={disabled}
-      >
-        <Plus size={15} color={COLORS.text} strokeWidth={2.2} />
-      </SurfaceIconButton>
-      <Text
-        style={{
-          minWidth: 24,
-          textAlign: 'center',
-          color: COLORS.text,
-          fontSize: 15,
-          fontWeight: '700',
-        }}
-      >
-        {quantity}
-      </Text>
-      <SurfaceIconButton
-        onPress={() => {
-          onQuantityChange(productId, quantity - 1);
-        }}
-        size={30}
-        backgroundColor={COLORS.surface}
-        borderColor={COLORS.quantityCircleBorder}
-        disabled={disabled}
-      >
-        <Minus size={15} color={COLORS.text} strokeWidth={2.2} />
-      </SurfaceIconButton>
-    </View>
-  );
-}
-
-function SurfaceIconButton({
+function StepperButton({
   onPress,
   children,
-  size,
-  backgroundColor,
-  borderColor,
   disabled = false,
 }: {
   onPress: () => void;
   children: React.ReactNode;
-  size: number;
-  backgroundColor: string;
-  borderColor?: string;
   disabled?: boolean;
 }) {
   return (
@@ -285,19 +174,72 @@ function SurfaceIconButton({
       disabled={disabled}
       hitSlop={8}
       style={({ pressed }) => ({
-        width: size,
-        height: size,
-        borderRadius: size / 2,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor,
-        borderWidth: borderColor ? 1 : 0,
-        borderColor,
+        backgroundColor: COLORS.surface,
         opacity: pressed || disabled ? 0.55 : 1,
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+        elevation: 1,
       })}
     >
       {children}
     </Pressable>
+  );
+}
+
+function CartQuantityStepper({
+  quantity,
+  disabled,
+  onIncrement,
+  onDecrement,
+}: {
+  quantity: number;
+  disabled?: boolean;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) {
+  const isRemoveStep = quantity <= 1;
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        flexShrink: 0,
+        backgroundColor: COLORS.quantityStepperTrack,
+        borderRadius: 999,
+        padding: 3,
+        gap: 2,
+      }}
+    >
+      <StepperButton onPress={onIncrement} disabled={disabled}>
+        <Plus size={14} color={COLORS.text} strokeWidth={2.4} />
+      </StepperButton>
+      <Text
+        style={{
+          minWidth: 26,
+          textAlign: 'center',
+          color: COLORS.text,
+          fontSize: 14,
+          fontWeight: '700',
+        }}
+      >
+        {quantity}
+      </Text>
+      <StepperButton onPress={onDecrement} disabled={disabled}>
+        {isRemoveStep ? (
+          <Trash2 size={13} color={COLORS.danger} strokeWidth={2.2} />
+        ) : (
+          <Minus size={14} color={COLORS.text} strokeWidth={2.4} />
+        )}
+      </StepperButton>
+    </View>
   );
 }
 
@@ -320,6 +262,7 @@ export function StoreCartScreen({
     isMutating,
     updateQuantity,
     removeItem,
+    getQuantity,
   } = useCart();
   const [isCheckoutPreparing, setIsCheckoutPreparing] = useState(false);
 
@@ -349,46 +292,19 @@ export function StoreCartScreen({
   /** גובה בר התשלום הצף + מרווח — בלי טאב בר */
   const floatingCheckoutReserve = 72;
   const scrollBottomPadding = insets.bottom + floatingCheckoutReserve + 28;
-  const [openQuantityLineId, setOpenQuantityLineId] = useState<string | null>(null);
-  const quantityStepperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearQuantityStepperTimer = useCallback(() => {
-    if (quantityStepperTimerRef.current !== null) {
-      clearTimeout(quantityStepperTimerRef.current);
-      quantityStepperTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleQuantityStepperClose = useCallback(() => {
-    clearQuantityStepperTimer();
-    quantityStepperTimerRef.current = setTimeout(() => {
-      setOpenQuantityLineId(null);
-      quantityStepperTimerRef.current = null;
-    }, CART_QUANTITY_STEPPER_AUTO_CLOSE_MS);
-  }, [clearQuantityStepperTimer]);
-
-  useEffect(() => () => clearQuantityStepperTimer(), [clearQuantityStepperTimer]);
-
-  const handleOpenQuantityLine = useCallback(
-    (lineId: string) => {
-      setOpenQuantityLineId(lineId);
-      scheduleQuantityStepperClose();
-    },
-    [scheduleQuantityStepperClose]
-  );
-
   const handleCartQuantityChange = useCallback(
     (productId: string, nextQty: number) => {
+      if (nextQty <= 0) {
+        if (Platform.OS !== 'web') {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        void removeItem(productId);
+        return;
+      }
       void updateQuantity(productId, nextQty);
-      scheduleQuantityStepperClose();
     },
-    [updateQuantity, scheduleQuantityStepperClose]
+    [removeItem, updateQuantity]
   );
-
-  const closeQuantityStepper = useCallback(() => {
-    clearQuantityStepperTimer();
-    setOpenQuantityLineId(null);
-  }, [clearQuantityStepperTimer]);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.background }}>
@@ -500,7 +416,6 @@ export function StoreCartScreen({
             }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            onScrollBeginDrag={closeQuantityStepper}
           >
           {isBootstrapping && (
             <View
@@ -631,21 +546,8 @@ export function StoreCartScreen({
                 </Text>
               </View>
 
-              <View
-                style={{
-                  backgroundColor: COLORS.surface,
-                  borderRadius: 22,
-                  borderWidth: 1,
-                  borderColor: COLORS.divider,
-                  overflow: 'hidden',
-                  shadowColor: '#0F172A',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.04,
-                  shadowRadius: 12,
-                  elevation: 2,
-                }}
-              >
-                {items.map((item, index) => {
+              <View style={{ gap: 12 }}>
+                {items.map((item) => {
                   const category = (item.product.subtitle ?? '').trim();
                   const variantPart =
                     item.product.variantTitle && item.product.variantTitle !== 'Default Title'
@@ -657,23 +559,40 @@ export function StoreCartScreen({
                       ? [category, variantPart].filter(Boolean).join(' • ')
                       : pageLabel;
 
+                  const displayQuantity = getQuantity(item.product.id) || item.quantity;
+                  const linePrice = isMember
+                    ? computeOcdPlusPrice(item.cost.totalAmount)
+                    : item.cost.totalAmount;
+
                   return (
-                    <View key={item.id}>
-                      {index > 0 ? (
-                        <View style={{ paddingHorizontal: 16 }}>
-                          <View style={{ height: 1, backgroundColor: COLORS.divider }} />
-                        </View>
-                      ) : null}
+                    <View
+                      key={item.id}
+                      style={{
+                        borderRadius: 24,
+                        backgroundColor: COLORS.surface,
+                        overflow: 'hidden',
+                        borderWidth: 1,
+                        borderColor: '#EFF2F6',
+                        shadowColor: '#0F172A',
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: 0.03,
+                        shadowRadius: 14,
+                        elevation: 1,
+                      }}
+                    >
                       <CartLineSwipeable
                         disabled={isMutating}
                         removeLabel={`הסר ${item.product.name} מהעגלה`}
                         onRemove={() => {
+                          if (Platform.OS !== 'web') {
+                            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          }
                           void removeItem(item.product.id);
                         }}
                       >
-                        <View style={{ paddingHorizontal: 14, paddingVertical: 16 }}>
-                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                            <View style={{ width: 76, height: 76 }}>
+                        <View style={{ padding: 14 }}>
+                          <View style={{ flexDirection: 'row-reverse', gap: 14 }}>
+                            <View style={{ width: 84, height: 84, flexShrink: 0 }}>
                               <CartProductImage
                                 imageUrl={item.product.imageUrl}
                                 imageAltText={item.product.imageAltText}
@@ -683,82 +602,75 @@ export function StoreCartScreen({
                               />
                             </View>
 
-                            <View style={{ flex: 1, minWidth: 0, gap: 6, alignItems: 'flex-end', justifyContent: 'center' }}>
-                              <Text
-                                numberOfLines={2}
+                            <View style={{ flex: 1, minWidth: 0, justifyContent: 'space-between' }}>
+                              <View style={{ gap: 3, alignItems: 'flex-end' }}>
+                                <Text
+                                  numberOfLines={2}
+                                  style={{
+                                    color: COLORS.text,
+                                    fontSize: 14.5,
+                                    fontWeight: '700',
+                                    lineHeight: 20,
+                                    letterSpacing: -0.2,
+                                    ...RTL_TEXT,
+                                  }}
+                                >
+                                  {item.product.name}
+                                </Text>
+                                {!!subtextLine && (
+                                  <Text
+                                    numberOfLines={1}
+                                    style={{ color: COLORS.softText, fontSize: 12, lineHeight: 16, ...RTL_TEXT }}
+                                  >
+                                    {subtextLine}
+                                  </Text>
+                                )}
+                              </View>
+
+                              <View
                                 style={{
-                                  color: COLORS.text,
-                                  fontSize: 15,
-                                  fontWeight: '800',
-                                  lineHeight: 21,
-                                  letterSpacing: -0.2,
-                                  ...RTL_TEXT,
+                                  flexDirection: 'row-reverse',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  marginTop: 10,
                                 }}
                               >
-                                {item.product.name}
-                              </Text>
-                              {!!subtextLine && (
-                                <Text
-                                  numberOfLines={1}
-                                  style={{ color: COLORS.muted, fontSize: 12.5, lineHeight: 17, ...RTL_TEXT }}
-                                >
-                                  {subtextLine}
-                                </Text>
-                              )}
-                              <View style={{ alignItems: 'flex-end', gap: 2, marginTop: 2 }}>
-                                {isMember ? (
-                                  <>
+                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                                  <Text
+                                    style={{
+                                      color: COLORS.text,
+                                      fontSize: 16.5,
+                                      fontWeight: '800',
+                                      letterSpacing: -0.3,
+                                    }}
+                                  >
+                                    {formatPrice(linePrice, item.cost.currencyCode)}
+                                  </Text>
+                                  {isMember && (
                                     <Text
                                       style={{
                                         color: COLORS.softText,
-                                        fontSize: 13,
+                                        fontSize: 12,
                                         fontWeight: '600',
                                         textDecorationLine: 'line-through',
-                                        ...RTL_TEXT,
                                       }}
                                     >
                                       {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
                                     </Text>
-                                    <Text
-                                      style={{
-                                        color: COLORS.text,
-                                        fontSize: 17,
-                                        fontWeight: '800',
-                                        letterSpacing: -0.3,
-                                        ...RTL_TEXT,
-                                      }}
-                                    >
-                                      {formatPrice(
-                                        computeOcdPlusPrice(item.cost.totalAmount),
-                                        item.cost.currencyCode,
-                                      )}
-                                    </Text>
-                                  </>
-                                ) : (
-                                  <Text
-                                    style={{
-                                      color: COLORS.text,
-                                      fontSize: 17,
-                                      fontWeight: '800',
-                                      letterSpacing: -0.3,
-                                      ...RTL_TEXT,
-                                    }}
-                                  >
-                                    {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
-                                  </Text>
-                                )}
-                              </View>
-                            </View>
+                                  )}
+                                </View>
 
-                            <View style={{ flexShrink: 0 }}>
-                              <CartQuantityPicker
-                                productId={item.product.id}
-                                quantity={item.quantity}
-                                disabled={isMutating}
-                                expanded={openQuantityLineId === item.id}
-                                onExpand={() => handleOpenQuantityLine(item.id)}
-                                onQuantityChange={handleCartQuantityChange}
-                              />
+                                <CartQuantityStepper
+                                  quantity={displayQuantity}
+                                  disabled={isMutating}
+                                  onIncrement={() =>
+                                    handleCartQuantityChange(item.product.id, displayQuantity + 1)
+                                  }
+                                  onDecrement={() =>
+                                    handleCartQuantityChange(item.product.id, displayQuantity - 1)
+                                  }
+                                />
+                              </View>
                             </View>
                           </View>
                         </View>
@@ -771,16 +683,16 @@ export function StoreCartScreen({
               <View
                 style={{
                   backgroundColor: COLORS.surface,
-                  borderRadius: 22,
+                  borderRadius: 24,
                   borderWidth: 1,
-                  borderColor: COLORS.divider,
+                  borderColor: '#EFF2F6',
                   paddingHorizontal: 18,
                   paddingVertical: 18,
                   shadowColor: '#0F172A',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.04,
-                  shadowRadius: 12,
-                  elevation: 2,
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.03,
+                  shadowRadius: 14,
+                  elevation: 1,
                   gap: 14,
                 }}
               >

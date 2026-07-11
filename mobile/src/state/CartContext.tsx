@@ -51,6 +51,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Optimistic quantity overrides: productId → desired qty (shown instantly)
   const [optimisticQuantities, setOptimisticQuantities] = useState<Record<string, number>>({});
+  // Lines hidden optimistically while their remove API call is still in flight
+  const [removingProductIds, setRemovingProductIds] = useState<string[]>([]);
   // Refs for debounced API calls (avoid stale closures in timers)
   const cartRef = useRef<ShopifyCart | null>(null);
   const pendingUpdatesRef = useRef<Record<string, number>>({});
@@ -118,25 +120,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [syncCart]);
 
-  const items = cart?.lines ?? [];
+  const items = useMemo(() => {
+    const lines = cart?.lines ?? [];
+    if (!removingProductIds.length) return lines;
+    return lines.filter((item) => !removingProductIds.includes(item.product.id));
+  }, [cart?.lines, removingProductIds]);
 
   const itemCount = useMemo(() => {
-    const base = cart?.totalQuantity ?? items.reduce((sum, item) => sum + item.quantity, 0);
+    const base = removingProductIds.length
+      ? items.reduce((sum, item) => sum + item.quantity, 0)
+      : cart?.totalQuantity ?? items.reduce((sum, item) => sum + item.quantity, 0);
     let delta = 0;
     for (const [productId, optimisticQty] of Object.entries(optimisticQuantities)) {
       const realQty = items.find((i) => i.product.id === productId)?.quantity ?? 0;
       delta += optimisticQty - realQty;
     }
     return Math.max(0, base + delta);
-  }, [cart?.totalQuantity, items, optimisticQuantities]);
+  }, [cart?.totalQuantity, items, optimisticQuantities, removingProductIds.length]);
 
-  const subtotal = cart?.cost.subtotalAmount ?? items.reduce((sum, item) => sum + item.cost.totalAmount, 0);
+  const subtotal = removingProductIds.length
+    ? items.reduce((sum, item) => sum + item.cost.totalAmount, 0)
+    : cart?.cost.subtotalAmount ?? items.reduce((sum, item) => sum + item.cost.totalAmount, 0);
   const currencyCode = getCurrencyCode(cart, items);
-
-  const findLineByProductId = useCallback(
-    (productId: string) => items.find((item) => item.product.id === productId) ?? null,
-    [items]
-  );
 
   const runCartMutation = useCallback(
     async (mutate: () => Promise<ShopifyCart | null>) => {
@@ -217,11 +222,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const removeItem = useCallback(
     async (productId: string) => {
-      const line = findLineByProductId(productId);
-      if (!cart?.id || !line) return;
+      const currentCart = cartRef.current;
+      const line = currentCart?.lines.find((item) => item.product.id === productId) ?? null;
+      if (!currentCart?.id || !line) return;
+
+      // Optimistic: hide the line immediately; the API call completes in the background
+      setRemovingProductIds((prev) => [...prev, productId]);
 
       try {
-        const nextCart = await runCartMutation(() => removeCartLines(cart.id, [line.id]));
+        const nextCart = await runCartMutation(() => removeCartLines(currentCart.id, [line.id]));
         await syncCart(nextCart);
       } catch (error: any) {
         Toast.show({
@@ -229,9 +238,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           text1: 'לא הצלחנו להסיר את המוצר',
           text2: error?.message ?? 'נסה שוב בעוד רגע',
         });
+      } finally {
+        setRemovingProductIds((prev) => prev.filter((id) => id !== productId));
       }
     },
-    [cart?.id, findLineByProductId, runCartMutation, syncCart]
+    [runCartMutation, syncCart]
   );
 
   const updateQuantity = useCallback(

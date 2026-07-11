@@ -17,6 +17,7 @@ import { CustomerFavoritesScreen } from '../screens/customer/FavoritesScreen';
 import { CustomerOrdersScreen } from '../screens/customer/OrdersScreen';
 import { CustomerOrderDetailScreen } from '../screens/customer/OrderDetailScreen';
 import { CustomerAddressesScreen } from '../screens/customer/AddressesScreen';
+import { CustomerOcdPlusScreen } from '../screens/customer/OcdPlusScreen';
 import { safeNavigate } from './navigationRef';
 import { StoreHomeScreen, type StoreBottomTabId, type StoreMainTabId } from '../screens/store/StoreHomeScreen';
 
@@ -31,6 +32,7 @@ export type CustomerDrawerParamList = {
   Orders: undefined;
   OrderDetail: { orderId: string; returnTo: 'Profile' | 'Orders' };
   Addresses: undefined;
+  OcdPlus: undefined;
   Services: undefined;
   Favorites: undefined;
 };
@@ -104,6 +106,16 @@ function CustomerProfileRoute({ navigation }: DrawerScreenProps<CustomerDrawerPa
       onOpenOrders={() => navigation.navigate('Orders')}
       onOpenOrder={(orderId) => navigation.navigate('OrderDetail', { orderId, returnTo: 'Profile' })}
       onOpenAddresses={() => navigation.navigate('Addresses')}
+      onOpenOcdPlus={() => navigation.navigate('OcdPlus')}
+      onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
+    />
+  );
+}
+
+function CustomerOcdPlusRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'OcdPlus'>) {
+  return (
+    <CustomerOcdPlusScreen
+      onBack={() => navigation.navigate('Profile')}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
   );
@@ -216,6 +228,7 @@ export function CustomerDrawer({ initialRouteName = 'Store' }: CustomerDrawerPro
         component={CustomerOrderDetailRoute}
       />
       <Drawer.Screen name="Addresses" options={{ title: 'כתובות', headerShown: false }} component={CustomerAddressesRoute} />
+      <Drawer.Screen name="OcdPlus" options={{ title: 'מנוי OCD+', headerShown: false }} component={CustomerOcdPlusRoute} />
       <Drawer.Screen name="Favorites" options={{ title: 'אהבתי', headerShown: false }} component={CustomerFavoritesRoute} />
       <Drawer.Screen name="Services" options={{ title: 'שירותים' }} component={CustomerServicesScreen} />
     </Drawer.Navigator>

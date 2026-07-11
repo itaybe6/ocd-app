@@ -15,6 +15,8 @@ export type RootStackParamList = {
         initialTabRequestId?: number;
         /** After customer sign-up, open profile (home with user details) once. */
         initialCustomerProfile?: boolean;
+        /** Open customer OCD+ membership management inside the personal area. */
+        initialCustomerOcdPlus?: boolean;
       }
     | undefined;
   Login: undefined;

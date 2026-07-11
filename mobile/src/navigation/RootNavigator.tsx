@@ -88,8 +88,12 @@ function CustomerEntryScreen({ initialDrawerRoute }: { initialDrawerRoute: keyof
 
 function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Main'>) {
   const { user } = useAuth();
-  const customerInitialDrawer =
-    user?.role === 'customer' && route.params?.initialCustomerProfile === true ? 'Profile' : 'Store';
+  const customerInitialDrawer: keyof CustomerDrawerParamList =
+    user?.role === 'customer' && route.params?.initialCustomerOcdPlus === true
+      ? 'OcdPlus'
+      : user?.role === 'customer' && route.params?.initialCustomerProfile === true
+        ? 'Profile'
+        : 'Store';
 
   if (!user) {
     return (
@@ -120,7 +124,13 @@ function MainEntryScreen({ navigation, route }: NativeStackScreenProps<RootStack
   if (user.role === 'worker') return <WorkerEntryScreen />;
   return (
     <CustomerEntryScreen
-      key={route.params?.initialCustomerProfile === true ? `customer-profile:${user.id}` : `customer:${user.id}`}
+      key={
+        route.params?.initialCustomerOcdPlus === true
+          ? `customer-ocdplus:${user.id}`
+          : route.params?.initialCustomerProfile === true
+            ? `customer-profile:${user.id}`
+            : `customer:${user.id}`
+      }
       initialDrawerRoute={customerInitialDrawer}
     />
   );
