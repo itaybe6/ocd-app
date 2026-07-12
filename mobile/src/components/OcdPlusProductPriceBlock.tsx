@@ -514,31 +514,48 @@ export function OcdPlusMemberPriceHint({
   onPress?: () => void;
 }) {
   const memberPrice = computeOcdPlusPrice(regularPrice);
+  const savings = Math.max(0, Math.round((regularPrice - memberPrice) * 100) / 100);
 
-  const content = (
-    <View style={ocdPlusHintStyles.wrap}>
-      <Text style={ocdPlusHintStyles.price}>{fmt(memberPrice)}</Text>
-      <Text style={ocdPlusHintStyles.label}>
-        {isOcdPlusSubscriber ? 'מחיר לחברי OCD+' : 'לחברי OCD+'}
-      </Text>
-    </View>
-  );
-
-  if (!isOcdPlusSubscriber && onPress) {
+  if (isOcdPlusSubscriber) {
     return (
-      <Pressable
-        onPress={onPress}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`מחיר OCD+ ${fmt(memberPrice)}`}
-        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-      >
-        {content}
-      </Pressable>
+      <View style={ocdPlusHintStyles.wrap}>
+        <Text style={ocdPlusHintStyles.subscriberPrice}>{fmt(memberPrice)}</Text>
+        <Text style={ocdPlusHintStyles.label}>מחיר לחברי OCD+</Text>
+      </View>
     );
   }
 
-  return content;
+  return (
+    <View style={ocdPlusHintStyles.guestWrap}>
+      <View style={ocdPlusHintStyles.guestRow}>
+        {onPress ? (
+          <Pressable
+            onPress={onPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="הצטרפות ל-OCD+"
+            style={({ pressed }) => ({ opacity: pressed ? 0.86 : 1 })}
+          >
+            <View style={ocdPlusHintStyles.joinButton}>
+              <OcdPlusMark size={15} variant="glyph" color="#FFFFFF" />
+              <Text style={ocdPlusHintStyles.joinText}>הצטרף</Text>
+            </View>
+          </Pressable>
+        ) : null}
+
+        <View style={ocdPlusHintStyles.guestPriceCol}>
+          <Text style={ocdPlusHintStyles.guestPrice}>{fmt(memberPrice)}</Text>
+          <View style={ocdPlusHintStyles.guestLabelRow}>
+            <OcdPlusMark size={14} />
+            <Text style={ocdPlusHintStyles.guestLabel}>לחברי OCD+</Text>
+          </View>
+          {savings > 0 ? (
+            <Text style={ocdPlusHintStyles.guestSavings}>חיסכון של {fmt(savings)}</Text>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
 }
 
 const ocdPlusHintStyles = StyleSheet.create({
@@ -551,7 +568,7 @@ const ocdPlusHintStyles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E5E8EE',
   },
-  price: {
+  subscriberPrice: {
     fontSize: 17,
     fontWeight: '700',
     color: '#0F172A',
@@ -565,5 +582,75 @@ const ocdPlusHintStyles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'right',
     writingDirection: 'rtl',
+  },
+  guestWrap: {
+    alignSelf: 'stretch',
+    marginTop: 2,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E8EE',
+  },
+  guestRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.035)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  guestPriceCol: {
+    flex: 1,
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  guestPrice: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0B1220',
+    letterSpacing: -0.45,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  guestLabelRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+  },
+  guestLabel: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748B',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  guestSavings: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#94A3B8',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  joinButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#0B1220',
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    shadowColor: '#0B1220',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  joinText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.15,
   },
 });
