@@ -18,6 +18,7 @@ import { CustomerOrdersScreen } from '../screens/customer/OrdersScreen';
 import { CustomerOrderDetailScreen } from '../screens/customer/OrderDetailScreen';
 import { CustomerAddressesScreen } from '../screens/customer/AddressesScreen';
 import { CustomerOcdPlusScreen } from '../screens/customer/OcdPlusScreen';
+import { triggerOcdPlusSubscribeSheet } from '../context/OcdPlusSubscribeSheetContext';
 import { safeNavigate } from './navigationRef';
 import { StoreHomeScreen, type StoreBottomTabId, type StoreMainTabId } from '../screens/store/StoreHomeScreen';
 
@@ -53,7 +54,7 @@ function handleCustomerTabPress(
   }
 
   if (tabId === 'ocdPlus') {
-    safeNavigate('StoreOcdPlus');
+    triggerOcdPlusSubscribeSheet();
     return;
   }
 

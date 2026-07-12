@@ -13,6 +13,13 @@ type OcdPlusSubscribeSheetContextValue = {
 
 const OcdPlusSubscribeSheetContext = createContext<OcdPlusSubscribeSheetContextValue | null>(null);
 
+let openOcdPlusSubscribeSheetHandler: (() => void) | null = null;
+
+/** Opens the OCD+ sheet from navigation handlers outside React tree hooks. */
+export function triggerOcdPlusSubscribeSheet() {
+  openOcdPlusSubscribeSheetHandler?.();
+}
+
 export function OcdPlusSubscribeSheetProvider({ children }: { children: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
   const { isActiveMember } = useOcdPlusMembership();
@@ -24,6 +31,15 @@ export function OcdPlusSubscribeSheetProvider({ children }: { children: React.Re
   const closeOcdPlusSubscribeSheet = useCallback(() => {
     setVisible(false);
   }, []);
+
+  React.useEffect(() => {
+    openOcdPlusSubscribeSheetHandler = openOcdPlusSubscribeSheet;
+    return () => {
+      if (openOcdPlusSubscribeSheetHandler === openOcdPlusSubscribeSheet) {
+        openOcdPlusSubscribeSheetHandler = null;
+      }
+    };
+  }, [openOcdPlusSubscribeSheet]);
 
   const value = useMemo(
     () => ({ openOcdPlusSubscribeSheet }),

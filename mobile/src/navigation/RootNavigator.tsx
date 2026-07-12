@@ -20,7 +20,7 @@ import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
 import { OcdPlusMark } from '../components/OcdPlusMark';
-import { OcdPlusSubscribeSheetProvider } from '../context/OcdPlusSubscribeSheetContext';
+import { OcdPlusSubscribeSheetProvider, triggerOcdPlusSubscribeSheet } from '../context/OcdPlusSubscribeSheetContext';
 import { placeCustomerOrder } from '../lib/orders';
 import { applyOcdPlusMemberCheckout, prepareMemberCart } from '../services/shopify';
 import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
@@ -59,7 +59,7 @@ function handleStoreTabNavigation(
   }
 
   if (tabId === 'ocdPlus') {
-    navigation.navigate('StoreOcdPlus');
+    triggerOcdPlusSubscribeSheet();
     return;
   }
 
