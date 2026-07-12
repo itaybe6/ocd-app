@@ -48,6 +48,8 @@ export function StoreFavoritesScreen({
     });
   }, [favorites, normalizedQuery]);
 
+  const showToolbar = favorites.length > 0;
+
   if (!user || user.role !== 'customer') {
     return (
       <View style={styles.root}>
@@ -80,11 +82,13 @@ export function StoreFavoritesScreen({
 
   return (
     <View style={styles.root}>
-      <View style={[styles.topBar, { paddingTop: insets.top }]}>
-        <View style={styles.topBarRow}>
-          <Text style={styles.topBarTitle}>אהבתי</Text>
+      {showToolbar ? (
+        <View style={[styles.topBar, { paddingTop: insets.top }]}>
+          <View style={styles.topBarRow}>
+            <Text style={styles.topBarTitle}>אהבתי</Text>
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <ScrollView
         style={styles.flex}
@@ -93,31 +97,34 @@ export function StoreFavoritesScreen({
         keyboardDismissMode="on-drag"
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingTop: 16,
+          paddingTop: showToolbar ? 16 : insets.top,
           paddingBottom: contentPaddingBottom + 8,
           gap: 16,
           flexGrow: 1,
+          justifyContent: showToolbar ? undefined : 'center',
         }}
       >
-        <View style={styles.searchShell}>
-          <Ionicons name="search-outline" size={18} color="#9CA3AF" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="חיפוש במוצרים שאהבתי"
-            placeholderTextColor="#B7BDC8"
-            style={styles.searchInput}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
-          {query.length > 0 ? (
-            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="נקה חיפוש">
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-            </Pressable>
-          ) : null}
-        </View>
+        {showToolbar ? (
+          <View style={styles.searchShell}>
+            <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="חיפוש במוצרים שאהבתי"
+              placeholderTextColor="#B7BDC8"
+              style={styles.searchInput}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+            {query.length > 0 ? (
+              <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="נקה חיפוש">
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
-        {!isHydrating && favorites.length > 0 ? (
+        {showToolbar ? (
           <View style={styles.countRow}>
             <Text style={styles.countText}>
               {normalizedQuery

@@ -20,6 +20,11 @@ import { useFavorites } from '../../state/FavoritesContext';
 import { createCheckout } from '../../services/shopify';
 import { useBrands } from '../../hooks/useBrands';
 import { ProductBrandBadge } from '../../components/ProductBrandBadge';
+import { ProductDescription } from '../../components/ProductDescription';
+import { OcdPlusMemberPriceHint, computeOcdPlusPrice, formatOcdPrice } from '../../components/OcdPlusProductPriceBlock';
+import { OcdPlusMark } from '../../components/OcdPlusMark';
+import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Product'>;
 
@@ -57,16 +62,6 @@ const PALETTE = {
 function formatPrice(price: number, currencyCode: string) {
   if (currencyCode === 'ILS') return `₪${price.toLocaleString('he-IL')}.00`;
   return `${price.toLocaleString('he-IL')} ${currencyCode}`;
-}
-
-function normalizeDescription(description: string) {
-  const trimmed = description.trim();
-  if (!trimmed) return ['אין כרגע תיאור למוצר הזה.'];
-
-  return trimmed
-    .split(/\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
 }
 
 function buildGalleryItems(product: ShopifyProduct | null): ProductGalleryItem[] {
@@ -351,6 +346,8 @@ export function ProductScreen({ navigation, route }: Props) {
   const { addItem, getQuantity, updateQuantity, isMutating } = useCart();
   const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
   const { data: remoteBrands = [] } = useBrands();
+  const { isActiveMember } = useOcdPlusMembership();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const handle = route.params.handle;
   const [reloadSeq, setReloadSeq] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -359,7 +356,6 @@ export function ProductScreen({ navigation, route }: Props) {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
 
   const galleryItems = useMemo(() => buildGalleryItems(product), [product]);
-  const descriptionParts = useMemo(() => normalizeDescription(product?.description ?? ''), [product?.description]);
   const quantityInCart = product ? getQuantity(product.id) : 0;
   const galleryFallbackImage = galleryItems[0] ?? null;
   const imageHeight = Dimensions.get('window').width;
@@ -377,6 +373,8 @@ export function ProductScreen({ navigation, route }: Props) {
   const discountPercent = displayIsOnSale
     ? Math.round((1 - displayPrice / displayCompareAtPrice!) * 100)
     : 0;
+  const ocdPlusPrice = useMemo(() => computeOcdPlusPrice(displayPrice), [displayPrice]);
+  const checkoutUnitPrice = isActiveMember ? ocdPlusPrice : displayPrice;
 
   const isCartCtaDisabled = !displayAvailableForSale || !displayVariantId;
 
@@ -650,8 +648,8 @@ export function ProductScreen({ navigation, route }: Props) {
 
       {/* ── גלילה ראשית ── */}
       <Animated.ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: actionBarHeight }}
+        style={{ flex: 1, backgroundColor: '#FFFFFF' }}
+        contentContainerStyle={{ paddingBottom: actionBarHeight, backgroundColor: '#FFFFFF' }}
         showsVerticalScrollIndicator={false}
         bounces
         onScroll={scrollHandler}
@@ -905,11 +903,6 @@ export function ProductScreen({ navigation, route }: Props) {
               borderTopLeftRadius: 30,
               borderTopRightRadius: 30,
               backgroundColor: '#FFFFFF',
-              shadowColor: '#0F172A',
-              shadowOffset: { width: 0, height: -10 },
-              shadowOpacity: 0.1,
-              shadowRadius: 18,
-              elevation: 14,
             }}
           >
           {/* ידית גרירה ויזואלית */}
@@ -979,56 +972,113 @@ export function ProductScreen({ navigation, route }: Props) {
               {product.title}
             </Text>
 
-            {/* מחיר — תגית הנחה מעל, מחירים בשורה מתחת */}
+            {/* מחיר */}
             <View style={{ marginTop: 16, alignItems: 'flex-end', gap: 8 }}>
-              {displayIsOnSale && discountPercent > 0 && (
-                <View
-                  style={{
-                    backgroundColor: PALETTE.danger,
-                    borderRadius: 999,
-                    paddingHorizontal: 10,
-                    paddingVertical: 5,
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800', writingDirection: 'rtl' }}>
-                    {discountPercent}% הנחה
-                  </Text>
-                </View>
-              )}
-              <View
-                style={{
-                  flexDirection: 'row-reverse',
-                  alignItems: 'center',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Text
-                  style={{
-                    color: PALETTE.text,
-                    fontSize: 30,
-                    fontWeight: '900',
-                    letterSpacing: -0.8,
-                    lineHeight: 34,
-                    ...RTL_TEXT,
-                  }}
-                >
-                  {formatPrice(displayPrice, displayCurrencyCode)}
-                </Text>
-                {displayIsOnSale && (
+              {isActiveMember ? (
+                <View style={{ alignItems: 'flex-end', gap: 5 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      gap: 7,
+                    }}
+                  >
+                    <OcdPlusMark size={22} />
+                    <Text
+                      style={{
+                        color: PALETTE.muted,
+                        fontSize: 13,
+                        fontWeight: '700',
+                        letterSpacing: -0.1,
+                        ...RTL_TEXT,
+                      }}
+                    >
+                      מחיר לחברי OCD+
+                    </Text>
+                  </View>
                   <Text
                     style={{
-                      color: PALETTE.softText,
-                      fontSize: 15,
-                      fontWeight: '600',
-                      textDecorationLine: 'line-through',
+                      color: PALETTE.text,
+                      fontSize: 32,
+                      fontWeight: '900',
+                      letterSpacing: -1,
+                      lineHeight: 38,
                       ...RTL_TEXT,
                     }}
                   >
-                    {formatPrice(displayCompareAtPrice!, displayCurrencyCode)}
+                    {formatOcdPrice(ocdPlusPrice)}
                   </Text>
-                )}
-              </View>
+                  <Text
+                    style={{
+                      color: PALETTE.softText,
+                      fontSize: 13.5,
+                      fontWeight: '500',
+                      ...RTL_TEXT,
+                    }}
+                  >
+                    מחיר רגיל:{' '}
+                    <Text style={{ textDecorationLine: 'line-through' }}>
+                      {formatPrice(displayPrice, displayCurrencyCode)}
+                    </Text>
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {displayIsOnSale && discountPercent > 0 && (
+                    <View
+                      style={{
+                        backgroundColor: PALETTE.danger,
+                        borderRadius: 999,
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800', writingDirection: 'rtl' }}>
+                        {discountPercent}% הנחה
+                      </Text>
+                    </View>
+                  )}
+                  <View
+                    style={{
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      gap: 10,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: PALETTE.text,
+                        fontSize: 30,
+                        fontWeight: '900',
+                        letterSpacing: -0.8,
+                        lineHeight: 34,
+                        ...RTL_TEXT,
+                      }}
+                    >
+                      {formatPrice(displayPrice, displayCurrencyCode)}
+                    </Text>
+                    {displayIsOnSale && (
+                      <Text
+                        style={{
+                          color: PALETTE.softText,
+                          fontSize: 15,
+                          fontWeight: '600',
+                          textDecorationLine: 'line-through',
+                          ...RTL_TEXT,
+                        }}
+                      >
+                        {formatPrice(displayCompareAtPrice!, displayCurrencyCode)}
+                      </Text>
+                    )}
+                  </View>
+                  <OcdPlusMemberPriceHint
+                    regularPrice={displayPrice}
+                    isOcdPlusSubscriber={false}
+                    onPress={openOcdPlusSubscribeSheet}
+                  />
+                </>
+              )}
             </View>
           </View>
 
@@ -1133,16 +1183,10 @@ export function ProductScreen({ navigation, route }: Props) {
                 תיאור המוצר
               </Text>
             </View>
-            <View style={{ gap: 10 }}>
-              {descriptionParts.map((part, index) => (
-                <Text
-                  key={`${product.id}-desc-${index}`}
-                  style={{ color: '#475569', lineHeight: 26, fontSize: 14.5, ...RTL_TEXT }}
-                >
-                  {part}
-                </Text>
-              ))}
-            </View>
+            <ProductDescription
+              description={product.description}
+              descriptionHtml={product.descriptionHtml}
+            />
           </View>
 
           {/* ── פרטי אמון ── */}
@@ -1200,23 +1244,28 @@ export function ProductScreen({ navigation, route }: Props) {
       <View
         style={{
           position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          bottom: Math.max(insets.bottom, 10),
+          left: 12,
+          right: 12,
           zIndex: 20,
-          paddingHorizontal: 16,
-          paddingTop: 14,
-          paddingBottom: Math.max(insets.bottom, 16) + 4,
-          borderTopWidth: 1,
-          borderTopColor: '#F0F2F5',
-          backgroundColor: '#FFFFFF',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.07,
+          borderRadius: 26,
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.1,
           shadowRadius: 12,
-          elevation: 14,
+          elevation: 10,
         }}
       >
+        <View
+          style={{
+            borderRadius: 26,
+            overflow: 'hidden',
+            padding: 8,
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            borderWidth: 1,
+            borderColor: 'rgba(226,232,240,0.78)',
+          }}
+        >
         {/* שורה: [כפתור פעולה]  [− כמות +] */}
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', width: '100%' }}>
           {/* כפתור ראשי — דינמי לפי מצב */}
@@ -1253,7 +1302,9 @@ export function ProductScreen({ navigation, route }: Props) {
                   </Text>
                   {!isCartCtaDisabled && (
                     <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
-                      {formatPrice(displayPrice * pendingQty, displayCurrencyCode)}
+                      {isActiveMember
+                        ? formatOcdPrice(checkoutUnitPrice * pendingQty)
+                        : formatPrice(checkoutUnitPrice * pendingQty, displayCurrencyCode)}
                     </Text>
                   )}
                 </View>
@@ -1268,7 +1319,7 @@ export function ProductScreen({ navigation, route }: Props) {
               alignItems: 'center',
               height: 58,
               borderRadius: 18,
-              backgroundColor: '#F3F5F8',
+              backgroundColor: 'rgba(241,245,249,0.76)',
               paddingHorizontal: 6,
               gap: 2,
             }}
@@ -1326,6 +1377,7 @@ export function ProductScreen({ navigation, route }: Props) {
               <Text style={{ fontSize: 24, fontWeight: '300', color: isCartCtaDisabled ? '#CBD5E1' : '#000000', lineHeight: 28, includeFontPadding: false }}>−</Text>
             </Pressable>
           </View>
+        </View>
         </View>
       </View>
     </View>

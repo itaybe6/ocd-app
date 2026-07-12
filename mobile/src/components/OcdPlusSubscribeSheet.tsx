@@ -75,22 +75,7 @@ function OcdPlusMemberSheetContent({ onClose }: { onClose: () => void }) {
       keyboardShouldPersistTaps="handled"
     >
       <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 20 }}>
-        <View
-          style={{
-            padding: 14,
-            borderRadius: 999,
-            borderWidth: 2,
-            borderColor: GOLD_SOFT,
-            backgroundColor: 'rgba(212,175,55,0.08)',
-            shadowColor: GOLD,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.35,
-            shadowRadius: 18,
-            elevation: 8,
-          }}
-        >
-          <OcdPlusMark size={72} />
-        </View>
+        <OcdPlusMark size={72} />
         <View
           style={{
             marginTop: 16,

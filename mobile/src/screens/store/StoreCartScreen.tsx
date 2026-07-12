@@ -8,6 +8,7 @@ import { ArrowLeft, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { computeOcdPlusPrice } from '../../components/OcdPlusProductPriceBlock';
 import { OcdPlusMark } from '../../components/OcdPlusMark';
+import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
 import { useCart } from '../../state/CartContext';
 import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 
@@ -243,6 +244,133 @@ function CartQuantityStepper({
   );
 }
 
+function CartOcdPlusSavingsUpsell({
+  subtotal,
+  currencyCode,
+  onJoinPress,
+}: {
+  subtotal: number;
+  currencyCode: string;
+  onJoinPress: () => void;
+}) {
+  const memberSubtotal = computeOcdPlusPrice(subtotal);
+  const savings = Math.max(0, Math.round((subtotal - memberSubtotal) * 100) / 100);
+
+  if (savings <= 0) return null;
+
+  return (
+    <View
+      style={{
+        borderRadius: 18,
+        backgroundColor: COLORS.dark,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        gap: 10,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          direction: 'ltr',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+        }}
+      >
+        <Pressable
+          onPress={onJoinPress}
+          accessibilityRole="button"
+          accessibilityLabel="הצטרפות ל-OCD+"
+          hitSlop={8}
+          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+        >
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 999,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              minWidth: 72,
+              alignItems: 'center',
+              justifyContent: 'center',
+              ...(Platform.OS === 'android'
+                ? { elevation: 3 }
+                : {
+                    shadowColor: '#000000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.18,
+                    shadowRadius: 4,
+                  }),
+            }}
+          >
+            <Text style={{ color: '#000000', fontSize: 13, fontWeight: '900' }}>הצטרף</Text>
+          </View>
+        </Pressable>
+
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+          <OcdPlusMark size={21} />
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: 12,
+              fontWeight: '700',
+              textAlign: 'right',
+              writingDirection: 'rtl',
+            }}
+          >
+            לחברי OCD+
+          </Text>
+        </View>
+      </View>
+
+      <View
+        style={{
+          alignItems: 'flex-end',
+          gap: 2,
+          paddingTop: 10,
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(255,255,255,0.1)',
+        }}
+      >
+        <Text
+          style={{
+            color: '#FFFFFF',
+            fontSize: 13,
+            fontWeight: '700',
+            textAlign: 'right',
+            writingDirection: 'rtl',
+          }}
+        >
+          אפשר לחסוך
+        </Text>
+        <Text
+          style={{
+            color: '#FFFFFF',
+            fontSize: 21,
+            lineHeight: 25,
+            fontWeight: '900',
+            letterSpacing: -0.4,
+            textAlign: 'right',
+          }}
+        >
+          {formatPrice(savings, currencyCode)}
+        </Text>
+        <Text
+          style={{
+            color: 'rgba(255,255,255,0.5)',
+            fontSize: 11,
+            fontWeight: '600',
+            textAlign: 'right',
+            writingDirection: 'rtl',
+          }}
+        >
+          {`מחיר העגלה לאחר הנחה: ${formatPrice(memberSubtotal, currencyCode)}`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export function StoreCartScreen({
   onBack,
   onOpenCheckout,
@@ -252,6 +380,7 @@ export function StoreCartScreen({
 }) {
   const insets = useSafeAreaInsets();
   const { isActiveMember } = useOcdPlusMembership();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const isMember = isActiveMember;
   const {
     checkoutUrl,
@@ -743,6 +872,14 @@ export function StoreCartScreen({
                       −{formatPrice(memberSavings, currencyCode)}
                     </Text>
                   </View>
+                ) : null}
+
+                {!isMember ? (
+                  <CartOcdPlusSavingsUpsell
+                    subtotal={subtotal}
+                    currencyCode={currencyCode}
+                    onJoinPress={openOcdPlusSubscribeSheet}
+                  />
                 ) : null}
 
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>

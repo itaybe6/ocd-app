@@ -44,6 +44,15 @@ function getCurrencyCode(cart: ShopifyCart | null, items: CartItem[]) {
   return cart?.cost.currencyCode ?? items[0]?.product.currencyCode ?? 'ILS';
 }
 
+function isCartConflictError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return message.toLowerCase().includes('conflict');
+}
+
+async function delay(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<ShopifyCart | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -57,6 +66,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const cartRef = useRef<ShopifyCart | null>(null);
   const pendingUpdatesRef = useRef<Record<string, number>>({});
   const updateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const mutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const activeMutationsRef = useRef(0);
 
   // Keep cartRef current so debounce timers always see the latest cart
   useEffect(() => {
@@ -143,16 +154,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     : cart?.cost.subtotalAmount ?? items.reduce((sum, item) => sum + item.cost.totalAmount, 0);
   const currencyCode = getCurrencyCode(cart, items);
 
-  const runCartMutation = useCallback(
-    async (mutate: () => Promise<ShopifyCart | null>) => {
-      setIsMutating(true);
-      try {
-        return await mutate();
-      } finally {
+  const enqueueCartMutation = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    activeMutationsRef.current += 1;
+    setIsMutating(true);
+
+    const run = mutationQueueRef.current
+      .catch(() => undefined)
+      .then(task);
+
+    mutationQueueRef.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return run.finally(() => {
+      activeMutationsRef.current = Math.max(0, activeMutationsRef.current - 1);
+      if (activeMutationsRef.current === 0) {
         setIsMutating(false);
       }
-    },
-    []
+    });
+  }, []);
+
+  const runCartMutation = useCallback(
+    async (mutate: () => Promise<ShopifyCart | null>) => enqueueCartMutation(mutate),
+    [enqueueCartMutation],
   );
 
   const refreshCart = useCallback(async () => {
@@ -264,43 +289,73 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(updateTimersRef.current[productId]);
       }
 
-      updateTimersRef.current[productId] = setTimeout(async () => {
+      updateTimersRef.current[productId] = setTimeout(() => {
         delete updateTimersRef.current[productId];
         const targetQty = pendingUpdatesRef.current[productId];
         delete pendingUpdatesRef.current[productId];
         if (targetQty === undefined) return;
 
-        const currentCart = cartRef.current;
-        const currentItems = currentCart?.lines ?? [];
-        const line = currentItems.find((item) => item.product.id === productId) ?? null;
-
         const clearOptimistic = () =>
           setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[productId]; return n; });
 
-        try {
-          let nextCart: ShopifyCart | null;
-          if (targetQty <= 0) {
-            if (!currentCart?.id || !line) { clearOptimistic(); return; }
-            nextCart = await removeCartLines(currentCart.id, [line.id]);
-          } else {
-            if (!currentCart?.id || !line) { clearOptimistic(); return; }
-            nextCart = await updateCartLines(currentCart.id, [{ id: line.id, quantity: targetQty }]);
+        void enqueueCartMutation(async () => {
+          const applyUpdate = async () => {
+            const currentCart = cartRef.current;
+            const currentItems = currentCart?.lines ?? [];
+            const line = currentItems.find((item) => item.product.id === productId) ?? null;
+
+            if (targetQty <= 0) {
+              if (!currentCart?.id || !line) return null;
+              return removeCartLines(currentCart.id, [line.id]);
+            }
+
+            if (!currentCart?.id || !line) return null;
+            return updateCartLines(currentCart.id, [{ id: line.id, quantity: targetQty }]);
+          };
+
+          try {
+            let nextCart = await applyUpdate();
+            if (!nextCart) {
+              clearOptimistic();
+              return;
+            }
+
+            clearOptimistic();
+            await syncCart(nextCart);
+          } catch (error: unknown) {
+            if (isCartConflictError(error) && cartRef.current?.id) {
+              try {
+                const refreshedCart = await fetchCart(cartRef.current.id);
+                if (refreshedCart) {
+                  cartRef.current = refreshedCart;
+                  setCart(refreshedCart);
+                }
+                await delay(180);
+                const nextCart = await applyUpdate();
+                if (nextCart) {
+                  clearOptimistic();
+                  await syncCart(nextCart);
+                  return;
+                }
+              } catch {
+                // fall through to error toast below
+              }
+            }
+
+            clearOptimistic();
+            const message = error instanceof Error ? error.message : 'נסה שוב בעוד רגע';
+            Toast.show({
+              type: 'error',
+              text1: 'עדכון הכמות נכשל',
+              text2: message,
+            });
           }
-          clearOptimistic();
-          await syncCart(nextCart);
-        } catch (error: any) {
-          clearOptimistic();
-          Toast.show({
-            type: 'error',
-            text1: 'עדכון הכמות נכשל',
-            text2: error?.message ?? 'נסה שוב בעוד רגע',
-          });
-        }
+        });
       }, 350);
 
       return Promise.resolve();
     },
-    [syncCart]
+    [enqueueCartMutation, syncCart]
   );
 
   const clearCart = useCallback(async () => {

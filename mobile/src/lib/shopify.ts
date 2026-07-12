@@ -43,6 +43,8 @@ export type ShopifyProduct = {
   id: string;
   title: string;
   description: string;
+  /** HTML מלא לתיאור — נטען במסך מוצר לפרסור מדויק יותר */
+  descriptionHtml?: string | null;
   handle: string;
   imageUrl: string | null;
   imageAltText: string | null;
@@ -185,6 +187,7 @@ type ShopifyProductNode = {
   id: string;
   title: string;
   description: string;
+  descriptionHtml?: string | null;
   handle: string;
   productType: string;
   vendor?: string | null;
@@ -687,6 +690,7 @@ function normalizeProduct(node: ShopifyProductNode): ShopifyProduct {
     id: node.id,
     title: node.title,
     description: node.description,
+    descriptionHtml: node.descriptionHtml ?? null,
     handle: node.handle,
     imageUrl: node.featuredImage?.url ?? null,
     imageAltText: node.featuredImage?.altText ?? null,
@@ -1265,6 +1269,7 @@ export async function fetchProductByHandle(handle: string): Promise<ShopifyProdu
     query GetProductByHandle($handle: String!) {
       productByHandle(handle: $handle) {
         ${PRODUCT_FIELDS}
+        descriptionHtml
         ${PRODUCT_MEDIA_FIELDS}
       }
     }

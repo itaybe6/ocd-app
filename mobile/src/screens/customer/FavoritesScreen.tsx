@@ -43,83 +43,90 @@ export function CustomerFavoritesScreen({
     });
   }, [favorites, normalizedQuery]);
 
+  const showToolbar = favorites.length > 0;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={showToolbar ? ['top'] : []}>
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View
-          style={{
-            backgroundColor: colors.bg,
-            borderBottomWidth: 1,
-            borderBottomColor: '#F0F0F0',
-            minHeight: 52,
-            paddingHorizontal: 16,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text
+        {showToolbar ? (
+          <View
             style={{
-              color: INK,
-              fontSize: 17,
-              fontWeight: '900',
-              textAlign: 'center',
+              backgroundColor: colors.bg,
+              borderBottomWidth: 1,
+              borderBottomColor: '#F0F0F0',
+              minHeight: 52,
+              paddingHorizontal: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            אהבתי
-          </Text>
-        </View>
+            <Text
+              style={{
+                color: INK,
+                fontSize: 17,
+                fontWeight: '900',
+                textAlign: 'center',
+              }}
+            >
+              אהבתי
+            </Text>
+          </View>
+        ) : null}
 
         <ScrollView
           style={{ flex: 1, width: '100%' }}
           contentContainerStyle={{
             paddingHorizontal: 16,
-            paddingTop: 16,
+            paddingTop: showToolbar ? 16 : insets.top + 24,
             gap: 16,
             paddingBottom: contentPaddingBottom + 8,
             width: '100%',
             flexGrow: 1,
+            justifyContent: showToolbar ? undefined : 'center',
           }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          <View
-            style={{
-              backgroundColor: '#F3F4F6',
-              borderRadius: 22,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              gap: 8,
-              minHeight: 48,
-            }}
-          >
-            <Ionicons name="search-outline" size={18} color="#9CA3AF" />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="חיפוש במוצרים שאהבתי"
-              placeholderTextColor="#B7BDC8"
+          {showToolbar ? (
+            <View
               style={{
-                flex: 1,
-                color: INK,
-                textAlign: 'right',
-                fontSize: 13,
                 backgroundColor: '#F3F4F6',
-                padding: 0,
+                borderRadius: 22,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                flexDirection: 'row-reverse',
+                alignItems: 'center',
+                gap: 8,
+                minHeight: 48,
               }}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-            {query.length > 0 ? (
-              <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="נקה חיפוש">
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </Pressable>
-            ) : null}
-          </View>
+            >
+              <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="חיפוש במוצרים שאהבתי"
+                placeholderTextColor="#B7BDC8"
+                style={{
+                  flex: 1,
+                  color: INK,
+                  textAlign: 'right',
+                  fontSize: 13,
+                  backgroundColor: '#F3F4F6',
+                  padding: 0,
+                }}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {query.length > 0 ? (
+                <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="נקה חיפוש">
+                  <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
-          {!isHydrating && favorites.length > 0 ? (
+          {showToolbar ? (
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ color: MUTED, fontSize: 13, fontWeight: '700', textAlign: 'right' }}>
                 {normalizedQuery

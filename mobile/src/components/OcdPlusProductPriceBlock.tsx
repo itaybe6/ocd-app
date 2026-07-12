@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   Extrapolation,
@@ -502,3 +502,68 @@ export function OcdPlusProductPriceBlock({
     </View>
   );
 }
+
+/** שורת מחיר OCD+ — מתחת למחיר הרגיל בעמוד מוצר */
+export function OcdPlusMemberPriceHint({
+  regularPrice,
+  isOcdPlusSubscriber,
+  onPress,
+}: {
+  regularPrice: number;
+  isOcdPlusSubscriber: boolean;
+  onPress?: () => void;
+}) {
+  const memberPrice = computeOcdPlusPrice(regularPrice);
+
+  const content = (
+    <View style={ocdPlusHintStyles.wrap}>
+      <Text style={ocdPlusHintStyles.price}>{fmt(memberPrice)}</Text>
+      <Text style={ocdPlusHintStyles.label}>
+        {isOcdPlusSubscriber ? 'מחיר לחברי OCD+' : 'לחברי OCD+'}
+      </Text>
+    </View>
+  );
+
+  if (!isOcdPlusSubscriber && onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`מחיר OCD+ ${fmt(memberPrice)}`}
+        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
+}
+
+const ocdPlusHintStyles = StyleSheet.create({
+  wrap: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-end',
+    gap: 2,
+    paddingTop: 10,
+    marginTop: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E8EE',
+  },
+  price: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+});

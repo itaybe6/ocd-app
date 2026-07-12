@@ -1910,6 +1910,9 @@ const HOME_HIGHLIGHT_SECTIONS = [
 
 type HomeHighlightSectionConfig = (typeof HOME_HIGHLIGHT_SECTIONS)[number];
 
+const HOME_NEW_HIGHLIGHT_SECTION = HOME_HIGHLIGHT_SECTIONS.find((section) => section.id === 'new')!;
+const HOME_MAIN_HIGHLIGHT_SECTIONS = HOME_HIGHLIGHT_SECTIONS.filter((section) => section.id !== 'new');
+
 /** כרטיס מוצר אופקי לקרוסלות הסקשנים — אותו עיצוב כמו כרטיסי «מארזי ניקיון» */
 function HomeHighlightRailCard({
   product,
@@ -2185,6 +2188,96 @@ function HomeHighlightRailSection({
           />
         ))}
       </ScrollView>
+    </View>
+  );
+}
+
+function HomeBundlesRailSection({
+  products,
+  loading,
+  remoteBrands,
+  isOcdPlusSubscriber,
+  onProductPress,
+  isFavorite,
+  isFavoritePending,
+  onToggleFavorite,
+  onOpenOcdPlusSheet,
+}: {
+  products: StoreProduct[];
+  loading: boolean;
+  remoteBrands: RemoteBrand[];
+  isOcdPlusSubscriber: boolean;
+  onProductPress?: (handle: string) => void;
+  isFavorite: (productId: string) => boolean;
+  isFavoritePending: (productId: string) => boolean;
+  onToggleFavorite: (product: StoreProduct) => void;
+  onOpenOcdPlusSheet: () => void;
+}) {
+  if (!loading && !products.length) return null;
+
+  return (
+    <View style={{ marginTop: 36 }}>
+      <View style={{ marginBottom: 18, paddingHorizontal: 4 }}>
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
+          <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: '#111827' }} />
+          <Text
+            style={{
+              color: '#6B7280',
+              fontSize: 11,
+              fontWeight: '700',
+              letterSpacing: 2.5,
+              textAlign: 'right',
+            }}
+          >
+            המארזים שלנו
+          </Text>
+        </View>
+        <Text
+          style={{
+            color: '#111827',
+            fontSize: 26,
+            lineHeight: 34,
+            fontWeight: '900',
+            textAlign: 'right',
+            letterSpacing: 0.2,
+            marginTop: 8,
+          }}
+        >
+          מארזים משתלמים, מוכנים להזמנה.
+        </Text>
+      </View>
+
+      {loading ? (
+        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+          <ActivityIndicator color="#111827" />
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginHorizontal: -12, direction: 'rtl' }}
+          contentContainerStyle={{
+            flexDirection: 'row',
+            gap: 12,
+            paddingHorizontal: 12,
+            paddingBottom: 40,
+          }}
+        >
+          {products.map((product) => (
+            <HomeHighlightRailCard
+              key={`bundle-${product.id}`}
+              product={product}
+              remoteBrands={remoteBrands}
+              isOcdPlusSubscriber={isOcdPlusSubscriber}
+              favorite={isFavorite(product.id)}
+              favoritePending={isFavoritePending(product.id)}
+              onPress={() => onProductPress?.(product.handle)}
+              onToggleFavorite={() => onToggleFavorite(product)}
+              onOpenOcdPlusSheet={onOpenOcdPlusSheet}
+            />
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -3622,76 +3715,24 @@ export function StoreHomeScreen({
               );
             })()}
 
-            {/* ─── Bundles section — אותו סגנון כותרת כמו סקשני ההיילייט ── */}
-            {!loading && (bundlesLoading || displayBundleProducts.length > 0) && (
-              <View style={{ marginTop: 36 }}>
-                <View style={{ marginBottom: 18, paddingHorizontal: 4 }}>
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 7 }}>
-                    <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: '#111827' }} />
-                    <Text
-                      style={{
-                        color: '#6B7280',
-                        fontSize: 11,
-                        fontWeight: '700',
-                        letterSpacing: 2.5,
-                        textAlign: 'right',
-                      }}
-                    >
-                      המארזים שלנו
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      color: '#111827',
-                      fontSize: 26,
-                      lineHeight: 34,
-                      fontWeight: '900',
-                      textAlign: 'right',
-                      letterSpacing: 0.2,
-                      marginTop: 8,
-                    }}
-                  >
-                    מארזים משתלמים, מוכנים להזמנה.
-                  </Text>
-                </View>
-
-                {bundlesLoading ? (
-                  <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                    <ActivityIndicator color="#111827" />
-                  </View>
-                ) : (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginHorizontal: -12, direction: 'rtl' }}
-                    contentContainerStyle={{
-                      flexDirection: 'row',
-                      gap: 12,
-                      paddingHorizontal: 12,
-                      paddingBottom: 40,
-                    }}
-                  >
-                    {displayBundleProducts.map((product) => (
-                      <HomeHighlightRailCard
-                        key={`bundle-${product.id}`}
-                        product={product}
-                        remoteBrands={remoteBrands}
-                        isOcdPlusSubscriber={isOcdPlusSubscriber}
-                        favorite={isFavorite(product.id)}
-                        favoritePending={isFavoritePending(product.id)}
-                        onPress={() => onProductPress?.(product.handle)}
-                        onToggleFavorite={() => {
-                          void toggleFavorite(favoriteInputFromStoreProduct(product));
-                        }}
-                        onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
-                      />
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
+            {/* ─── חדש אצלנו — לפני שאר הקרוסלות ── */}
+            {!loading && !homeTabLoading && (
+              <HomeHighlightRailSection
+                section={HOME_NEW_HIGHLIGHT_SECTION}
+                products={homeSectionProducts.new}
+                remoteBrands={remoteBrands}
+                isOcdPlusSubscriber={isOcdPlusSubscriber}
+                onProductPress={onProductPress}
+                isFavorite={isFavorite}
+                isFavoritePending={isFavoritePending}
+                onToggleFavorite={(product) => {
+                  void toggleFavorite(favoriteInputFromStoreProduct(product));
+                }}
+                onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
+              />
             )}
 
-            {/* שלושה סקשנים של קרוסלות — הכי נמכרים / המבצעים שלנו / הכי חדשים */}
+            {/* שלושה סקשנים של קרוסלות — הכי נמכרים / המבצעים שלנו */}
             {SHOW_PROMO_CAROUSEL && <PromoCarousel />}
 
             {homeTabLoading ? (
@@ -3711,22 +3752,40 @@ export function StoreHomeScreen({
                 <Text style={{ color: '#111827', fontWeight: '700' }}>טוען מוצרים...</Text>
               </View>
             ) : (
-              HOME_HIGHLIGHT_SECTIONS.map((section) => (
-                <HomeHighlightRailSection
-                  key={section.id}
-                  section={section}
-                  products={homeSectionProducts[section.id]}
-                  remoteBrands={remoteBrands}
-                  isOcdPlusSubscriber={isOcdPlusSubscriber}
-                  onProductPress={onProductPress}
-                  isFavorite={isFavorite}
-                  isFavoritePending={isFavoritePending}
-                  onToggleFavorite={(product) => {
-                    void toggleFavorite(favoriteInputFromStoreProduct(product));
-                  }}
-                  onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
-                />
-              ))
+              <>
+                {HOME_MAIN_HIGHLIGHT_SECTIONS.map((section) => (
+                  <HomeHighlightRailSection
+                    key={section.id}
+                    section={section}
+                    products={homeSectionProducts[section.id]}
+                    remoteBrands={remoteBrands}
+                    isOcdPlusSubscriber={isOcdPlusSubscriber}
+                    onProductPress={onProductPress}
+                    isFavorite={isFavorite}
+                    isFavoritePending={isFavoritePending}
+                    onToggleFavorite={(product) => {
+                      void toggleFavorite(favoriteInputFromStoreProduct(product));
+                    }}
+                    onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
+                  />
+                ))}
+
+                {!loading && (
+                  <HomeBundlesRailSection
+                    products={displayBundleProducts}
+                    loading={bundlesLoading}
+                    remoteBrands={remoteBrands}
+                    isOcdPlusSubscriber={isOcdPlusSubscriber}
+                    onProductPress={onProductPress}
+                    isFavorite={isFavorite}
+                    isFavoritePending={isFavoritePending}
+                    onToggleFavorite={(product) => {
+                      void toggleFavorite(favoriteInputFromStoreProduct(product));
+                    }}
+                    onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
+                  />
+                )}
+              </>
             )}
 
             {selectedCategory === 'all' && !loading && !categoryLoading && !visibleProducts.length && (

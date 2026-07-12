@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { NavigationContainer, DefaultTheme, type Theme, useFocusEffect } from '@react-navigation/native';
 import {
@@ -262,25 +262,31 @@ function StoreProductRoute({
 
 function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreCart'>) {
   const { isActiveMember } = useOcdPlusMembership();
-  const { cartId, itemCount, setCartSnapshot } = useCart();
+  const { cartId, itemCount, isMutating, setCartSnapshot } = useCart();
+  const itemCountRef = useRef(itemCount);
+  const isMutatingRef = useRef(isMutating);
+
+  useEffect(() => {
+    itemCountRef.current = itemCount;
+  }, [itemCount]);
+
+  useEffect(() => {
+    isMutatingRef.current = isMutating;
+  }, [isMutating]);
 
   const syncMemberDiscount = useCallback(() => {
-    if (!isActiveMember || !cartId || itemCount === 0) return;
+    if (!isActiveMember || !cartId || itemCountRef.current === 0 || isMutatingRef.current) return;
     void prepareMemberCart({ cartId }).then((cart) => {
       if (cart) void setCartSnapshot(cart);
     });
-  }, [cartId, isActiveMember, itemCount, setCartSnapshot]);
+  }, [cartId, isActiveMember, setCartSnapshot]);
 
-  // Keep the Shopify cart in sync whenever the cart screen is focused or lines change.
+  // Apply member discount once when opening the cart — not on every quantity change.
   useFocusEffect(
     useCallback(() => {
       syncMemberDiscount();
     }, [syncMemberDiscount]),
   );
-
-  useEffect(() => {
-    syncMemberDiscount();
-  }, [syncMemberDiscount]);
 
   const handleOpenCheckout = useCallback(
     async (checkoutUrl: string) => {
