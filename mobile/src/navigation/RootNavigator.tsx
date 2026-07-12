@@ -385,8 +385,22 @@ export function RootNavigator() {
         <Stack.Screen name="Main" component={MainEntryScreen} />
         {!user && (
           <>
-            <Stack.Screen name="Login" component={LoginRoute} />
-            <Stack.Screen name="Register" component={RegisterRoute} />
+            <Stack.Screen
+              name="Login"
+              component={LoginRoute}
+              options={{
+                animation: 'none',
+                contentStyle: { backgroundColor: colors.bg },
+              }}
+            />
+            <Stack.Screen
+              name="Register"
+              component={RegisterRoute}
+              options={{
+                animation: 'none',
+                contentStyle: { backgroundColor: colors.bg },
+              }}
+            />
           </>
         )}
         <Stack.Screen
@@ -440,6 +454,7 @@ export function RootNavigator() {
           component={StoreFavoritesRoute}
           options={{
             headerShown: false,
+            animation: 'none',
             contentStyle: { backgroundColor: colors.bg },
           }}
         />

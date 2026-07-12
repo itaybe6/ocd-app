@@ -63,7 +63,7 @@ function handleCustomerTabPress(
   }
 
   if (tabId === 'favorites') {
-    navigation.navigate('Favorites');
+    safeNavigate('StoreFavorites');
     return;
   }
 
@@ -79,7 +79,7 @@ function CustomerStoreScreen({ navigation, route }: DrawerScreenProps<CustomerDr
   return (
     <StoreHomeScreen
       onProfilePress={() => navigation.navigate('Profile')}
-      onFavoritesPress={() => navigation.navigate('Favorites')}
+      onFavoritesPress={() => safeNavigate('StoreFavorites')}
       isOcdPlusSubscriber={isActiveMember}
       onSearchPress={() => safeNavigate('StoreSearch')}
       onProductPress={(handle) => safeNavigate('Product', { handle })}
