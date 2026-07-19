@@ -25,7 +25,16 @@ type AuthContextValue = {
   /** Sends an SMS OTP to a phone number for new-account registration. */
   sendRegisterOtp: (args: { phone: string }) => Promise<{ phone: string }>;
   /** Verifies the register OTP and creates the customer account. On success, persists the user and navigates to the customer profile. */
-  verifyRegisterOtp: (args: { phone: string; code: string; name: string; address?: string | null }) => Promise<void>;
+  verifyRegisterOtp: (args: {
+    phone: string;
+    code: string;
+    name: string;
+    address?: string | null;
+    gender?: string | null;
+    dateOfBirth?: string | null;
+    city?: string | null;
+    email?: string | null;
+  }) => Promise<void>;
   signOut: () => Promise<void>;
   deleteCustomerAccount: () => Promise<void>;
   setUser: (u: AuthUser | null) => Promise<void>;
@@ -177,12 +186,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const verifyRegisterOtp = useCallback(
-    async ({ phone, code, name, address }: { phone: string; code: string; name: string; address?: string | null }) => {
+    async ({
+      phone,
+      code,
+      name,
+      address,
+      gender,
+      dateOfBirth,
+      city,
+      email,
+    }: {
+      phone: string;
+      code: string;
+      name: string;
+      address?: string | null;
+      gender?: string | null;
+      dateOfBirth?: string | null;
+      city?: string | null;
+      email?: string | null;
+    }) => {
       const { user: authedUser, session, refresh } = await verifyRegisterOtpApi({
         phone: phone.trim(),
         code: code.trim(),
         name: name.trim(),
         address: address?.trim() || null,
+        gender: gender ?? null,
+        dateOfBirth: dateOfBirth ?? null,
+        city: city?.trim() || null,
+        email: email?.trim() || null,
       });
       await storeSession(session, refresh);
       await setUser(authedUser as AuthUser);

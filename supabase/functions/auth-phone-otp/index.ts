@@ -7,7 +7,7 @@
 //   { action: 'send_login_otp',     phone }
 //   { action: 'verify_login_otp',   phone, code } // code may also be the user's password
 //   { action: 'send_register_otp',  phone }
-//   { action: 'verify_register_otp', phone, code, name, address? }
+//   { action: 'verify_register_otp', phone, code, name, address?, gender?, dateOfBirth?, city?, email? }
 //   { action: 'delete_customer_account', userId, phone }
 //
 // Required Edge Function secrets:
@@ -55,6 +55,10 @@ type Payload = {
   code?: string;
   name?: string;
   address?: string | null;
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  city?: string | null;
+  email?: string | null;
   refreshToken?: string;
 };
 
@@ -462,7 +466,7 @@ async function verifyOtp(
 }
 
 const USER_COLUMNS =
-  'id, phone, role, name, address, price, ocd_plus_subscriber, avatar_url, created_at';
+  'id, phone, role, name, address, gender, date_of_birth, city, email, price, ocd_plus_subscriber, avatar_url, created_at';
 const USER_COLUMNS_WITH_PASSWORD = `${USER_COLUMNS}, password`;
 
 Deno.serve(async (req) => {
@@ -603,9 +607,20 @@ Deno.serve(async (req) => {
         const variants = phoneLookupVariants(payload.phone ?? '');
         const name = (payload.name ?? '').trim();
         const address = (payload.address ?? null)?.toString().trim() || null;
+        const city = (payload.city ?? '').trim();
+        const email = (payload.email ?? '').trim().toLowerCase();
+        const genderRaw = (payload.gender ?? '').trim();
+        const gender =
+          genderRaw === 'male' || genderRaw === 'female' || genderRaw === 'prefer_not_to_say' ? genderRaw : null;
+        const dateOfBirthRaw = (payload.dateOfBirth ?? '').trim();
+        const dateOfBirth = /^\d{4}-\d{2}-\d{2}$/.test(dateOfBirthRaw) ? dateOfBirthRaw : null;
 
         if (!phone) return jsonResponse({ ok: false, error: 'מספר טלפון חסר או לא תקין' }, { status: 400 });
         if (!name) return jsonResponse({ ok: false, error: 'שם מלא חסר' }, { status: 400 });
+        if (!city) return jsonResponse({ ok: false, error: 'עיר חסרה' }, { status: 400 });
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return jsonResponse({ ok: false, error: 'כתובת אימייל לא תקינה' }, { status: 400 });
+        }
 
         const result = await verifyOtp(supabase, phone, 'register', String(payload.code ?? ''));
         if (!result.ok) return jsonResponse({ ok: false, error: result.error }, { status: result.status });
@@ -634,6 +649,10 @@ Deno.serve(async (req) => {
             role: 'customer',
             name,
             address,
+            gender,
+            date_of_birth: dateOfBirth,
+            city,
+            email,
             price: null,
             avatar_url: null,
           })

@@ -13,16 +13,21 @@ import Animated, {
 import Toast from '../../components/toast/Toast';
 import { Screen } from '../../components/Screen';
 import { useAuth } from '../../state/AuthContext';
+import type { UserGender } from '../../types/database';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
 import {
   AuthFooterLink,
   AuthLogo,
+  DateOfBirthField,
   Field,
+  GenderChips,
+  GhostButton,
   MUTED,
   OTP_LENGTH,
   OtpInput,
   PhoneField,
   PrimaryButton,
+  ReadOnlyField,
   RESEND_SECONDS,
   StepDots,
   TEXT,
@@ -33,7 +38,48 @@ type RegisterScreenProps = {
   onTabPress: (tabId: StoreBottomTabId) => void;
 };
 
-type Step = 'phone' | 'code' | 'details';
+type Step = 'phone' | 'code' | 'personal' | 'location' | 'contact';
+
+const STEP_ORDER: Step[] = ['phone', 'code', 'personal', 'location', 'contact'];
+
+const STEP_META: Record<Step, { title: string; subtitle: string }> = {
+  phone: {
+    title: 'יצירת חשבון',
+    subtitle: 'הזן מספר טלפון כדי להתחיל בהרשמה',
+  },
+  code: {
+    title: 'קוד אימות',
+    subtitle: 'שלחנו קוד בן 6 ספרות למספר',
+  },
+  personal: {
+    title: 'בוא נכיר',
+    subtitle: 'ספר לנו קצת עליך',
+  },
+  location: {
+    title: 'איפה אתה?',
+    subtitle: 'כדי שנוכל לשרת אותך טוב יותר',
+  },
+  contact: {
+    title: 'איך נשמור על קשר?',
+    subtitle: 'הטלפון כבר אומת — נשאר רק אימייל',
+  },
+};
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function formatDisplayPhone(phone: string): string {
+  const digits = phone.replace(/\D+/g, '');
+  if (digits.startsWith('972') && digits.length >= 11) {
+    const local = `0${digits.slice(3)}`;
+    return local.replace(/(\d{3})(\d+)/, '$1-$2');
+  }
+  if (digits.startsWith('0') && digits.length >= 9) {
+    return digits.replace(/(\d{3})(\d+)/, '$1-$2');
+  }
+  return phone.trim();
+}
 
 export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps) {
   const { sendRegisterOtp, verifyRegisterOtp } = useAuth();
@@ -44,7 +90,11 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [gender, setGender] = useState<UserGender | null>(null);
+  const [dateOfBirth, setDateOfBirth] = useState<string | null>(null);
+  const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
+  const [email, setEmail] = useState('');
   const [verifiedPhone, setVerifiedPhone] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -134,10 +184,22 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
 
   const onCompleteSignup = useCallback(async () => {
     const nameTrim = name.trim();
+    const cityTrim = city.trim();
+    const emailTrim = email.trim();
+
     if (nameTrim.length < 2) {
       Toast.show({ type: 'error', text1: 'נא להזין שם מלא' });
       return;
     }
+    if (cityTrim.length < 2) {
+      Toast.show({ type: 'error', text1: 'נא להזין עיר' });
+      return;
+    }
+    if (!isValidEmail(emailTrim)) {
+      Toast.show({ type: 'error', text1: 'נא להזין כתובת אימייל תקינה' });
+      return;
+    }
+
     try {
       setSubmitting(true);
       await verifyRegisterOtp({
@@ -145,6 +207,10 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
         code: code.trim(),
         name: nameTrim,
         address: address.trim() || null,
+        gender,
+        dateOfBirth,
+        city: cityTrim,
+        email: emailTrim,
       });
     } catch (e: any) {
       const message: string = e?.message ?? 'Unknown error';
@@ -157,14 +223,14 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
     } finally {
       setSubmitting(false);
     }
-  }, [address, code, name, phone, verifiedPhone, verifyRegisterOtp]);
+  }, [address, city, code, dateOfBirth, email, gender, name, phone, verifiedPhone, verifyRegisterOtp]);
 
   useEffect(() => {
     if (step !== 'code' || submitting) return;
     if (code.length !== OTP_LENGTH) return;
     if (lastAutoVerifiedCode.current === code) return;
     lastAutoVerifiedCode.current = code;
-    setStep('details');
+    setStep('personal');
   }, [code, step, submitting]);
 
   const canSendCode = useMemo(
@@ -172,39 +238,54 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
     [phone, submitting]
   );
 
-  const displayPhone = verifiedPhone ? `0${verifiedPhone.replace(/^972/, '')}` : phone.trim();
-  const signupStepIndex = step === 'phone' ? 0 : step === 'code' ? 1 : 2;
-
-  const title = step === 'phone' ? 'יצירת חשבון' : step === 'code' ? 'קוד אימות' : 'כמעט סיימנו';
+  const displayPhone = formatDisplayPhone(verifiedPhone ? `0${verifiedPhone.replace(/^972/, '')}` : phone.trim());
+  const signupStepIndex = STEP_ORDER.indexOf(step);
+  const meta = STEP_META[step];
   const subtitle =
-    step === 'phone'
-      ? 'הזן מספר טלפון כדי להתחיל בהרשמה'
-      : step === 'code'
-        ? `שלחנו קוד בן 6 ספרות למספר ${displayPhone}`
-        : 'עוד כמה פרטים קטנים והחשבון שלך מוכן';
+    step === 'code' ? `${meta.subtitle} ${displayPhone}` : meta.subtitle;
+
+  const canAdvancePersonal = !submitting && name.trim().length >= 2;
+  const canAdvanceLocation = !submitting && city.trim().length >= 2;
+  const canCompleteSignup = !submitting && isValidEmail(email);
+
+  const goBackWithinDetails = useCallback(() => {
+    if (step === 'contact') {
+      setStep('location');
+      return;
+    }
+    if (step === 'location') {
+      setStep('personal');
+      return;
+    }
+    if (step === 'personal') {
+      setCode('');
+      lastAutoVerifiedCode.current = '';
+      setStep('code');
+    }
+  }, [step]);
 
   return (
     <Screen padded={false} backgroundColor="#FFFFFF" safeAreaEdges={['top']}>
       <View style={{ flex: 1 }}>
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{
-              flexGrow: 1,
-              paddingHorizontal: 24,
-              paddingTop: 36,
-              paddingBottom: contentPaddingBottom,
-            }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            automaticallyAdjustKeyboardInsets
-          >
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: 24,
+            paddingTop: 36,
+            paddingBottom: contentPaddingBottom,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets
+        >
           <Animated.View style={headerStyle}>
             <AuthLogo />
           </Animated.View>
 
           <Animated.View key={`title-${step}`} entering={FadeInDown.duration(280)} style={{ marginBottom: 24 }}>
-            <Text style={{ color: TEXT, fontSize: 26, fontWeight: '900', textAlign: 'center' }}>{title}</Text>
+            <Text style={{ color: TEXT, fontSize: 26, fontWeight: '900', textAlign: 'center' }}>{meta.title}</Text>
             <Text
               style={{
                 color: MUTED,
@@ -218,7 +299,7 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
               {subtitle}
             </Text>
             <View style={{ marginTop: 16 }}>
-              <StepDots total={3} current={signupStepIndex} />
+              <StepDots total={STEP_ORDER.length} current={signupStepIndex} />
             </View>
           </Animated.View>
 
@@ -275,9 +356,9 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
             </Animated.View>
           )}
 
-          {step === 'details' && (
+          {step === 'personal' && (
             <Animated.View
-              key="details"
+              key="personal"
               entering={FadeInDown.duration(320).delay(40)}
               exiting={FadeOut.duration(120)}
               style={{ gap: 16 }}
@@ -293,36 +374,89 @@ export function RegisterScreen({ onGoToLogin, onTabPress }: RegisterScreenProps)
                 editable={!submitting}
               />
 
+              <GenderChips value={gender} onChange={setGender} disabled={submitting} />
+
+              <DateOfBirthField value={dateOfBirth} onChange={setDateOfBirth} disabled={submitting} />
+
+              <PrimaryButton
+                title="המשך"
+                onPress={() => setStep('location')}
+                disabled={!canAdvancePersonal}
+              />
+
+              <Pressable disabled={submitting} onPress={goBackWithinDetails} style={{ alignItems: 'center' }}>
+                <Text style={{ color: MUTED, fontSize: 13, fontWeight: '700' }}>חזרה לקוד האימות</Text>
+              </Pressable>
+            </Animated.View>
+          )}
+
+          {step === 'location' && (
+            <Animated.View
+              key="location"
+              entering={FadeInDown.duration(320).delay(40)}
+              exiting={FadeOut.duration(120)}
+              style={{ gap: 16 }}
+            >
+              <Field
+                label="עיר"
+                value={city}
+                onChangeText={setCity}
+                placeholder="תל אביב"
+                textContentType="addressCity"
+                autoComplete="postal-address-locality"
+                autoFocus
+                editable={!submitting}
+              />
+
               <Field
                 label="כתובת (לא חובה)"
                 value={address}
                 onChangeText={setAddress}
-                placeholder="רחוב, עיר"
+                placeholder="רחוב ומספר בית"
                 textContentType="fullStreetAddress"
                 autoComplete="street-address"
+                editable={!submitting}
+              />
+
+              <PrimaryButton title="המשך" onPress={() => setStep('contact')} disabled={!canAdvanceLocation} />
+
+              <GhostButton title="חזרה" onPress={goBackWithinDetails} disabled={submitting} />
+            </Animated.View>
+          )}
+
+          {step === 'contact' && (
+            <Animated.View
+              key="contact"
+              entering={FadeInDown.duration(320).delay(40)}
+              exiting={FadeOut.duration(120)}
+              style={{ gap: 16 }}
+            >
+              <ReadOnlyField label="מספר טלפון" value={displayPhone} />
+
+              <Field
+                label="אימייל"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="name@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="emailAddress"
+                autoComplete="email"
+                autoFocus
                 editable={!submitting}
               />
 
               <PrimaryButton
                 title={submitting ? 'יוצר חשבון…' : 'השלמת הרשמה'}
                 onPress={onCompleteSignup}
-                disabled={submitting || name.trim().length < 2}
+                disabled={!canCompleteSignup}
               />
 
-              <Pressable
-                disabled={submitting}
-                onPress={() => {
-                  setCode('');
-                  lastAutoVerifiedCode.current = '';
-                  setStep('code');
-                }}
-                style={{ alignItems: 'center' }}
-              >
-                <Text style={{ color: MUTED, fontSize: 13, fontWeight: '700' }}>חזרה לקוד האימות</Text>
-              </Pressable>
+              <GhostButton title="חזרה" onPress={goBackWithinDetails} disabled={submitting} />
             </Animated.View>
           )}
-          </ScrollView>
+        </ScrollView>
         <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
       </View>
     </Screen>

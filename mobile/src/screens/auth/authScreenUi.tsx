@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Animated, {
   Easing,
   interpolate,
@@ -195,6 +196,157 @@ export function Field({
           inputProps.style,
         ]}
       />
+    </View>
+  );
+}
+
+export function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ color: MUTED, textAlign: 'right', fontSize: 13, fontWeight: '700' }}>{label}</Text>
+      <View
+        style={{
+          height: 54,
+          borderRadius: 16,
+          borderWidth: 1.5,
+          borderColor: BORDER,
+          backgroundColor: SURFACE,
+          paddingHorizontal: 16,
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={{ color: TEXT, fontSize: 15, fontWeight: '700', textAlign: 'right', letterSpacing: 0.5 }}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+export type GenderOption = 'male' | 'female' | 'prefer_not_to_say';
+
+const GENDER_OPTIONS: { value: GenderOption; label: string }[] = [
+  { value: 'male', label: 'זכר' },
+  { value: 'female', label: 'נקבה' },
+  { value: 'prefer_not_to_say', label: 'מעדיף/ה לא לציין' },
+];
+
+export function GenderChips({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: GenderOption | null;
+  onChange: (v: GenderOption | null) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ color: MUTED, textAlign: 'right', fontSize: 13, fontWeight: '700' }}>מגדר (לא חובה)</Text>
+      <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+        {GENDER_OPTIONS.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              disabled={disabled}
+              onPress={() => onChange(selected ? null : opt.value)}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.88 : 1,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderRadius: 999,
+                borderWidth: 1.5,
+                borderColor: selected ? INK : BORDER,
+                backgroundColor: selected ? INK : '#FFFFFF',
+              })}
+            >
+              <Text style={{ color: selected ? '#FFFFFF' : TEXT, fontSize: 14, fontWeight: '700' }}>{opt.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function formatDobLabel(date: Date | null): string {
+  if (!date) return 'בחר תאריך לידה';
+  return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function toYmd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function DateOfBirthField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = value ? new Date(`${value}T12:00:00`) : null;
+  const maxDate = new Date();
+  const minDate = new Date();
+  minDate.setFullYear(minDate.getFullYear() - 100);
+
+  const onPickerChange = (event: DateTimePickerEvent, date?: Date) => {
+    if (Platform.OS === 'android') setOpen(false);
+    if (event.type === 'dismissed' || !date) return;
+    onChange(toYmd(date));
+  };
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ color: MUTED, textAlign: 'right', fontSize: 13, fontWeight: '700' }}>תאריך לידה (לא חובה)</Text>
+      <Pressable
+        disabled={disabled}
+        onPress={() => setOpen((o) => !o)}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.92 : 1,
+          height: 54,
+          borderRadius: 16,
+          borderWidth: 1.5,
+          borderColor: open || selectedDate ? INK : BORDER,
+          backgroundColor: '#FFFFFF',
+          paddingHorizontal: 16,
+          justifyContent: 'center',
+        })}
+      >
+        <Text
+          style={{
+            color: selectedDate ? TEXT : '#B9BEC6',
+            fontSize: 15,
+            fontWeight: '600',
+            textAlign: 'right',
+          }}
+        >
+          {formatDobLabel(selectedDate)}
+        </Text>
+      </Pressable>
+      {selectedDate ? (
+        <Pressable disabled={disabled} onPress={() => onChange(null)} style={{ alignSelf: 'flex-end' }}>
+          <Text style={{ color: MUTED, fontSize: 12, fontWeight: '700' }}>ניקוי תאריך</Text>
+        </Pressable>
+      ) : null}
+      {open ? (
+        <DateTimePicker
+          value={selectedDate ?? new Date(1990, 0, 1)}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          maximumDate={maxDate}
+          minimumDate={minDate}
+          onChange={onPickerChange}
+          locale="he-IL"
+        />
+      ) : null}
     </View>
   );
 }

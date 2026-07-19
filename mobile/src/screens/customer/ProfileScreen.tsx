@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { ModalDialog } from '../../components/ModalDialog';
 import Toast from '../../components/toast/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -147,49 +147,65 @@ function DeleteAccountDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Modal
-      transparent
+    <ModalDialog
       visible={visible}
-      animationType="fade"
-      onRequestClose={() => {
+      onClose={() => {
         if (!deleting) onCancel();
       }}
+      containerStyle={styles.dialogCard}
     >
-      <View style={styles.dialogBackdrop}>
-        <View style={styles.dialogCard}>
+      <View style={styles.dialogContent}>
+        <View style={styles.dialogIconWrap}>
           <View style={styles.dialogIcon}>
-            <Ionicons name="trash-outline" size={24} color={P.destructive} />
+            <Ionicons name="trash-outline" size={26} color={P.destructive} />
           </View>
+        </View>
 
-          <Text style={styles.dialogTitle}>מחיקת חשבון</Text>
-          <Text style={styles.dialogBody}>
-            החשבון שלך, המועדפים והיסטוריית ההזמנות יימחקו לצמיתות. לא ניתן לבטל פעולה זו.
-          </Text>
+        <Text style={styles.dialogTitle}>מחיקת חשבון</Text>
+        <Text style={styles.dialogBody}>
+          החשבון שלך, המועדפים והיסטוריית ההזמנות יימחקו לצמיתות.
+        </Text>
 
-          <View style={styles.dialogActions}>
-            <Pressable
-              disabled={deleting}
-              onPress={onCancel}
-              style={({ pressed }) => [styles.dialogButton, styles.dialogCancelButton, pressed && styles.dialogPressed]}
-            >
-              <Text style={styles.dialogCancelText}>ביטול</Text>
-            </Pressable>
+        <View style={styles.dialogWarningBox}>
+          <Ionicons name="alert-circle-outline" size={18} color={P.destructive} />
+          <Text style={styles.dialogWarningText}>לא ניתן לבטל פעולה זו.</Text>
+        </View>
 
-            <Pressable
-              disabled={deleting}
-              onPress={onConfirm}
-              style={({ pressed }) => [styles.dialogButton, styles.dialogDeleteButton, pressed && styles.dialogPressed]}
-            >
+        <View style={styles.dialogActions}>
+          <Pressable
+            disabled={deleting}
+            onPress={onConfirm}
+            style={({ pressed }) => [
+              styles.dialogButtonPressable,
+              deleting && styles.dialogButtonDisabled,
+              pressed && !deleting && styles.dialogPressed,
+            ]}
+          >
+            <View style={[styles.dialogButton, styles.dialogDeleteButton]}>
               {deleting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.dialogDeleteText}>מחק חשבון</Text>
               )}
-            </Pressable>
-          </View>
+            </View>
+          </Pressable>
+
+          <Pressable
+            disabled={deleting}
+            onPress={onCancel}
+            style={({ pressed }) => [
+              styles.dialogButtonPressable,
+              deleting && styles.dialogButtonDisabled,
+              pressed && !deleting && styles.dialogPressed,
+            ]}
+          >
+            <View style={[styles.dialogButton, styles.dialogCancelButton]}>
+              <Text style={styles.dialogCancelText}>ביטול</Text>
+            </View>
+          </Pressable>
         </View>
       </View>
-    </Modal>
+    </ModalDialog>
   );
 }
 
@@ -704,87 +720,105 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '600', color: P.label },
   emptyText: { fontSize: 14, color: P.tertiaryLabel, textAlign: 'center' },
 
-  /* custom dialogs */
-  dialogBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.46)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
+  /* delete-account dialog */
   dialogCard: {
-    width: '100%',
-    maxWidth: 380,
-    borderRadius: 28,
-    backgroundColor: '#FFFFFF',
-    padding: 22,
-    alignItems: 'stretch',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 8,
+    borderRadius: 24,
+    borderWidth: 0,
+    padding: 0,
+    overflow: 'hidden',
+    maxWidth: 340,
+    alignSelf: 'center',
+  },
+  dialogContent: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 22,
+    gap: 12,
+  },
+  dialogIconWrap: {
+    alignItems: 'center',
+    marginBottom: 4,
   },
   dialogIcon: {
-    alignSelf: 'flex-end',
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: '#FFF0F0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
   },
   dialogTitle: {
     color: P.label,
     fontSize: 22,
     fontWeight: '800',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: -0.3,
   },
   dialogBody: {
     color: P.secondaryLabel,
     fontSize: 15,
     lineHeight: 23,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    marginBottom: 20,
+    textAlign: 'center',
+    paddingHorizontal: 4,
   },
-  dialogActions: {
+  dialogWarningBox: {
     flexDirection: 'row-reverse',
-    gap: 10,
-  },
-  dialogButton: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFF5F5',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#FCDCDC',
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  dialogWarningText: {
+    color: '#B91C1C',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  dialogActions: {
+    gap: 10,
+    marginTop: 4,
+  },
+  dialogButtonPressable: {
+    width: '100%',
+  },
+  dialogButton: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  dialogDeleteButton: {
+    backgroundColor: P.destructive,
   },
   dialogCancelButton: {
-    backgroundColor: P.bg,
+    backgroundColor: P.card,
     borderWidth: 1,
     borderColor: P.separator,
   },
-  dialogDeleteButton: {
-    backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: P.destructive,
+  dialogButtonDisabled: {
+    opacity: 0.65,
   },
   dialogPressed: {
-    opacity: 0.9,
+    opacity: 0.88,
   },
   dialogCancelText: {
     color: P.label,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
   },
   dialogDeleteText: {
-    color: '#991B1B',
-    fontSize: 15,
-    fontWeight: '900',
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
     textAlign: 'center',
-    writingDirection: 'rtl',
   },
 });

@@ -112,6 +112,10 @@ export async function verifyRegisterOtp(args: {
   code: string;
   name: string;
   address?: string | null;
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  city?: string | null;
+  email?: string | null;
 }): Promise<VerifyOtpResult> {
   return callOtpFunction<VerifyOtpResult>({
     action: 'verify_register_otp',
@@ -119,6 +123,10 @@ export async function verifyRegisterOtp(args: {
     code: args.code,
     name: args.name,
     address: args.address ?? null,
+    gender: args.gender ?? null,
+    dateOfBirth: args.dateOfBirth ?? null,
+    city: args.city ?? null,
+    email: args.email ?? null,
   });
 }
 

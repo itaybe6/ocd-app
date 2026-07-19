@@ -1,5 +1,7 @@
 export type UserRole = 'admin' | 'worker' | 'customer';
 
+export type UserGender = 'male' | 'female' | 'prefer_not_to_say';
+
 export type UserRow = {
   id: string;
   phone: string;
@@ -7,6 +9,10 @@ export type UserRow = {
   role: UserRole;
   name: string;
   address?: string | null;
+  gender?: UserGender | null;
+  date_of_birth?: string | null;
+  city?: string | null;
+  email?: string | null;
   price?: number | null;
   /** When true, store shows club member pricing without the join call-to-action. */
   ocd_plus_subscriber?: boolean | null;
