@@ -1,5 +1,6 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
@@ -10,58 +11,12 @@ import {
   normalizeCheckoutUrl,
   resolveCheckoutLaunchUrl,
 } from '../../lib/checkoutUrl';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 
 const RTL_TEXT = {
   textAlign: 'right' as const,
   writingDirection: 'rtl' as const,
 };
-
-/** Hide only Shopify's top checkout banner (store logo strip). Keep selectors narrow — broad rules blank the page. */
-const CHECKOUT_HIDE_SHOPIFY_HEADER_SCRIPT = `
-  (function() {
-    if (window.__ocdCheckoutHeaderHidden) return;
-    window.__ocdCheckoutHeaderHidden = true;
-
-    var styleId = 'ocd-checkout-hide-shopify-header';
-    var css =
-      '.banner{display:none !important;height:0 !important;min-height:0 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;border:0 !important;}' +
-      '.main{padding-top:0 !important;margin-top:0 !important;}';
-
-    function applyHide() {
-      if (!document.head) return false;
-      var style = document.getElementById(styleId);
-      if (!style) {
-        style = document.createElement('style');
-        style.id = styleId;
-        document.head.appendChild(style);
-      }
-      if (style.textContent !== css) {
-        style.textContent = css;
-      }
-      return true;
-    }
-
-    function scheduleRetries() {
-      var attempts = 0;
-      function tick() {
-        applyHide();
-        attempts += 1;
-        if (attempts < 6) {
-          setTimeout(tick, attempts < 2 ? 120 : 400);
-        }
-      }
-      tick();
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', scheduleRetries, { once: true });
-    } else {
-      scheduleRetries();
-    }
-
-    true;
-  })();
-`;
 
 /**
  * Injected early so price strings stay LTR inside an RTL WebView host.
@@ -432,6 +387,7 @@ export type CheckoutScreenProps = {
 
 export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: CheckoutScreenProps) {
   const insets = useSafeAreaInsets();
+  const { isActiveMember } = useOcdPlusMembership();
   const [launchUrl, setLaunchUrl] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -572,11 +528,11 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
   const showWebViewLoader = initialLoading && !loadError && !!launchUrl;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg, paddingBottom: insets.bottom }}>
       <View style={{ backgroundColor: '#000000', paddingTop: insets.top }}>
         <View style={{ paddingVertical: 7, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '600' }}>
-            משלוחים חינם בהזמנות מעל 299₪
+            {isActiveMember ? 'משלוח חינם לחברי OCD+ בהזמנות מעל 149₪' : 'משלוחים חינם בהזמנות מעל 299₪'}
           </Text>
         </View>
       </View>
@@ -601,27 +557,24 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
               onPress={onBack}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="סגירת קופה"
-              style={({ pressed }) => ({
+              accessibilityLabel="חזרה לעגלת הקניות"
+              style={{
                 width: 40,
                 height: 40,
-                borderRadius: 10,
+                borderRadius: radii.pill,
+                backgroundColor: '#F6F6F6',
                 alignItems: 'center',
                 justifyContent: 'center',
-                opacity: pressed ? 0.72 : 1,
-              })}
+              }}
             >
-              <Ionicons name="close-outline" size={22} color="#111827" />
+              <Ionicons name="arrow-forward" size={22} color="#202124" />
             </Pressable>
           </View>
 
           <View style={{ flex: 1, alignItems: 'center' }}>
-            <Image
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              source={require('../../../assets/logopng/OCDLOGO-04.png')}
-              style={{ width: 115, height: 42 }}
-              resizeMode="contain"
-            />
+            <Text accessibilityRole="header" style={{ color: '#202124', fontSize: 16, fontWeight: '600', ...RTL_TEXT }}>
+              תשלום מאובטח
+            </Text>
           </View>
 
           <View style={{ width: 44, height: 40 }} />
@@ -646,7 +599,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
               alignSelf: 'flex-start',
               paddingVertical: 10,
               paddingHorizontal: 16,
-              borderRadius: 12,
+              borderRadius: radii.surface,
               backgroundColor: '#0F172A',
               opacity: pressed ? 0.88 : 1,
             })}
@@ -689,7 +642,7 @@ export function CheckoutScreen({ checkoutUrl, onBack, onCheckoutComplete }: Chec
             thirdPartyCookiesEnabled
             setSupportMultipleWindows={false}
             injectedJavaScriptBeforeContentLoaded={CHECKOUT_DIRECTION_FIX_SCRIPT}
-            injectedJavaScript={`${CHECKOUT_DIRECTION_FIX_SCRIPT}\n${CHECKOUT_HIDE_SHOPIFY_HEADER_SCRIPT}`}
+            injectedJavaScript={CHECKOUT_DIRECTION_FIX_SCRIPT}
             onLoadStart={() => {
               setLoadError(null);
             }}

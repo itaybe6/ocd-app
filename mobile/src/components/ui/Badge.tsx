@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React from 'react';
 import { Text, View } from 'react-native';
 import { colors } from '../../theme/colors';
@@ -11,7 +12,7 @@ export function Badge({ count }: { count: number }) {
         minWidth: 24,
         height: 20,
         paddingHorizontal: 6,
-        borderRadius: 999,
+        borderRadius: radii.pill,
         backgroundColor: colors.danger,
         alignItems: 'center',
         justifyContent: 'center',

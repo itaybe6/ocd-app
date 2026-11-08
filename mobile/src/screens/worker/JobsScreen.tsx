@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dimensions,
@@ -45,7 +46,7 @@ const WORKER_JOB_DETAILS_ORIGIN_MS = 260;
 const jsStat = StyleSheet.create({
   card: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -640,7 +641,7 @@ export function WorkerJobsScreen() {
                   alignItems: 'center',
                   gap: 8,
                   backgroundColor: '#FFFFFF',
-                  borderRadius: 12,
+                  borderRadius: radii.surface,
                   paddingHorizontal: 12,
                   height: 44,
                 }}
@@ -668,7 +669,7 @@ export function WorkerJobsScreen() {
                     style={{
                       width: 44,
                       height: 44,
-                      borderRadius: 14,
+                      borderRadius: radii.compact,
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: colors.adminHeader,
@@ -693,13 +694,13 @@ export function WorkerJobsScreen() {
                   alignItems: 'center',
                   gap: 6,
                   backgroundColor: 'rgba(0,122,255,0.08)',
-                  borderRadius: 10,
+                  borderRadius: radii.compact,
                   paddingHorizontal: 12,
                   paddingVertical: 8,
                   alignSelf: 'flex-end',
                 }}
               >
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#007AFF' }} />
+                <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: '#007AFF' }} />
                 <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 13 }}>
                   {filtered.length} תוצאות
                 </Text>
@@ -731,7 +732,7 @@ export function WorkerJobsScreen() {
             <View
               style={{
                 backgroundColor: ui.fill,
-                borderRadius: 10,
+                borderRadius: radii.compact,
                 paddingHorizontal: 10,
                 paddingVertical: 4,
               }}
@@ -771,7 +772,7 @@ export function WorkerJobsScreen() {
               style={{
                 width: 64,
                 height: 64,
-                borderRadius: 20,
+                borderRadius: radii.surface,
                 backgroundColor: ui.fill,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -806,7 +807,7 @@ export function WorkerJobsScreen() {
               style={({ pressed }) => ({
                 paddingHorizontal: 14,
                 paddingVertical: 7,
-                borderRadius: 10,
+                borderRadius: radii.compact,
                 backgroundColor: pressed ? 'rgba(255,59,48,0.12)' : 'rgba(255,59,48,0.08)',
               })}
             >
@@ -836,7 +837,7 @@ export function WorkerJobsScreen() {
                       style={{
                         paddingHorizontal: 18,
                         paddingVertical: 10,
-                        borderRadius: 12,
+                        borderRadius: radii.surface,
                         backgroundColor: active ? opt.color : opt.bg,
                         opacity: pressed ? 0.7 : 1,
                       }}
@@ -862,7 +863,7 @@ export function WorkerJobsScreen() {
               alignItems: 'center',
               gap: 10,
               backgroundColor: ui.fill,
-              borderRadius: 12,
+              borderRadius: radii.surface,
               paddingHorizontal: 14,
               paddingVertical: 12,
               marginBottom: 24,
@@ -904,7 +905,7 @@ export function WorkerJobsScreen() {
                   style={{
                     paddingHorizontal: 28,
                     paddingVertical: 12,
-                    borderRadius: 14,
+                    borderRadius: radii.surface,
                     backgroundColor: pressed ? 'rgba(0,122,255,0.85)' : '#007AFF',
                     shadowColor: '#007AFF',
                     shadowOpacity: 0.25,
@@ -938,7 +939,7 @@ export function WorkerJobsScreen() {
             <View
               style={{
                 backgroundColor: ui.surfaceLow,
-                borderRadius: 22,
+                borderRadius: radii.surface,
                 padding: 16,
                 borderWidth: 1,
                 borderColor: ui.outline,
@@ -968,14 +969,14 @@ export function WorkerJobsScreen() {
                       selected.status === 'completed' ? 'rgba(52,199,89,0.10)' : 'rgba(255,149,0,0.10)',
                     paddingHorizontal: 12,
                     paddingVertical: 6,
-                    borderRadius: 10,
+                    borderRadius: radii.compact,
                   }}
                 >
                   <View
                     style={{
                       width: 7,
                       height: 7,
-                      borderRadius: 3.5,
+                      borderRadius: radii.pill,
                       backgroundColor: selected.status === 'completed' ? '#34C759' : '#FF9500',
                     }}
                   />
@@ -999,7 +1000,7 @@ export function WorkerJobsScreen() {
                           : 'rgba(0,122,255,0.10)',
                     paddingHorizontal: 10,
                     paddingVertical: 4,
-                    borderRadius: 8,
+                    borderRadius: radii.compact,
                   }}
                 >
                   <Text
@@ -1090,7 +1091,7 @@ export function WorkerJobsScreen() {
                       minHeight: 44,
                       paddingHorizontal: 18,
                       paddingVertical: 12,
-                      borderRadius: 14,
+                      borderRadius: radii.surface,
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: colors.adminHeader,
@@ -1191,7 +1192,7 @@ export function WorkerJobsScreen() {
                           <View style={{ opacity: pressed ? 0.95 : 1 }}>
                             <Image
                               source={{ uri: u }}
-                              style={{ width: '100%', height: 190, borderRadius: 14 }}
+                              style={{ width: '100%', height: 190, borderRadius: radii.surface }}
                               resizeMode="cover"
                             />
                           </View>
@@ -1220,7 +1221,7 @@ export function WorkerJobsScreen() {
                   style={{
                     width: 36,
                     height: 36,
-                    borderRadius: 12,
+                    borderRadius: radii.compact,
                     backgroundColor: pressed ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.05)',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1235,7 +1236,7 @@ export function WorkerJobsScreen() {
           {!!previewImageUrl && (
             <Image
               source={{ uri: previewImageUrl }}
-              style={{ width: '100%', height: 340, borderRadius: 18 }}
+              style={{ width: '100%', height: 340, borderRadius: radii.surface }}
               resizeMode="cover"
             />
           )}
@@ -1277,7 +1278,7 @@ export function WorkerJobsScreen() {
                       <View
                         style={{
                           backgroundColor: 'rgba(120,120,128,0.08)',
-                          borderRadius: 8,
+                          borderRadius: radii.compact,
                           paddingHorizontal: 10,
                           paddingVertical: 4,
                         }}
@@ -1294,7 +1295,7 @@ export function WorkerJobsScreen() {
                         gap: 5,
                         backgroundColor:
                           execJob.status === 'completed' ? 'rgba(52,199,89,0.12)' : 'rgba(255,149,0,0.12)',
-                        borderRadius: 8,
+                        borderRadius: radii.compact,
                         paddingHorizontal: 10,
                         paddingVertical: 4,
                       }}
@@ -1303,7 +1304,7 @@ export function WorkerJobsScreen() {
                         style={{
                           width: 6,
                           height: 6,
-                          borderRadius: 3,
+                          borderRadius: radii.pill,
                           backgroundColor: execJob.status === 'completed' ? '#34C759' : '#FF9500',
                         }}
                       />
@@ -1332,7 +1333,7 @@ export function WorkerJobsScreen() {
                     style={{
                       width: 56,
                       height: 56,
-                      borderRadius: 16,
+                      borderRadius: radii.surface,
                       backgroundColor: 'rgba(120,120,128,0.08)',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1370,7 +1371,7 @@ export function WorkerJobsScreen() {
                         key={item.id}
                         style={{
                           backgroundColor: '#FFFFFF',
-                          borderRadius: 16,
+                          borderRadius: radii.surface,
                           borderWidth: 1,
                           borderColor: 'rgba(60,60,67,0.06)',
                           shadowColor: '#000',
@@ -1418,7 +1419,7 @@ export function WorkerJobsScreen() {
                               style={{
                                 width: 28,
                                 height: 28,
-                                borderRadius: 14,
+                                borderRadius: radii.pill,
                                 backgroundColor: 'rgba(52,199,89,0.12)',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -1436,7 +1437,7 @@ export function WorkerJobsScreen() {
                               style={{
                                 width: '100%',
                                 height: 180,
-                                borderRadius: 12,
+                                borderRadius: radii.surface,
                                 backgroundColor: 'rgba(120,120,128,0.08)',
                               }}
                               resizeMode="cover"
@@ -1448,7 +1449,7 @@ export function WorkerJobsScreen() {
                               marginHorizontal: 14,
                               marginBottom: 12,
                               height: 100,
-                              borderRadius: 12,
+                              borderRadius: radii.surface,
                               backgroundColor: 'rgba(120,120,128,0.04)',
                               borderWidth: 1.5,
                               borderColor: 'rgba(120,120,128,0.08)',
@@ -1488,7 +1489,7 @@ export function WorkerJobsScreen() {
                                     backgroundColor: pressed
                                       ? 'rgba(120,120,128,0.16)'
                                       : 'rgba(120,120,128,0.08)',
-                                    borderRadius: 12,
+                                    borderRadius: radii.surface,
                                     paddingVertical: 11,
                                   }}
                                 >
@@ -1517,7 +1518,7 @@ export function WorkerJobsScreen() {
                                       : pressed
                                         ? 'rgba(0,122,255,0.18)'
                                         : 'rgba(0,122,255,0.10)',
-                                    borderRadius: 12,
+                                    borderRadius: radii.surface,
                                     paddingVertical: 11,
                                   }}
                                 >
@@ -1544,7 +1545,7 @@ export function WorkerJobsScreen() {
                     style={{
                       width: 56,
                       height: 56,
-                      borderRadius: 16,
+                      borderRadius: radii.surface,
                       backgroundColor: 'rgba(120,120,128,0.08)',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1581,7 +1582,7 @@ export function WorkerJobsScreen() {
                         key={d.id}
                         style={{
                           backgroundColor: '#FFFFFF',
-                          borderRadius: 16,
+                          borderRadius: radii.surface,
                           borderWidth: 1,
                           borderColor: 'rgba(60,60,67,0.06)',
                           shadowColor: '#000',
@@ -1620,7 +1621,7 @@ export function WorkerJobsScreen() {
                               style={{
                                 width: 28,
                                 height: 28,
-                                borderRadius: 14,
+                                borderRadius: radii.pill,
                                 backgroundColor: 'rgba(52,199,89,0.12)',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -1638,7 +1639,7 @@ export function WorkerJobsScreen() {
                               style={{
                                 width: '100%',
                                 height: 180,
-                                borderRadius: 12,
+                                borderRadius: radii.surface,
                                 backgroundColor: 'rgba(120,120,128,0.08)',
                               }}
                               resizeMode="cover"
@@ -1650,7 +1651,7 @@ export function WorkerJobsScreen() {
                               marginHorizontal: 14,
                               marginBottom: 12,
                               height: 100,
-                              borderRadius: 12,
+                              borderRadius: radii.surface,
                               backgroundColor: 'rgba(120,120,128,0.04)',
                               borderWidth: 1.5,
                               borderColor: 'rgba(120,120,128,0.08)',
@@ -1690,7 +1691,7 @@ export function WorkerJobsScreen() {
                                     backgroundColor: pressed
                                       ? 'rgba(120,120,128,0.16)'
                                       : 'rgba(120,120,128,0.08)',
-                                    borderRadius: 12,
+                                    borderRadius: radii.surface,
                                     paddingVertical: 11,
                                   }}
                                 >
@@ -1719,7 +1720,7 @@ export function WorkerJobsScreen() {
                                       : pressed
                                         ? 'rgba(0,122,255,0.18)'
                                         : 'rgba(0,122,255,0.10)',
-                                    borderRadius: 12,
+                                    borderRadius: radii.surface,
                                     paddingVertical: 11,
                                   }}
                                 >
@@ -1757,7 +1758,7 @@ export function WorkerJobsScreen() {
                 <View
                   style={{
                     backgroundColor: '#FFFFFF',
-                    borderRadius: 16,
+                    borderRadius: radii.surface,
                     borderWidth: 1,
                     borderColor: 'rgba(60,60,67,0.06)',
                     shadowColor: '#000',
@@ -1803,7 +1804,7 @@ export function WorkerJobsScreen() {
                               style={{
                                 width: 28,
                                 height: 28,
-                                borderRadius: 14,
+                                borderRadius: radii.pill,
                                 backgroundColor: 'rgba(52,199,89,0.12)',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -1821,7 +1822,7 @@ export function WorkerJobsScreen() {
                               style={{
                                 width: '100%',
                                 height: 180,
-                                borderRadius: 12,
+                                borderRadius: radii.surface,
                                 backgroundColor: 'rgba(120,120,128,0.08)',
                               }}
                               resizeMode="cover"
@@ -1833,7 +1834,7 @@ export function WorkerJobsScreen() {
                               marginHorizontal: 14,
                               marginBottom: 12,
                               height: 100,
-                              borderRadius: 12,
+                              borderRadius: radii.surface,
                               backgroundColor: 'rgba(120,120,128,0.04)',
                               borderWidth: 1.5,
                               borderColor: 'rgba(120,120,128,0.08)',
@@ -1870,7 +1871,7 @@ export function WorkerJobsScreen() {
                                     backgroundColor: pressed
                                       ? 'rgba(120,120,128,0.16)'
                                       : 'rgba(120,120,128,0.08)',
-                                    borderRadius: 12,
+                                    borderRadius: radii.surface,
                                     paddingVertical: 11,
                                   }}
                                 >
@@ -1899,7 +1900,7 @@ export function WorkerJobsScreen() {
                                       : pressed
                                         ? 'rgba(0,122,255,0.18)'
                                         : 'rgba(0,122,255,0.10)',
-                                    borderRadius: 12,
+                                    borderRadius: radii.surface,
                                     paddingVertical: 11,
                                   }}
                                 >
@@ -1928,7 +1929,7 @@ export function WorkerJobsScreen() {
                     justifyContent: 'center',
                     gap: 8,
                     backgroundColor: 'rgba(52,199,89,0.10)',
-                    borderRadius: 14,
+                    borderRadius: radii.surface,
                     paddingVertical: 16,
                   }}
                 >
@@ -1936,7 +1937,7 @@ export function WorkerJobsScreen() {
                     style={{
                       width: 24,
                       height: 24,
-                      borderRadius: 12,
+                      borderRadius: radii.pill,
                       backgroundColor: '#34C759',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1960,7 +1961,7 @@ export function WorkerJobsScreen() {
                       : pressed
                         ? 'rgba(0,122,255,0.85)'
                         : '#007AFF',
-                    borderRadius: 14,
+                    borderRadius: radii.surface,
                     paddingVertical: 16,
                     borderWidth: 1,
                     borderColor: !isExecCompletable ? '#94A3B8' : 'rgba(0,0,0,0.08)',

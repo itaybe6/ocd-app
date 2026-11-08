@@ -1,343 +1,222 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { radii } from '../../theme/radii';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Pressable,
-  RefreshControl,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
+  ActivityIndicator, FlatList, Image, Keyboard, Pressable, RefreshControl,
+  StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchProducts, searchProducts } from '../../lib/shopify';
-import { findProductBrand, type RemoteBrand } from '../../lib/brands';
+import { searchProducts } from '../../lib/shopify';
+import { normalizeBrandImageUrl, type RemoteBrand } from '../../lib/brands';
+import { indexCatalog, normalizeSearchQuery, searchCatalog } from '../../lib/catalogSearch';
+import { favoriteInputFromStoreProduct } from '../../lib/favorites';
 import { useBrands } from '../../hooks/useBrands';
-import { ProductBrandBadge } from '../../components/ProductBrandBadge';
+import { useStoreCatalog } from '../../hooks/useStoreCatalog';
+import { useDiscoveryProducts } from '../../hooks/useDiscoveryProducts';
+import { useCart } from '../../state/CartContext';
+import { useFavorites } from '../../state/FavoritesContext';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
+import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
 import {
-  getStoreBottomBarMetrics,
-  ProductImage,
-  StoreFloatingTabBar,
-  toStoreProduct,
-  type StoreBottomTabId,
-  type StoreProduct,
-  type StoreSubcategory,
+  getStoreBottomBarMetrics, HomeHighlightRailCard, StoreFloatingTabBar, toStoreProduct,
+  type StoreBottomTabId, type StoreProduct, type StoreSubcategory,
 } from './StoreHomeScreen';
-import { colors } from '../../theme/colors';
 
-function brandMatchesQuery(brand: RemoteBrand, q: string): boolean {
-  const needle = q.toLowerCase();
-  if (brand.label.toLowerCase().includes(needle)) return true;
-  if (brand.short.toLowerCase().includes(needle)) return true;
-  if (brand.handle.toLowerCase().includes(needle)) return true;
-  return brand.keywords.some((k) => k.toLowerCase().includes(needle) || needle.includes(k.toLowerCase()));
+// These logos include a solid square background intended to fill the circular crop.
+const FULL_BLEED_BRAND_LOGOS = new Set(['יעקבי', 'יעקובי', 'פינל-1', 'פינל', 'סנו-1', 'סנו', 'shiny', 'שייני']);
+
+function SearchBrandChip({ brand, onPress }: { brand: RemoteBrand; onPress: () => void }) {
+  const uri = normalizeBrandImageUrl(brand.image);
+  const fillCircle = FULL_BLEED_BRAND_LOGOS.has(brand.handle) || FULL_BLEED_BRAND_LOGOS.has(brand.label.trim().toLowerCase());
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`חיפוש ${brand.label}`} style={styles.brandChip}>
+    <View style={styles.brandLogoCircle}>
+      {uri && uri !== failedUri
+        ? <Image source={{ uri }} resizeMode={fillCircle ? 'cover' : 'contain'} style={fillCircle ? styles.brandLogoFullBleed : styles.brandLogo} accessible={false} onError={() => setFailedUri(uri)} />
+        : <Text style={styles.brandInitial} accessible={false}>{(brand.short || brand.label).slice(0, 1)}</Text>}
+    </View>
+    <Text style={styles.brandText}>{brand.label}</Text>
+  </Pressable>;
 }
 
-function productMatchesQuery(product: StoreProduct, q: string, brands: RemoteBrand[]): boolean {
-  const needle = q.toLowerCase();
-  if (product.name.toLowerCase().includes(needle)) return true;
-  if (product.subtitle.toLowerCase().includes(needle)) return true;
-  if (product.description.toLowerCase().includes(needle)) return true;
-  if ((product.tags ?? []).some((t) => t.toLowerCase().includes(needle))) return true;
-
-  const productBrand = findProductBrand(
-    {
-      tags: product.tags,
-      collectionHandles: product.collectionHandles,
-      collectionTitles: product.collectionTitles,
-    },
-    brands,
-  );
-  if (productBrand && brandMatchesQuery(productBrand, needle)) return true;
-
-  return brands.some(
-    (b) =>
-      brandMatchesQuery(b, needle) &&
-      findProductBrand(
-        {
-          tags: product.tags,
-          collectionHandles: product.collectionHandles,
-          collectionTitles: product.collectionTitles,
-        },
-        [b],
-      ),
-  );
-}
-
-function mergeUniqueProducts(primary: StoreProduct[], secondary: StoreProduct[]): StoreProduct[] {
-  const seen = new Set<string>();
-  const out: StoreProduct[] = [];
-  for (const product of [...primary, ...secondary]) {
-    if (seen.has(product.id)) continue;
-    seen.add(product.id);
-    out.push(product);
-  }
-  return out;
-}
-
-export function StoreSearchScreen({
-  onBack: _onBack,
-  onOpenCart: _onOpenCart,
-  onOpenProduct,
-  onOpenCategory: _onOpenCategory,
-  onTabPress,
-}: {
+export function StoreSearchScreen({ onBack, onOpenCart, onOpenProduct, onTabPress }: {
   onBack: () => void;
   onOpenCart?: () => void;
   onOpenProduct?: (product: StoreProduct) => void;
-  onOpenCategory?: (category: {
-    id: string;
-    title: string;
-    description?: string;
-    parentTitle?: string;
-    subcategories?: StoreSubcategory[];
-  }) => void;
+  onOpenCategory?: (category: { id: string; title: string; description?: string; parentTitle?: string; subcategories?: StoreSubcategory[] }) => void;
   onTabPress: (tabId: StoreBottomTabId) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
-  const { width: windowWidth } = useWindowDimensions();
-  const { data: remoteBrands = [] } = useBrands();
-
-  const TILE_GAP = 2;
-  const tileWidth = Math.floor((windowWidth - TILE_GAP * 2) / 3);
-
-  const [browsing, setBrowsing] = useState<StoreProduct[]>([]);
-  const [results, setResults] = useState<StoreProduct[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
+  const tileWidth = (width - 28) / 4;
+  const cardWidth = (width - 42) / 2;
+  const { data: brands = [] } = useBrands();
+  const catalog = useStoreCatalog();
+  const { isFavorite, isFavoritePending, toggleFavorite } = useFavorites();
+  const { isActiveMember } = useOcdPlusMembership();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const [query, setQuery] = useState('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchGenRef = useRef(0);
+  const [brandQuery, setBrandQuery] = useState<string | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [discoveryRound, setDiscoveryRound] = useState(0);
+  const listRef = useRef<FlatList<StoreProduct>>(null);
+  const needle = normalizeSearchQuery(query);
+  const columns = needle ? 2 : 4;
+  const searchScope = brandQuery === needle ? 'catalog' : 'name';
+  const hasQuery = !!needle;
 
-  const trimmedQuery = query.trim();
-  const isSearchingMode = trimmedQuery.length > 0;
-  const displayed = isSearchingMode ? results : browsing;
-  const pageBg = isSearchingMode ? '#F3F4F6' : colors.bg;
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(needle), 300);
+    return () => clearTimeout(timer);
+  }, [needle]);
 
-  const doLoad = useCallback(async (isRefresh = false) => {
+  const browsing = useMemo(() => catalog.products.map((product, i) => toStoreProduct(product, i)), [catalog.products]);
+  const discovery = useDiscoveryProducts(browsing, discoveryRound);
+  // Opening discovery must never build a full text/brand index. Typed searches
+  // need only names; metadata is indexed only when selecting a brand chip.
+  const index = useMemo(() => hasQuery ? indexCatalog(browsing, brands, searchScope) : [], [browsing, brands, hasQuery, searchScope]);
+  const remote = useQuery({
+    queryKey: ['store-search', debouncedQuery],
+    queryFn: async () => (await searchProducts(debouncedQuery, 48)).map((product, i) => toStoreProduct(product, i)),
+    enabled: !!needle && needle === debouncedQuery,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+  const remoteIndex = useMemo(() => hasQuery ? indexCatalog(remote.data ?? [], brands, searchScope) : [], [remote.data, brands, hasQuery, searchScope]);
+  // A late response belongs only to its own query; never show it for new/cleared input.
+  const displayed = useMemo(() => needle
+    ? searchCatalog([...index, ...(needle === debouncedQuery ? remoteIndex : [])], needle, searchScope)
+    : discovery, [needle, debouncedQuery, index, remoteIndex, searchScope, discovery]);
+  const searching = !!needle && (needle !== debouncedQuery || remote.isFetching);
+  const loading = searching || catalog.isFetching;
+  const suggestions = brands.filter(brand => !brand.hiddenFromCarousel);
+
+  function changeQuery(value: string, fromBrand = false) {
+    setQuery(value);
+    setBrandQuery(fromBrand ? normalizeSearchQuery(value) : null);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }
+
+  function shuffleDiscovery() {
+    setDiscoveryRound(round => round + 1);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }
+
+  async function refresh() {
+    setRefreshing(true);
     try {
-      if (isRefresh) setRefreshing(true);
-      setError(null);
-      const raw = await fetchProducts();
-      const mapped = raw.map((p, i) => toStoreProduct(p, i)).sort(() => Math.random() - 0.5);
-      setBrowsing(mapped);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'שגיאה בטעינת מוצרים');
-    } finally {
-      setInitialLoading(false);
-      if (isRefresh) setRefreshing(false);
-    }
-  }, []);
+      await Promise.all([catalog.refetch({ cancelRefetch: false }),
+        ...(needle && needle === debouncedQuery ? [remote.refetch({ cancelRefetch: false })] : [])]);
+    } finally { setRefreshing(false); }
+  }
 
-  useEffect(() => {
-    void doLoad();
-  }, [doLoad]);
+  const error = (!catalog.isFetching && catalog.isError) || (!!needle && needle === debouncedQuery && remote.isError && !remote.isFetching);
 
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-
-    setSearching(true);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    const gen = ++searchGenRef.current;
-    debounceRef.current = setTimeout(async () => {
-      const localMatches = browsing.filter((p) => productMatchesQuery(p, q, remoteBrands));
-
-      let remoteMatches: StoreProduct[] = [];
-      try {
-        const raw = await searchProducts(q, 48);
-        remoteMatches = raw.map((p, i) => toStoreProduct(p, i));
-      } catch {
-        // Keep local matches if Shopify search fails.
-      }
-
-      if (searchGenRef.current !== gen) return;
-
-      setResults(mergeUniqueProducts(localMatches, remoteMatches));
-      setSearching(false);
-    }, 400);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query, browsing, remoteBrands]);
-
-  const resultsHeader = useMemo(() => {
-    if (!isSearchingMode) return null;
-    if (searching) return 'מחפש…';
-    return `${displayed.length} תוצאות עבור "${trimmedQuery}"`;
-  }, [isSearchingMode, searching, displayed.length, trimmedQuery]);
-
-  const renderListEmpty = useCallback(() => {
-    if (searching) {
-      return (
-        <View style={{ paddingVertical: 48, alignItems: 'center', gap: 12 }}>
-          <ActivityIndicator size="large" color="#111827" />
-          <Text style={{ color: '#8A8F98', fontWeight: '600', fontSize: 14 }}>מחפש מוצרים…</Text>
-        </View>
-      );
-    }
-    return (
-      <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: 28, gap: 10 }}>
-        <Ionicons name="search-outline" size={48} color="#C7C7CC" />
-        <Text style={{ color: '#111827', fontWeight: '800', fontSize: 16, textAlign: 'center' }}>
-          {isSearchingMode ? 'לא נמצאו תוצאות' : 'לא נמצאו מוצרים'}
-        </Text>
-        {isSearchingMode ? (
-          <Text style={{ color: '#8A8F98', fontWeight: '600', fontSize: 14, textAlign: 'center', lineHeight: 21 }}>
-            נסה שם מוצר או מותג אחר
-          </Text>
-        ) : null}
+  return <SafeAreaView edges={['top']} style={styles.page}>
+    <View style={styles.header}>
+      <View style={styles.topRow}>
+        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="חזרה" style={styles.roundButton}><Ionicons name="arrow-forward" size={21} color="#202124" /></Pressable>
+        <Text style={styles.pageLabel}>חיפוש מוצרים</Text>
+        {onOpenCart ? <SearchCartButton onOpenCart={onOpenCart} /> : <View style={{ width: 44 }} />}
       </View>
-    );
-  }, [searching, isSearchingMode]);
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={21} color="#75787C" />
+        <TextInput value={query} onChangeText={changeQuery} placeholder="שם מוצר או חלק מהשם" placeholderTextColor="#96999D" accessibilityLabel="חיפוש לפי שם מוצר" returnKeyType="search" autoCorrect={false} autoCapitalize="none" onSubmitEditing={Keyboard.dismiss} style={styles.input} />
+        {query ? <Pressable onPress={() => changeQuery('')} accessibilityRole="button" accessibilityLabel="ניקוי החיפוש" style={styles.clearButton}><Ionicons name="close" size={18} color="#75787C" /></Pressable> : null}
+      </View>
+    </View>
+    <FlatList
+      ref={listRef} key={columns} data={displayed} numColumns={columns} keyExtractor={product => product.id}
+      contentContainerStyle={{ paddingBottom: contentPaddingBottom, flexGrow: 1 }}
+      columnWrapperStyle={{ direction: 'ltr', flexDirection: 'row-reverse', gap: needle ? 10 : 4, paddingHorizontal: needle ? 16 : 8 }}
+      ItemSeparatorComponent={() => <View style={{ height: needle ? 14 : 4 }} />}
+      initialNumToRender={needle ? 3 : 6} maxToRenderPerBatch={needle ? 3 : 4} windowSize={5}
+      showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor="#202124" />}
+      ListHeaderComponent={<View>
+        {!needle && suggestions.length ? <FlatList
+          horizontal inverted data={suggestions} keyExtractor={brand => brand.handle}
+          showsHorizontalScrollIndicator={false} style={styles.brandRail}
+          contentContainerStyle={styles.brandRailContent} keyboardShouldPersistTaps="handled"
+          renderItem={({ item: brand }) => <SearchBrandChip brand={brand} onPress={() => changeQuery(brand.label, true)} />}
+        /> : null}
+        <View style={styles.resultsHeading}>
+          <Text style={styles.sectionTitle}>{needle ? 'תוצאות החיפוש' : 'לגלות משהו חדש'}</Text>
+          <View style={styles.resultStatus}>{loading ? <ActivityIndicator size="small" color="#8A8D91" /> : null}{needle ? <Text style={styles.muted}>{`${displayed.length} מוצרים${loading ? ' בינתיים' : ''}`}</Text> : <Pressable onPress={shuffleDiscovery} accessibilityRole="button" accessibilityLabel="ערבוב סדר המוצרים" style={styles.shuffleButton}><Ionicons name="shuffle-outline" size={16} color="#777A7E" /><Text style={styles.muted}>ערבוב</Text></Pressable>}</View>
+        </View>
+        {error && displayed.length > 0 ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={styles.notice}><Text style={styles.muted}>לא הצלחנו לעדכן את כל התוצאות · לניסיון נוסף</Text></Pressable> : null}
+      </View>}
+      renderItem={({ item: product }) => needle ? <HomeHighlightRailCard
+        product={product} cardWidth={cardWidth} remoteBrands={brands} isOcdPlusSubscriber={isActiveMember}
+        favorite={isFavorite(product.id)} favoritePending={isFavoritePending(product.id)}
+        onPress={() => { Keyboard.dismiss(); onOpenProduct?.(product); }}
+        onToggleFavorite={() => { void toggleFavorite(favoriteInputFromStoreProduct(product)); }}
+        onOpenOcdPlusSheet={openOcdPlusSubscribeSheet}
+      /> : <Pressable
+        accessibilityRole="button" accessibilityLabel={product.name} accessibilityHint="פתיחת פרטי המוצר"
+        style={[styles.productTile, { width: tileWidth, height: tileWidth }]}
+        android_ripple={{ color: '#E8E8E8' }}
+        onPress={() => { Keyboard.dismiss(); onOpenProduct?.(product); }}
+      >{product.imageUrl ? <Image source={{ uri: product.imageUrl }} resizeMode="contain" style={styles.productImage} accessible={false} /> : <Ionicons name="image-outline" size={26} color="#C5C7CA" />}</Pressable>}
+      ListEmptyComponent={loading && !needle ? <View accessibilityLabel="טוען מוצרים" style={styles.skeletonGrid}>
+        {Array.from({ length: 24 }, (_, i) => <View key={i} style={[styles.skeletonTile, { width: tileWidth, height: tileWidth }]} />)}
+      </View> : <View style={styles.empty}>
+        <View style={styles.emptyIcon}><Ionicons name={error ? 'cloud-offline-outline' : 'search-outline'} size={28} color="#84878B" /></View>
+        <Text style={styles.emptyTitle}>{loading ? 'מחפשים את המוצר שלכם…' : error ? 'החיפוש לא התעדכן כרגע' : needle ? 'לא מצאנו התאמה הפעם' : 'המוצרים יופיעו כאן בקרוב'}</Text>
+        <Text style={styles.emptyText}>{loading ? 'התוצאות יופיעו כאן ברגע שיגיעו.' : error ? 'אפשר לנסות שוב בעוד רגע.' : needle ? 'נסו שם קצר יותר, סוג מוצר או מותג.' : 'אפשר לרענן ולנסות שוב.'}</Text>
+        {!loading ? <Pressable accessibilityRole="button" onPress={() => error || !needle ? void refresh() : changeQuery('')} style={styles.emptyButton}><Text style={styles.brandText}>{error || !needle ? 'ניסיון נוסף' : 'לכל המוצרים'}</Text></Pressable> : null}
+      </View>}
+    />
+    <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
+  </SafeAreaView>;
+}
 
-  const showMainList = !initialLoading && !(error && displayed.length === 0);
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 12 },
+  topRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 18 },
+  roundButton: { width: 44, height: 44, borderRadius: radii.pill, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
+  pageLabel: { flex: 1, textAlign: 'right', fontSize: 22, lineHeight: 30, fontWeight: '700', color: '#202124' },
+  cartBadge: { position: 'absolute', top: -2, left: -2, minWidth: 18, height: 18, borderRadius: radii.compact, paddingHorizontal: 3, backgroundColor: '#202124', alignItems: 'center', justifyContent: 'center' },
+  cartCount: { color: '#FFFFFF', fontSize: 10, fontWeight: '600' },
+  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', paddingRight: 14, paddingLeft: 4, gap: 9, borderRadius: radii.surface, backgroundColor: '#F5F5F5', minHeight: 50, borderWidth: 1, borderColor: '#EEEEEE' },
+  input: { flex: 1, textAlign: 'right', writingDirection: 'rtl', fontSize: 14, color: '#202124', paddingVertical: 13 },
+  clearButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  brandRail: { direction: 'ltr', marginBottom: 6 },
+  brandRailContent: { direction: 'ltr', flexDirection: 'row', gap: 8, flexGrow: 1, paddingHorizontal: 16 },
+  brandChip: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 8, minHeight: 44, paddingRight: 6, paddingLeft: 14, paddingVertical: 5, borderRadius: radii.pill, borderWidth: 1, borderColor: '#ECEDEE', backgroundColor: '#FAFAFA' },
+  brandLogoCircle: { width: 30, height: 30, borderRadius: radii.pill, overflow: 'hidden', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#ECEDEE', alignItems: 'center', justifyContent: 'center' },
+  brandLogo: { width: 26, height: 26 },
+  brandLogoFullBleed: { width: '100%', height: '100%' },
+  brandInitial: { fontSize: 13, fontWeight: '600', color: '#777A7E' },
+  brandText: { fontSize: 13, fontWeight: '500', color: '#343639', textAlign: 'center' },
+  resultsHeading: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 6, flexWrap: 'wrap', minHeight: 48 },
+  shuffleButton: { flexDirection: 'row-reverse', gap: 5, alignItems: 'center', justifyContent: 'center', minHeight: 44, paddingLeft: 4, paddingRight: 8 },
+  sectionTitle: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: '#202124', textAlign: 'right' },
+  resultStatus: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7 },
+  muted: { fontSize: 12, lineHeight: 19, color: '#8A8D91', textAlign: 'right' },
+  notice: { padding: 12, borderRadius: radii.surface, backgroundColor: '#F6F6F6', marginHorizontal: 16, marginBottom: 12 },
+  empty: { alignItems: 'center', paddingHorizontal: 20, paddingVertical: 40, gap: 10 },
+  emptyIcon: { width: 64, height: 64, borderRadius: radii.pill, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  emptyTitle: { fontSize: 17, fontWeight: '600', color: '#202124', textAlign: 'center' },
+  emptyText: { fontSize: 14, lineHeight: 22, color: '#8A8D91', textAlign: 'center' },
+  emptyButton: { paddingHorizontal: 22, paddingVertical: 13, borderRadius: radii.surface, backgroundColor: '#F3F3F3', marginTop: 8 },
+  productTile: { alignItems: 'center', justifyContent: 'center', borderRadius: radii.compact, backgroundColor: '#F7F7F7', overflow: 'hidden', padding: 5 },
+  productImage: { width: '100%', height: '100%' },
+  skeletonGrid: { direction: 'ltr', flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 4, paddingHorizontal: 8 },
+  skeletonTile: { borderRadius: radii.compact, backgroundColor: '#F5F5F5' },
+});
 
+function SearchCartButton({ onOpenCart }: { onOpenCart: () => void }) {
+  const { itemCount } = useCart();
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: pageBg }}>
-      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12, backgroundColor: pageBg }}>
-        <View
-          style={{
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            backgroundColor: isSearchingMode ? '#FFFFFF' : '#EFEFEF',
-            borderRadius: 14,
-            borderWidth: isSearchingMode ? 1 : 0,
-            borderColor: '#E5E7EB',
-            paddingHorizontal: 12,
-            height: 42,
-          }}
-        >
-          {searching ? (
-            <ActivityIndicator size="small" color="#8E8E93" style={{ marginLeft: 6 }} />
-          ) : (
-            <Ionicons name="search" size={16} color="#8E8E93" style={{ marginLeft: 6 }} />
-          )}
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="חיפוש לפי שם מוצר או מותג..."
-            placeholderTextColor="#AEAEB2"
-            returnKeyType="search"
-            autoCorrect={false}
-            style={{ flex: 1, color: '#111827', textAlign: 'right', fontSize: 15, padding: 0 }}
-          />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color="#AEAEB2" style={{ marginRight: 4 }} />
-            </Pressable>
-          )}
-        </View>
-
-        {!!resultsHeader && (
-          <Text
-            style={{
-              marginTop: 12,
-              color: '#6B7280',
-              fontSize: 13,
-              fontWeight: '700',
-              textAlign: 'right',
-            }}
-          >
-            {resultsHeader}
-          </Text>
-        )}
-      </View>
-
-      {initialLoading && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color="#555" />
-        </View>
-      )}
-
-      {!initialLoading && !!error && displayed.length === 0 && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <Ionicons name="alert-circle-outline" size={40} color="#DC2626" />
-          <Text style={{ color: '#991B1B', fontWeight: '700', textAlign: 'center', marginTop: 12, marginBottom: 20 }}>
-            {error}
-          </Text>
-          <Pressable
-            onPress={() => void doLoad()}
-            style={({ pressed }) => ({
-              backgroundColor: '#111827',
-              paddingHorizontal: 24,
-              paddingVertical: 10,
-              borderRadius: 10,
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>נסה שנית</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {showMainList && (
-        <FlatList
-          data={displayed}
-          keyExtractor={(item) => item.id}
-          numColumns={3}
-          style={{ flex: 1, backgroundColor: pageBg }}
-          contentContainerStyle={
-            displayed.length === 0
-              ? { flexGrow: 1, paddingBottom: contentPaddingBottom }
-              : { paddingBottom: contentPaddingBottom }
-          }
-          columnWrapperStyle={
-            displayed.length > 0 ? { flexDirection: 'row-reverse', gap: TILE_GAP } : undefined
-          }
-          ItemSeparatorComponent={displayed.length > 0 ? () => <View style={{ height: TILE_GAP }} /> : undefined}
-          ListEmptyComponent={renderListEmpty}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void doLoad(true)}
-              tintColor="#555"
-              colors={['#555']}
-            />
-          }
-          renderItem={({ item: product }) => (
-            <Pressable
-              onPress={() => onOpenProduct?.(product)}
-              style={({ pressed }) => ({
-                width: tileWidth,
-                height: tileWidth,
-                backgroundColor: isSearchingMode ? '#FFFFFF' : '#D1D5DB',
-                opacity: pressed ? 0.82 : 1,
-                overflow: 'hidden',
-              })}
-            >
-              <View style={{ width: tileWidth, height: tileWidth }}>
-                {product.imageUrl ? (
-                  <Image
-                    source={{ uri: product.imageUrl }}
-                    resizeMode="cover"
-                    style={{ width: tileWidth, height: tileWidth }}
-                  />
-                ) : (
-                  <ProductImage product={product} height={tileWidth} />
-                )}
-                <ProductBrandBadge product={product} brands={remoteBrands} size={28} />
-              </View>
-            </Pressable>
-          )}
-        />
-      )}
-
-      <StoreFloatingTabBar activeTab="search" onTabPress={onTabPress} />
-    </SafeAreaView>
+    <Pressable onPress={onOpenCart} accessibilityRole="button" accessibilityLabel={`עגלת קניות, ${itemCount} פריטים`} style={styles.roundButton}>
+      <Ionicons name="bag-outline" size={20} color="#202124" />
+      {itemCount > 0 ? <View style={styles.cartBadge}><Text style={styles.cartCount}>{itemCount > 99 ? '99+' : itemCount}</Text></View> : null}
+    </Pressable>
   );
 }

@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -50,7 +51,7 @@ const S = StyleSheet.create({
 
   hero: {
     marginTop: 0,
-    borderRadius: 24,
+    borderRadius: radii.surface,
     padding: 22,
     backgroundColor: colors.adminHeader,
     ...Platform.select({
@@ -62,8 +63,8 @@ const S = StyleSheet.create({
   heroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10 },
   heroPct: { color: '#FFFFFF', fontSize: 48, fontWeight: '900', letterSpacing: -2 },
   heroMeta: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '700', textAlign: 'right', marginBottom: 6 },
-  heroBar: { marginTop: 18, height: 7, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
-  heroBarFill: { height: '100%', borderRadius: 999, backgroundColor: '#FFFFFF' },
+  heroBar: { marginTop: 18, height: 7, borderRadius: radii.pill, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
+  heroBarFill: { height: '100%', borderRadius: radii.pill, backgroundColor: '#FFFFFF' },
   heroPills: { flexDirection: 'row', gap: 8, marginTop: 14 },
   heroPill: {
     flexDirection: 'row',
@@ -71,7 +72,7 @@ const S = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
   heroPillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
@@ -80,7 +81,7 @@ const S = StyleSheet.create({
   kpiCard: {
     flexBasis: '47%',
     flexGrow: 1,
-    borderRadius: 22,
+    borderRadius: radii.surface,
     padding: 18,
     borderWidth: 1,
     ...Platform.select({
@@ -88,10 +89,10 @@ const S = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  kpiIconWrap: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  kpiIconWrap: { width: 46, height: 46, borderRadius: radii.compact, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   kpiValue: { color: colors.text, fontSize: 28, fontWeight: '900', textAlign: 'right', letterSpacing: -1 },
   kpiLabel: { color: colors.muted, fontSize: 12, fontWeight: '800', textAlign: 'right', marginTop: 4 },
-  kpiAccentBar: { position: 'absolute', bottom: 0, left: 24, right: 24, height: 3, borderRadius: 999 },
+  kpiAccentBar: { position: 'absolute', bottom: 0, left: 24, right: 24, height: 3, borderRadius: radii.pill },
 
   section: { marginTop: 26 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
@@ -99,7 +100,7 @@ const S = StyleSheet.create({
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 10,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.14)',
@@ -107,7 +108,7 @@ const S = StyleSheet.create({
   badgeText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
 
   devCard: {
-    borderRadius: 22,
+    borderRadius: radii.surface,
     padding: 6,
     backgroundColor: colors.elevated,
     borderWidth: 1,
@@ -128,15 +129,15 @@ const S = StyleSheet.create({
     backgroundColor: 'rgba(15,23,42,0.04)',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radii.compact,
     overflow: 'hidden',
   },
-  devBar: { width: 72, height: 5, borderRadius: 999, backgroundColor: colors.adminHeaderBarTrack, overflow: 'hidden' },
-  devBarFill: { height: '100%', borderRadius: 999 },
+  devBar: { width: 72, height: 5, borderRadius: radii.pill, backgroundColor: colors.adminHeaderBarTrack, overflow: 'hidden' },
+  devBarFill: { height: '100%', borderRadius: radii.pill },
   devDivider: { height: 1, backgroundColor: 'rgba(15,23,42,0.04)', marginHorizontal: 14 },
 
   wrkWrap: {
-    borderRadius: 22,
+    borderRadius: radii.surface,
     backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.06)',
@@ -146,38 +147,38 @@ const S = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  wrkCard: { width: 164, borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  wrkCard: { width: 164, borderRadius: radii.surface, borderWidth: 1, overflow: 'hidden' },
   wrkInner: { padding: 16, alignItems: 'center', gap: 10 },
-  wrkRing: { width: 66, height: 66, borderRadius: 33, borderWidth: 3, padding: 2, alignItems: 'center', justifyContent: 'center' },
+  wrkRing: { width: 66, height: 66, borderRadius: radii.pill, borderWidth: 3, padding: 2, alignItems: 'center', justifyContent: 'center' },
   wrkName: { color: colors.text, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   wrkPct: { fontSize: 34, fontWeight: '900', letterSpacing: -1.5 },
   wrkMeta: { color: colors.muted, fontSize: 11, fontWeight: '800', textAlign: 'center' },
   wrkChips: { flexDirection: 'row', gap: 6 },
-  wrkChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  wrkChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.compact },
   wrkChipText: { fontSize: 11, fontWeight: '900' },
   wrkBar: { height: 4, backgroundColor: 'rgba(15,23,42,0.03)' },
   wrkBarFill: { height: '100%' },
-  wrkTodayPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: 'rgba(15,23,42,0.04)' },
+  wrkTodayPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: 'rgba(15,23,42,0.04)' },
   wrkTodayText: { color: colors.muted, fontWeight: '900', fontSize: 10 },
 
   overlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.4)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.elevated,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: radii.sheet,
+    borderTopRightRadius: radii.sheet,
     maxHeight: '86%',
     ...Platform.select({
       ios: { shadowColor: '#0F172A', shadowOpacity: 0.16, shadowRadius: 32, shadowOffset: { width: 0, height: -8 } },
       android: { elevation: 14 },
     }),
   },
-  sheetHandle: { width: 42, height: 4, borderRadius: 999, backgroundColor: 'rgba(15,23,42,0.1)', alignSelf: 'center', marginTop: 12, marginBottom: 6 },
+  sheetHandle: { width: 42, height: 4, borderRadius: radii.pill, backgroundColor: 'rgba(15,23,42,0.1)', alignSelf: 'center', marginTop: 12, marginBottom: 6 },
   sheetBody: { padding: 22, paddingBottom: 36 },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 },
   closeBtn: {
     width: 38,
     height: 38,
-    borderRadius: 13,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(15,23,42,0.05)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -188,7 +189,7 @@ const S = StyleSheet.create({
   sheetStat: {
     flexBasis: '47%',
     flexGrow: 1,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.06)',
     backgroundColor: colors.bg,
@@ -197,15 +198,15 @@ const S = StyleSheet.create({
   sheetStatVal: { color: colors.text, fontSize: 26, fontWeight: '900', textAlign: 'right' },
   sheetStatLbl: { color: colors.muted, fontSize: 12, fontWeight: '800', textAlign: 'right', marginTop: 4 },
   sheetFull: {
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.06)',
     backgroundColor: colors.bg,
     padding: 16,
     marginTop: 10,
   },
-  sheetBar: { marginTop: 16, height: 10, borderRadius: 999, backgroundColor: 'rgba(15,23,42,0.06)', overflow: 'hidden' },
-  sheetBarFill: { height: '100%', borderRadius: 999 },
+  sheetBar: { marginTop: 16, height: 10, borderRadius: radii.pill, backgroundColor: 'rgba(15,23,42,0.06)', overflow: 'hidden' },
+  sheetBarFill: { height: '100%', borderRadius: radii.pill },
   noData: { color: colors.muted, fontSize: 14, fontWeight: '700', textAlign: 'right', padding: 20 },
 });
 
@@ -637,7 +638,7 @@ export function DashboardScreen() {
                   style={{
                     width: 58,
                     height: 58,
-                    borderRadius: 29,
+                    borderRadius: radii.pill,
                     borderWidth: 2,
                     borderColor: `${colors.primary}30`,
                     padding: 2,

@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -746,7 +747,7 @@ export function DailyScheduleScreen() {
               alignItems: 'center',
               gap: 8,
               backgroundColor: '#FFFFFF',
-              borderRadius: 12,
+              borderRadius: radii.surface,
               paddingHorizontal: 12,
               height: 44,
             }}
@@ -774,7 +775,7 @@ export function DailyScheduleScreen() {
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 14,
+                  borderRadius: radii.compact,
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: colors.adminHeader,
@@ -797,7 +798,7 @@ export function DailyScheduleScreen() {
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 14,
+                  borderRadius: radii.compact,
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: colors.adminHeader,
@@ -822,13 +823,13 @@ export function DailyScheduleScreen() {
               alignItems: 'center',
               gap: 6,
               backgroundColor: 'rgba(0,122,255,0.08)',
-              borderRadius: 10,
+              borderRadius: radii.compact,
               paddingHorizontal: 12,
               paddingVertical: 8,
               alignSelf: 'flex-end',
             }}
           >
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#007AFF' }} />
+            <View style={{ width: 6, height: 6, borderRadius: radii.pill, backgroundColor: '#007AFF' }} />
             <Text style={{ color: '#007AFF', fontWeight: '600', fontSize: 13 }}>
               {filteredItems.length} תוצאות
             </Text>
@@ -1117,7 +1118,7 @@ export function DailyScheduleScreen() {
             {/* ── Section: בחירת עובד ── */}
             <View style={st.editSection}>
               <View style={st.editSectionTitleRow}>
-                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 16, height: 16, borderRadius: radii.pill, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>W</Text>
                 </View>
                 <Text style={st.editSectionTitle}>עובד מבצע</Text>
@@ -1403,8 +1404,8 @@ export function DailyScheduleScreen() {
 
             {executeJob.status === 'completed' && (
               <View style={{ marginTop: 12, gap: 10 }}>
-                <Button title="סגור" variant="secondary" style={{ borderRadius: 14 }} onPress={closeExecuteModal} />
-                <Button title="החזר לממתין" variant="danger" style={{ borderRadius: 14 }} onPress={confirmRevertToPending} />
+                <Button title="סגור" variant="secondary" style={{ borderRadius: radii.surface }} onPress={closeExecuteModal} />
+                <Button title="החזר לממתין" variant="danger" style={{ borderRadius: radii.surface }} onPress={confirmRevertToPending} />
               </View>
             )}
           </ScrollView>
@@ -1507,7 +1508,7 @@ export function DailyScheduleScreen() {
             />
           )}
 
-          <Button title="סגור" variant="secondary" onPress={closePoints} style={{ borderRadius: 14, marginTop: 8 }} />
+          <Button title="סגור" variant="secondary" onPress={closePoints} style={{ borderRadius: radii.surface, marginTop: 8 }} />
         </View>
       </OriginWindow>
 
@@ -1541,7 +1542,7 @@ export function DailyScheduleScreen() {
                 style={{
                   width: 48,
                   height: 48,
-                  borderRadius: 14,
+                  borderRadius: radii.surface,
                   backgroundColor: 'rgba(255,59,48,0.12)',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1568,7 +1569,7 @@ export function DailyScheduleScreen() {
             <View
               style={{
                 backgroundColor: colors.elevated,
-                borderRadius: 16,
+                borderRadius: radii.surface,
                 borderWidth: 1,
                 borderColor: colors.border,
                 padding: 14,
@@ -1616,7 +1617,7 @@ export function DailyScheduleScreen() {
                   <View
                     style={{
                       paddingVertical: 14,
-                      borderRadius: 14,
+                      borderRadius: radii.surface,
                       backgroundColor: pressed ? 'rgba(255,59,48,0.92)' : '#FF3B30',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1635,7 +1636,7 @@ export function DailyScheduleScreen() {
                   <View
                     style={{
                       paddingVertical: 14,
-                      borderRadius: 14,
+                      borderRadius: radii.surface,
                       backgroundColor: pressed ? 'rgba(120,120,128,0.14)' : 'rgba(120,120,128,0.10)',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1659,7 +1660,7 @@ export function DailyScheduleScreen() {
               style={({ pressed }) => ({
                 paddingHorizontal: 14,
                 paddingVertical: 7,
-                borderRadius: 10,
+                borderRadius: radii.compact,
                 backgroundColor: pressed ? 'rgba(255,59,48,0.12)' : 'rgba(255,59,48,0.08)',
               })}
             >
@@ -1691,7 +1692,7 @@ export function DailyScheduleScreen() {
                         gap: 10,
                         paddingVertical: 12,
                         paddingHorizontal: 14,
-                        borderRadius: 12,
+                        borderRadius: radii.surface,
                         backgroundColor: selected ? 'rgba(0,122,255,0.12)' : ui.fill,
                         borderWidth: selected ? 1.5 : 0,
                         borderColor: selected ? '#007AFF' : 'transparent',
@@ -1701,7 +1702,7 @@ export function DailyScheduleScreen() {
                       {row.id ? (
                         <Avatar size={32} uri={row.avatarUrl} name={row.label} />
                       ) : (
-                        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(120,120,128,0.14)' }} />
+                        <View style={{ width: 32, height: 32, borderRadius: radii.pill, backgroundColor: 'rgba(120,120,128,0.14)' }} />
                       )}
                       <Text
                         style={{
@@ -1742,7 +1743,7 @@ export function DailyScheduleScreen() {
                   style={{
                     paddingHorizontal: 28,
                     paddingVertical: 12,
-                    borderRadius: 14,
+                    borderRadius: radii.surface,
                     backgroundColor: pressed ? 'rgba(0,122,255,0.85)' : '#007AFF',
                     shadowColor: '#007AFF',
                     shadowOpacity: 0.25,
@@ -1777,7 +1778,7 @@ const st = StyleSheet.create({
   // ── Calendar Card ──────────────────────────────────
   calCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: radii.surface,
     overflow: 'hidden',
     ...Platform.select({
       ios:     { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 16, shadowOffset: { width: 0, height: 2 } },
@@ -1795,7 +1796,7 @@ const st = StyleSheet.create({
   calNavBtn: {
     width: 34,
     height: 34,
-    borderRadius: 11,
+    borderRadius: radii.compact,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F2F2F7',
@@ -1815,7 +1816,7 @@ const st = StyleSheet.create({
   },
   todayPill: {
     backgroundColor: colors.primary,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
@@ -1853,12 +1854,12 @@ const st = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: radii.surface,
   },
   calDayBubble: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1892,7 +1893,7 @@ const st = StyleSheet.create({
   calDayDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
     opacity: 0,
   },
@@ -1936,7 +1937,7 @@ const st = StyleSheet.create({
   // ── Stats Card ─────────────────────────────────────
   statsCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: radii.surface,
     paddingVertical: 16,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -1953,7 +1954,7 @@ const st = StyleSheet.create({
   statDot: {
     width: 7,
     height: 7,
-    borderRadius: 3.5,
+    borderRadius: radii.pill,
     marginBottom: 2,
   },
   statNumber: {
@@ -1976,7 +1977,7 @@ const st = StyleSheet.create({
 
   // ── Task Card ──────────────────────────────────────
   taskWrap: {
-    borderRadius: 20,
+    borderRadius: radii.surface,
     ...Platform.select({
       ios:     { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 3 } },
       android: { elevation: 3 },
@@ -1984,7 +1985,7 @@ const st = StyleSheet.create({
   },
   taskInner: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.07)',
     overflow: 'hidden',
@@ -2021,7 +2022,7 @@ const st = StyleSheet.create({
   },
   taskTimePill: {
     backgroundColor: 'rgba(30,58,138,0.07)',
-    borderRadius: 20,
+    borderRadius: radii.pill,
     paddingHorizontal: 11,
     paddingVertical: 4,
     borderWidth: 1,
@@ -2058,7 +2059,7 @@ const st = StyleSheet.create({
     borderTopColor: '#F2F2F7',
   },
   kindChip: {
-    borderRadius: 20,
+    borderRadius: radii.pill,
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderWidth: 1,
@@ -2074,7 +2075,7 @@ const st = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 20,
+    borderRadius: radii.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
@@ -2084,7 +2085,7 @@ const st = StyleSheet.create({
   statusDot: {
     width: 5,
     height: 5,
-    borderRadius: 3,
+    borderRadius: radii.pill,
   },
   statusChipText: {
     fontSize: 10,
@@ -2094,7 +2095,7 @@ const st = StyleSheet.create({
   tcBtn: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: radii.compact,
     borderWidth: 1.5,
     borderColor: 'rgba(30,58,138,0.16)',
     backgroundColor: 'rgba(30,58,138,0.07)',
@@ -2115,7 +2116,7 @@ const st = StyleSheet.create({
   emptyIconWrap: {
     width: 64,
     height: 64,
-    borderRadius: 22,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2158,7 +2159,7 @@ const st = StyleSheet.create({
   },
   jbExecOrderBadge: {
     backgroundColor: 'rgba(120,120,128,0.08)',
-    borderRadius: 8,
+    borderRadius: radii.compact,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
@@ -2172,7 +2173,7 @@ const st = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(255,149,0,0.12)',
-    borderRadius: 8,
+    borderRadius: radii.compact,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
@@ -2182,7 +2183,7 @@ const st = StyleSheet.create({
   jbExecStatusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radii.pill,
   },
   jbExecStatusText: {
     fontWeight: '600',
@@ -2191,7 +2192,7 @@ const st = StyleSheet.create({
   jbExecKindBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: radii.compact,
   },
   jbExecKindRegular: {
     backgroundColor: 'rgba(0,122,255,0.10)',
@@ -2209,7 +2210,7 @@ const st = StyleSheet.create({
   jbExecCloseBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(120,120,128,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2226,7 +2227,7 @@ const st = StyleSheet.create({
   },
   jbExecSummaryCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(60,60,67,0.06)',
     padding: 16,
@@ -2289,7 +2290,7 @@ const st = StyleSheet.create({
   jbExecEmptyPointsIcon: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(120,120,128,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2310,7 +2311,7 @@ const st = StyleSheet.create({
   },
   jbExecPointCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(60,60,67,0.06)',
     overflow: 'hidden',
@@ -2347,7 +2348,7 @@ const st = StyleSheet.create({
   jbExecPointDoneDot: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(52,199,89,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2364,7 +2365,7 @@ const st = StyleSheet.create({
   jbExecPointImage: {
     width: '100%',
     height: 180,
-    borderRadius: 12,
+    borderRadius: radii.surface,
     backgroundColor: 'rgba(120,120,128,0.08)',
   },
   jbExecPointRemoveBtn: {
@@ -2373,7 +2374,7 @@ const st = StyleSheet.create({
     left: 8,
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(17,24,39,0.78)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2388,7 +2389,7 @@ const st = StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 12,
     height: 100,
-    borderRadius: 12,
+    borderRadius: radii.surface,
     backgroundColor: 'rgba(120,120,128,0.04)',
     borderWidth: 1.5,
     borderColor: 'rgba(120,120,128,0.08)',
@@ -2414,7 +2415,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     backgroundColor: 'rgba(120,120,128,0.08)',
-    borderRadius: 12,
+    borderRadius: radii.surface,
     paddingVertical: 11,
   },
   jbExecPickBtnText: {
@@ -2428,7 +2429,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     backgroundColor: 'rgba(0,122,255,0.10)',
-    borderRadius: 12,
+    borderRadius: radii.surface,
     paddingVertical: 11,
   },
   jbExecUploadBtnText: {
@@ -2442,13 +2443,13 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: 'rgba(52,199,89,0.10)',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     paddingVertical: 16,
   },
   jbExecDoneIcon: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     backgroundColor: '#34C759',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2469,7 +2470,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#007AFF',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     paddingVertical: 16,
     ...Platform.select({
       ios:     { shadowColor: '#007AFF', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
@@ -2512,7 +2513,7 @@ const st = StyleSheet.create({
   editHdrKindDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
+    borderRadius: radii.pill,
   },
   editHdrTitle: {
     fontSize: 22,
@@ -2531,7 +2532,7 @@ const st = StyleSheet.create({
   editInfoStrip: {
     flexDirection: 'row-reverse',
     backgroundColor: '#F8FAFF',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(0,122,255,0.10)',
     paddingVertical: 14,
@@ -2570,7 +2571,7 @@ const st = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 8,
+    borderRadius: radii.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
@@ -2583,7 +2584,7 @@ const st = StyleSheet.create({
   editStatusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radii.pill,
   },
   editStatusText: {
     fontSize: 12,
@@ -2594,7 +2595,7 @@ const st = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(0,122,255,0.08)',
-    borderRadius: 8,
+    borderRadius: radii.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
@@ -2628,7 +2629,7 @@ const st = StyleSheet.create({
   editTimeBtn: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radii.surface,
     backgroundColor: '#F2F2F7',
     borderWidth: 1,
     borderColor: 'rgba(60,60,67,0.06)',
@@ -2662,7 +2663,7 @@ const st = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: 'rgba(60,60,67,0.08)',
@@ -2697,7 +2698,7 @@ const st = StyleSheet.create({
     left: -5,
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radii.pill,
     backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2715,7 +2716,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#007AFF',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     paddingVertical: 17,
     ...Platform.select({
       ios:     { shadowColor: '#007AFF', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
@@ -2732,7 +2733,7 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(120,120,128,0.10)',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     paddingVertical: 17,
   },
   editCancelBtnText: {
@@ -2743,7 +2744,7 @@ const st = StyleSheet.create({
 
   editKindDetailCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(60,60,67,0.08)',
     padding: 14,

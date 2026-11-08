@@ -31,6 +31,7 @@ type ProductDescriptionProps = {
   emptyMessage?: string;
   textStyle?: TextStyle;
   toggleColor?: string;
+  bulletColor?: string;
   /** צבע הרקע שאליו הגרדיאנט נמוג — צריך להתאים לרקע העמוד */
   fadeColor?: string;
 };
@@ -38,9 +39,11 @@ type ProductDescriptionProps = {
 function DescriptionBlocks({
   blocks,
   textStyle,
+  bulletColor,
 }: {
   blocks: ProductDescriptionBlock[];
   textStyle: TextStyle;
+  bulletColor: string;
 }) {
   return (
     <View style={{ gap: 12 }}>
@@ -53,7 +56,7 @@ function DescriptionBlocks({
                   key={`bullet-${index}-${itemIndex}`}
                   style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 }}
                 >
-                  <Text style={{ color: '#C18D39', fontSize: 16, lineHeight: 24, fontWeight: '800' }}>•</Text>
+                  <Text style={{ color: bulletColor, fontSize: 16, lineHeight: 24, fontWeight: '600' }}>•</Text>
                   <Text style={{ flex: 1, ...textStyle }}>{item}</Text>
                 </View>
               ))}
@@ -77,6 +80,7 @@ export function ProductDescription({
   emptyMessage,
   textStyle,
   toggleColor = '#0F172A',
+  bulletColor = '#8A8D91',
   fadeColor = '#FFFFFF',
 }: ProductDescriptionProps) {
   const blocks = useMemo(
@@ -101,7 +105,7 @@ export function ProductDescription({
   };
 
   const showFade = canCollapse && !expanded;
-  const fadeColors = useMemo(
+  const fadeColors = useMemo<[string, string, string, string]>(
     () => [withAlpha(fadeColor, 0), withAlpha(fadeColor, 0.55), withAlpha(fadeColor, 0.92), fadeColor],
     [fadeColor],
   );
@@ -109,7 +113,7 @@ export function ProductDescription({
   return (
     <View>
       <View style={styles.contentWrap}>
-        <DescriptionBlocks blocks={visibleBlocks} textStyle={mergedTextStyle} />
+        <DescriptionBlocks blocks={visibleBlocks} textStyle={mergedTextStyle} bulletColor={bulletColor} />
 
         {showFade ? (
           <LinearGradient
@@ -137,7 +141,7 @@ export function ProductDescription({
             style={{
               color: toggleColor,
               fontSize: 14,
-              fontWeight: '800',
+              fontWeight: '600',
               lineHeight: 20,
               textAlign: 'right',
               writingDirection: 'rtl',

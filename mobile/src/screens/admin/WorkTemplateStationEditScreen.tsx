@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -176,7 +177,7 @@ const ms = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radii.pill,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -190,7 +191,7 @@ const ms = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: colors.elevated,
-    borderRadius: 14,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 14,
@@ -209,7 +210,7 @@ const ms = StyleSheet.create({
   clearQueryBtn: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
@@ -223,7 +224,7 @@ const ms = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     backgroundColor: '#FEF2F2',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: '#FECACA',
   },
@@ -245,7 +246,7 @@ const ms = StyleSheet.create({
     backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
@@ -270,7 +271,7 @@ const ms = StyleSheet.create({
   checkCircle: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     backgroundColor: colors.bg,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -285,7 +286,7 @@ const ms = StyleSheet.create({
   emptyIcon: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: radii.pill,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -558,7 +559,7 @@ const s = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.elevated,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
@@ -574,7 +575,7 @@ const s = StyleSheet.create({
   personAvatar: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(37,99,235,0.08)',
     borderWidth: 1.5,
     borderColor: 'rgba(37,99,235,0.15)',
@@ -606,7 +607,7 @@ const s = StyleSheet.create({
   selectedDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
   },
   selectedDotWorker: {
@@ -626,7 +627,7 @@ const s = StyleSheet.create({
   timeIconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.16)',
@@ -649,7 +650,7 @@ const s = StyleSheet.create({
   },
   errorBanner: {
     backgroundColor: '#FEF2F2',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: '#FECACA',
     paddingHorizontal: 16,
@@ -669,7 +670,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: 9,
     backgroundColor: colors.primary,
-    borderRadius: 18,
+    borderRadius: radii.surface,
     paddingVertical: 16,
     elevation: 4,
   },
@@ -685,7 +686,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: colors.elevated,
-    borderRadius: 18,
+    borderRadius: radii.surface,
     paddingVertical: 15,
     borderWidth: 1.5,
     borderColor: '#FECACA',

@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking } from 'react-native';
+import { AppState } from 'react-native';
 import Toast from '../components/toast/Toast';
 import {
   cancelOcdPlus,
   createOcdPlusPayment,
   getOcdPlusStatus,
   OcdPlusNotConfiguredError,
+  OcdPlusCancellationPendingError,
   type OcdPlusStatus,
   type OcdPlusSubscription,
 } from '../lib/ocdPlus';
 import { useAuth } from './AuthContext';
+import { isLocalDemoUser } from '../lib/localDemoAccount';
+import { navigationRef, safeNavigate } from '../navigation/navigationRef';
 
 type MembershipState = {
   status: OcdPlusStatus;
@@ -41,7 +44,7 @@ export function useOcdPlusMembership(): MembershipState {
   const [busy, setBusy] = useState(false);
   const aliveRef = useRef(true);
 
-  const canQuery = !!(user?.id && user.role === 'customer');
+  const canQuery = !!(user?.id && user.role === 'customer' && !isLocalDemoUser(user.id));
 
   const syncSubscriberFlag = useCallback(
     async (nextStatus: OcdPlusStatus) => {
@@ -54,6 +57,12 @@ export function useOcdPlusMembership(): MembershipState {
   );
 
   const refresh = useCallback(async () => {
+    if (isLocalDemoUser(user?.id)) {
+      setStatus('none');
+      setSubscription(null);
+      setLoading(false);
+      return;
+    }
     if (!canQuery || !user?.id) return;
     setLoading(true);
     try {
@@ -98,7 +107,23 @@ export function useOcdPlusMembership(): MembershipState {
     return () => sub.remove();
   }, [refresh]);
 
+  // In-app checkout does not background the app. Refresh the still-mounted
+  // membership consumers when it closes, including Android's back button.
+  useEffect(() => {
+    const checkoutIsOpen = () => navigationRef.isReady() && navigationRef.getCurrentRoute()?.name === 'OcdPlusCheckout';
+    let wasCheckout = checkoutIsOpen();
+    return navigationRef.addListener('state', () => {
+      const isCheckout = checkoutIsOpen();
+      if (wasCheckout && !isCheckout) void refresh();
+      wasCheckout = isCheckout;
+    });
+  }, [refresh]);
+
   const startPurchase = useCallback(async () => {
+    if (isLocalDemoUser(user?.id)) {
+      safeNavigate('OcdPlusPaymentSignIn');
+      return;
+    }
     if (!user?.id || user.role !== 'customer') {
       Toast.show({ type: 'info', text1: 'צריך להתחבר כדי להצטרף ל-OCD+' });
       return;
@@ -106,15 +131,7 @@ export function useOcdPlusMembership(): MembershipState {
     setBusy(true);
     try {
       const { paymentUrl } = await createOcdPlusPayment();
-      const supported = await Linking.canOpenURL(paymentUrl);
-      if (!supported) {
-        Toast.show({ type: 'error', text1: 'לא ניתן לפתוח את עמוד התשלום' });
-        return;
-      }
-      await Linking.openURL(paymentUrl);
-      // Do not assume success — refresh from server shortly after.
-      setStatus('pending');
-      setTimeout(() => void refresh(), 4000);
+      safeNavigate('OcdPlusCheckout', { paymentUrl });
     } catch (e) {
       if (e instanceof OcdPlusNotConfiguredError) {
         Toast.show({
@@ -128,7 +145,7 @@ export function useOcdPlusMembership(): MembershipState {
     } finally {
       if (aliveRef.current) setBusy(false);
     }
-  }, [refresh, user?.id, user?.phone, user?.role]);
+  }, [user?.id, user?.role]);
 
   const cancel = useCallback(async () => {
     if (!user?.id) return;
@@ -142,7 +159,12 @@ export function useOcdPlusMembership(): MembershipState {
         Toast.show({ type: 'success', text1: 'המנוי בוטל' });
       }
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'ביטול המנוי נכשל', text2: (e as Error)?.message });
+      if (e instanceof OcdPlusCancellationPendingError) {
+        await refresh();
+        Toast.show({ type: 'info', text1: 'בקשת הביטול ממתינה לאישור', text2: e.message });
+      } else {
+        Toast.show({ type: 'error', text1: 'ביטול המנוי נכשל', text2: (e as Error)?.message });
+      }
     } finally {
       if (aliveRef.current) setBusy(false);
     }

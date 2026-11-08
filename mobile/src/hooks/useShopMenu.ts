@@ -4,7 +4,7 @@ import type { NavLink } from '../lib/collections';
 const NAV_URL = 'https://www.ocd-online.co.il/api/public/nav';
 
 /** Bump version when server nav structure changes to bust React Query cache. */
-export const SHOP_MENU_QUERY_KEY = ['remote-nav', 'v2'] as const;
+export const SHOP_MENU_QUERY_KEY = ['remote-nav', 'v3'] as const;
 
 export function useShopMenu(): { data: NavLink[]; loading: boolean } {
   const query = useQuery({

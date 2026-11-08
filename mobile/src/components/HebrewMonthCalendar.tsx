@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
@@ -182,10 +183,10 @@ export function HebrewMonthCalendar({ selected, onSelect, horizonDays = 180 }: H
           fontWeight: '700',
         },
         selected: {
-          borderRadius: 20,
+          borderRadius: radii.surface,
         },
         today: {
-          borderRadius: 20,
+          borderRadius: radii.surface,
         },
       },
     }),
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   shell: {
     alignSelf: 'stretch',
     width: '100%',
-    borderRadius: 20,
+    borderRadius: radii.surface,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,

@@ -1,0 +1,15 @@
+{
+  "tool": "built-in image_gen",
+  "prompt": "Create a premium ecommerce product photograph asset for an Israeli cleaning store mobile app. Reference 1 is the exact VITRO PLUS 750ml white trigger spray bottle to preserve. Reference 2 shows the correct quantity: EXACTLY THREE bottles. Arrange exactly three identical bottles in a compact triangular studio composition: one slightly forward in the center, two just behind left and right, all three clearly countable, full bottles and trigger heads visible. Subtle dimensional perspective and natural very soft contact shadows, polished real product photography, crisp white plastic, faithful blue/green VITRO PLUS / AQUAGEN / SUCITESA labels matching reference. Preserve bottle proportions and label identity. A tasteful minimal promotional composition, no pedestal, no splashes, no stars, no extra props, no additional text, no price text, no logo outside the original packaging. Transparent background, smooth transparent fade of contact shadows, compact nearly square framing with 6 percent breathing room. Intended to occupy the left half of a mobile promotional banner with live text on the right. Output only the product trio asset.",
+  "asset": "../assets/vitro-trio-promo.png",
+  "original": "C:/Users/user/.codex/generated_images/01a1b559-5334-7771-8d90-1c6adb507db8/exec-3ef29a1f-3471-4f94-bb0b-83b99d097431.png",
+  "offer": {
+    "handle": "מארז-3-ויטרו-750-מל-רק-ב-99-שח",
+    "price": 99,
+    "currency": "ILS",
+    "quantity": 3,
+    "sizeMl": 750,
+    "verified": "2026-11-07"
+  },
+  "processing": "Downsampled to 720x720 PNG preserving alpha; original retained."
+}

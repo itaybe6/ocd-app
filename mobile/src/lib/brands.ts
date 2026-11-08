@@ -107,32 +107,43 @@ export function findProductBrand(
   },
   brands: RemoteBrand[],
 ): RemoteBrand | undefined {
-  if (!brands.length) return undefined;
+  return createProductBrandResolver(brands)(product);
+}
 
-  const productKeys = collectProductBrandKeys(product);
-  if (!productKeys.length) return undefined;
+/** Normalize brand tokens once for a whole catalog instead of once per product. */
+export function createProductBrandResolver(brands: RemoteBrand[]) {
+  const entries = brands.map(brand => ({
+    brand,
+    matchers: brandTagMatchers(brand).map(value => ({ value, compact: value.replace(/\s+/g, '') })),
+  }));
+  return (product: { tags?: string[]; collectionHandles?: string[]; collectionTitles?: string[] }): RemoteBrand | undefined => {
+    if (!entries.length) return undefined;
 
-  let best: { brand: RemoteBrand; score: number } | null = null;
+    const productKeys = collectProductBrandKeys(product);
+    if (!productKeys.length) return undefined;
 
-  for (const brand of brands) {
-    const matchers = brandTagMatchers(brand);
-    if (!matchers.length) continue;
+    let best: { brand: RemoteBrand; score: number } | null = null;
 
-    for (const key of productKeys) {
-      for (const matcher of matchers) {
-        const exact = key === matcher;
-        const compact =
-          matcher.length >= 3 &&
-          (key.replace(/\s+/g, '') === matcher.replace(/\s+/g, '') ||
-            key.includes(matcher) ||
-            matcher.includes(key));
-        if (!exact && !compact) continue;
+    for (const { brand, matchers } of entries) {
+      if (!matchers.length) continue;
 
-        const score = exact ? matcher.length + 100 : matcher.length;
-        if (!best || score > best.score) best = { brand, score };
+      for (const key of productKeys) {
+        const compactKey = key.replace(/\s+/g, '');
+        for (const { value: matcher, compact: compactMatcher } of matchers) {
+          const exact = key === matcher;
+          const compact =
+            matcher.length >= 3 &&
+            (compactKey === compactMatcher ||
+              key.includes(matcher) ||
+              matcher.includes(key));
+          if (!exact && !compact) continue;
+
+          const score = exact ? matcher.length + 100 : matcher.length;
+          if (!best || score > best.score) best = { brand, score };
+        }
       }
     }
-  }
 
-  return best?.brand;
+    return best?.brand;
+  };
 }

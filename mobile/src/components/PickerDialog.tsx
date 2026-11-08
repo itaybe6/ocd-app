@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { ModalDialog } from './ModalDialog';
@@ -47,7 +48,7 @@ export function PickerDialog({
         backgroundColor: selected ? '#EAF2FF' : colors.elevated,
         borderColor: selected ? '#93C5FD' : colors.border,
         borderWidth: 1,
-        borderRadius: 14,
+        borderRadius: radii.surface,
         paddingVertical: 12,
         paddingHorizontal: 12,
       }}

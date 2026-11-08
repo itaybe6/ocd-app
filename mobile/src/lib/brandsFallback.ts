@@ -64,6 +64,24 @@ const LOCAL_BRAND_META: Record<
     keywords: ['כביסכל', 'פרפיום'],
   },
   ocd: { short: 'OCD', tone: '#111827', tags: ['ocd'], keywords: ['ocd'] },
+  'cereria-molla': {
+    short: 'CM',
+    tone: '#ffffff',
+    tags: ['molla', 'cereria'],
+    keywords: ['cereria molla', 'cereria mollá', 'molla'],
+  },
+  'be-fresh': {
+    short: 'BF',
+    tone: '#ffffff',
+    tags: ['be fresh', 'befresh'],
+    keywords: ['be fresh', 'befresh', 'בי פרש'],
+  },
+  'spring-collection': {
+    short: 'SP',
+    tone: '#ffffff',
+    tags: ['spring', 'ספרינג'],
+    keywords: ['spring', 'ספרינג'],
+  },
   // Website includes these as hiddenFromCarousel brands — not always in /api/public/brands
   voluspa: {
     short: 'Vo',

@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, {
@@ -114,7 +115,7 @@ export function OriginWindow({
     top: interpolate(progress.value, [0, 1], [svTop.value, endTop]),
     width: interpolate(progress.value, [0, 1], [svW.value, openedWidth]),
     height: interpolate(progress.value, [0, 1], [svH.value, openedHeight]),
-    borderRadius: interpolate(progress.value, [0, 1], [svR.value, 20]),
+    borderRadius: interpolate(progress.value, [0, 1], [svR.value, radii.sheet]),
   }));
 
   const contentStyle = useAnimatedStyle(() => ({
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   closeBtn: {
-    borderRadius: 16,
+    borderRadius: radii.surface,
   },
   closeBtnPressed: {
     opacity: 0.88,
@@ -204,7 +205,7 @@ const styles = StyleSheet.create({
   closeBtnInner: {
     width: 48,
     height: 48,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(15,23,42,0.07)',

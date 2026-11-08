@@ -18,7 +18,13 @@ import { StoreFavoritesScreen } from '../screens/store/StoreFavoritesScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ProductScreen } from '../screens/store/ProductScreen';
+import { BottomSheetScreen } from '../components/BottomSheetScreen';
+import { PAGE_TRANSITION } from '../theme/sheetMotion';
+import { useReducedMotion } from 'react-native-reanimated';
 import { StoreOcdPlusScreen } from '../screens/store/StoreOcdPlusScreen';
+import { OcdPlusPaymentSignInScreen } from '../screens/customer/OcdPlusPaymentSignInScreen';
+import { OcdPlusCheckoutScreen } from '../screens/customer/OcdPlusCheckoutScreen';
+import { isLocalDemoUser } from '../lib/localDemoAccount';
 import { OcdPlusMark } from '../components/OcdPlusMark';
 import { OcdPlusSubscribeSheetProvider, triggerOcdPlusSubscribeSheet } from '../context/OcdPlusSubscribeSheetContext';
 import { placeCustomerOrder } from '../lib/orders';
@@ -261,6 +267,8 @@ function StoreProductRoute({
 }
 
 function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamList, 'StoreCart'>) {
+  const sheetOpened = useRef(false);
+  const { user } = useAuth();
   const { isActiveMember } = useOcdPlusMembership();
   const { cartId, itemCount, isMutating, setCartSnapshot } = useCart();
   const itemCountRef = useRef(itemCount);
@@ -276,15 +284,15 @@ function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamLis
 
   const syncMemberDiscount = useCallback(() => {
     if (!isActiveMember || !cartId || itemCountRef.current === 0 || isMutatingRef.current) return;
-    void prepareMemberCart({ cartId }).then((cart) => {
+    void prepareMemberCart({ cartId, phone: user?.phone, email: user?.email }).then((cart) => {
       if (cart) void setCartSnapshot(cart);
     });
-  }, [cartId, isActiveMember, setCartSnapshot]);
+  }, [cartId, isActiveMember, setCartSnapshot, user?.email, user?.phone]);
 
   // Apply member discount once when opening the cart — not on every quantity change.
   useFocusEffect(
     useCallback(() => {
-      syncMemberDiscount();
+      if (sheetOpened.current) syncMemberDiscount();
     }, [syncMemberDiscount]),
   );
 
@@ -295,14 +303,22 @@ function StoreCartRoute({ navigation }: NativeStackScreenProps<RootStackParamLis
         url = await applyOcdPlusMemberCheckout({
           cartId,
           fallbackCheckoutUrl: checkoutUrl,
+          phone: user?.phone,
+          email: user?.email,
         });
       }
-      navigation.navigate('StoreCheckout', { checkoutUrl: url });
+      // Replace removes the native modal route. BottomSheetScreen intercepts
+      // this removal, closes the cart, then dispatches the same action once.
+      navigation.replace('StoreCheckout', { checkoutUrl: url });
     },
-    [cartId, isActiveMember, navigation],
+    [cartId, isActiveMember, navigation, user?.email, user?.phone],
   );
 
-  return <StoreCartScreen onBack={() => navigation.goBack()} onOpenCheckout={handleOpenCheckout} />;
+  return (
+    <BottomSheetScreen navigation={navigation} compactHeader heightRatio={0.82} onOpened={() => { sheetOpened.current = true; syncMemberDiscount(); }}>
+      <StoreCartScreen onBack={() => navigation.goBack()} onOpenCheckout={handleOpenCheckout} />
+    </BottomSheetScreen>
+  );
 }
 
 function StoreCheckoutRoute({
@@ -315,7 +331,7 @@ function StoreCheckoutRoute({
   return (
     <CheckoutScreen
       checkoutUrl={route.params.checkoutUrl}
-      onBack={() => navigation.goBack()}
+      onBack={() => navigation.replace('StoreCart')}
       onCheckoutComplete={async (info) => {
         let appOrderNumber = info?.orderNumber;
 
@@ -342,12 +358,29 @@ function StoreCheckoutRoute({
   );
 }
 
+function ProductSheetRoute(props: NativeStackScreenProps<RootStackParamList, 'Product'>) {
+  return (
+    <BottomSheetScreen navigation={props.navigation} compactHeader heightRatio={0.86}>
+      <ProductScreen {...props} />
+    </BottomSheetScreen>
+  );
+}
+
 function OrderSuccessRoute(props: NativeStackScreenProps<RootStackParamList, 'OrderSuccess'>) {
   return <OrderSuccessScreen {...props} />;
 }
 
+const bottomSheetOptions = {
+  headerShown: false,
+  presentation: 'transparentModal' as const,
+  animation: 'none' as const,
+  gestureEnabled: false,
+  contentStyle: { backgroundColor: 'transparent' },
+};
+
 export function RootNavigator() {
   const { user, isBootstrapping } = useAuth();
+  const reducedMotion = useReducedMotion();
 
   const navTheme = useMemo<Theme>(
     () => ({
@@ -381,15 +414,28 @@ export function RootNavigator() {
       onReady={() => flushPendingNavigation()}
     >
       <OcdPlusSubscribeSheetProvider>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, ...PAGE_TRANSITION, ...(reducedMotion ? { animation: 'none' as const } : {}) }}>
         <Stack.Screen name="Main" component={MainEntryScreen} />
+        {user?.role === 'customer' && !isLocalDemoUser(user.id) && (
+          <Stack.Screen
+            name="OcdPlusCheckout"
+            component={OcdPlusCheckoutScreen}
+            options={{ presentation: 'card', contentStyle: { backgroundColor: '#FFFFFF' } }}
+          />
+        )}
+        {isLocalDemoUser(user?.id) && (
+          <Stack.Screen
+            name="OcdPlusPaymentSignIn"
+            component={OcdPlusPaymentSignInScreen}
+            options={{ presentation: 'card', contentStyle: { backgroundColor: '#FFFFFF' } }}
+          />
+        )}
         {!user && (
           <>
             <Stack.Screen
               name="Login"
               component={LoginRoute}
               options={{
-                animation: 'none',
                 contentStyle: { backgroundColor: colors.bg },
               }}
             />
@@ -397,7 +443,6 @@ export function RootNavigator() {
               name="Register"
               component={RegisterRoute}
               options={{
-                animation: 'none',
                 contentStyle: { backgroundColor: colors.bg },
               }}
             />
@@ -409,20 +454,13 @@ export function RootNavigator() {
           options={{ contentStyle: { backgroundColor: '#FFFFFF' } }}
         />
         <Stack.Screen name="StoreProduct" component={StoreProductRoute} />
-        <Stack.Screen
-          name="StoreCart"
-          component={StoreCartRoute}
-          options={{
-            contentStyle: { backgroundColor: '#FFFFFF' },
-            scrollEdgeEffects: { top: 'hidden' },
-          }}
-        />
+        <Stack.Screen name="StoreCart" component={StoreCartRoute} options={bottomSheetOptions} />
         <Stack.Screen
           name="StoreCheckout"
           component={StoreCheckoutRoute}
           options={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.bg },
+            presentation: 'card',
+            contentStyle: { backgroundColor: '#FFFFFF' },
           }}
         />
         <Stack.Screen
@@ -454,7 +492,6 @@ export function RootNavigator() {
           component={StoreFavoritesRoute}
           options={{
             headerShown: false,
-            animation: 'none',
             contentStyle: { backgroundColor: colors.bg },
           }}
         />
@@ -463,18 +500,10 @@ export function RootNavigator() {
           component={StoreSearchRoute}
           options={{
             headerShown: false,
-            animation: 'none',
             contentStyle: { backgroundColor: colors.bg },
           }}
         />
-        <Stack.Screen
-          name="Product"
-          component={ProductScreen}
-          options={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.bg },
-          }}
-        />
+        <Stack.Screen name="Product" component={ProductSheetRoute} options={bottomSheetOptions} />
       </Stack.Navigator>
       </OcdPlusSubscribeSheetProvider>
     </NavigationContainer>

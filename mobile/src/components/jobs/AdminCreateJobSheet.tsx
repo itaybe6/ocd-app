@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Toast from '../toast/Toast';
@@ -392,7 +393,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                 style={{
                   width: 40,
                   height: 40,
-                  borderRadius: 12,
+                  borderRadius: radii.compact,
                   backgroundColor: pressed ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.05)',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -437,7 +438,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                       backgroundColor: colors.elevated,
                       borderColor: colors.border,
                       borderWidth: 1,
-                      borderRadius: 14,
+                      borderRadius: radii.surface,
                       paddingHorizontal: 14,
                       paddingVertical: 12,
                       flexDirection: 'row',
@@ -486,7 +487,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                     style={{
                       flexDirection: 'row-reverse',
                       backgroundColor: colors.elevated,
-                      borderRadius: 14,
+                      borderRadius: radii.surface,
                       padding: 4,
                       borderWidth: 1,
                       borderColor: colors.border,
@@ -505,7 +506,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                       {({ pressed }) => (
                         <View
                           style={{
-                            borderRadius: 11,
+                            borderRadius: radii.compact,
                             paddingVertical: 11,
                             paddingHorizontal: 8,
                             backgroundColor: !createSpecialLinkCustomer ? colors.card : 'transparent',
@@ -536,7 +537,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                       {({ pressed }) => (
                         <View
                           style={{
-                            borderRadius: 11,
+                            borderRadius: radii.compact,
                             paddingVertical: 11,
                             paddingHorizontal: 8,
                             backgroundColor: createSpecialLinkCustomer ? colors.card : 'transparent',
@@ -575,7 +576,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                       style={{
                         flexDirection: 'row-reverse',
                         backgroundColor: colors.elevated,
-                        borderRadius: 14,
+                        borderRadius: radii.surface,
                         padding: 4,
                         borderWidth: 1,
                         borderColor: colors.border,
@@ -586,7 +587,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                         {({ pressed }) => (
                           <View
                             style={{
-                              borderRadius: 11,
+                              borderRadius: radii.compact,
                               paddingVertical: 11,
                               paddingHorizontal: 8,
                               backgroundColor: !createUseOneTimeCustomer ? colors.card : 'transparent',
@@ -617,7 +618,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                         {({ pressed }) => (
                           <View
                             style={{
-                              borderRadius: 11,
+                              borderRadius: radii.compact,
                               paddingVertical: 11,
                               paddingHorizontal: 8,
                               backgroundColor: createUseOneTimeCustomer ? colors.card : 'transparent',
@@ -762,7 +763,7 @@ export function AdminCreateJobSheet({ visible, onClose, onCreated, initialDateYm
                         disabled={createInstallationDevices.length <= 1}
                         style={{
                           backgroundColor: createInstallationDevices.length <= 1 ? colors.border : colors.danger,
-                          borderRadius: 14,
+                          borderRadius: radii.surface,
                           paddingHorizontal: 12,
                           paddingVertical: 12,
                         }}

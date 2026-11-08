@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import Toast from '../../components/toast/Toast';
@@ -156,7 +157,7 @@ export function CustomerServicesScreen() {
                 renderItem={({ item }) => (
                   <View style={{ flex: 1 }}>
                     <Card style={{ padding: 10 }}>
-                      <Image source={{ uri: item }} style={{ width: '100%', height: 140, borderRadius: 12 }} resizeMode="cover" />
+                      <Image source={{ uri: item }} style={{ width: '100%', height: 140, borderRadius: radii.surface }} resizeMode="cover" />
                     </Card>
                   </View>
                 )}

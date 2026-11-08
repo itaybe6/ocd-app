@@ -1,0 +1,8 @@
+[mcp_servers.stitch]
+url = "https://stitch.googleapis.com/mcp"
+
+[mcp_servers.stitch.http_headers]
+X-Goog-Api-Key = "AQ.Ab8RN6Jmk7svV8moCcpZ4KgcRtvcSMTzj7vc7p8ZUHxyic8pIw"
+
+[mcp_servers.supabase]
+url = "https://mcp.supabase.com/mcp?project_ref=wlzreoiumzmfbskzuywj"

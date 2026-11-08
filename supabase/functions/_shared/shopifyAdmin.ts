@@ -26,7 +26,7 @@ const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 function getDomain(): string {
   const domain = (Deno.env.get('SHOPIFY_STORE_DOMAIN') ?? '').trim();
-  if (!domain) throw new Error('Shopify Admin not configured: missing SHOPIFY_STORE_DOMAIN.');
+  if (!/^[a-zA-Z0-9-]+\.myshopify\.com$/.test(domain)) throw new Error('Invalid Shopify store domain.');
   return domain;
 }
 
@@ -59,6 +59,7 @@ async function requestFreshToken(): Promise<TokenCache> {
   const { clientId, clientSecret } = getCredentials();
 
   const res = await fetch(tokenEndpoint(), {
+    signal: AbortSignal.timeout(15_000), redirect: 'error',
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
@@ -125,7 +126,7 @@ export function getShopifyAdminTokenInfo(): {
 }
 
 // ── GraphQL request with single 401 retry ──────────────────────────────────
-async function adminRequest<T>(
+export async function adminRequest<T>(
   query: string,
   variables?: Record<string, unknown>,
   isRetry = false,
@@ -133,6 +134,7 @@ async function adminRequest<T>(
   const token = await getShopifyAdminAccessToken();
 
   const res = await fetch(graphqlEndpoint(), {
+    signal: AbortSignal.timeout(15_000), redirect: 'error',
     method: 'POST',
     headers: {
       'content-type': 'application/json',

@@ -73,7 +73,7 @@ export async function verifyAppSession(token: string): Promise<AppSessionClaims 
   const key = await hmacKey();
   let valid = false;
   try {
-    valid = await crypto.subtle.verify('HMAC', key, bytesFromB64url(signature), new TextEncoder().encode(signingInput));
+    valid = await crypto.subtle.verify('HMAC', key, new Uint8Array(bytesFromB64url(signature)), new TextEncoder().encode(signingInput));
   } catch {
     return null;
   }

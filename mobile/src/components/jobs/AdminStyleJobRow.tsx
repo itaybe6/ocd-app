@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useRef } from 'react';
 import { Platform, Pressable, Text, View, type ViewStyle } from 'react-native';
 import { Avatar } from '../ui/Avatar';
@@ -7,7 +8,7 @@ export type AdminStyleJobRowKind = 'regular' | 'installation' | 'special';
 
 /** Chips + action buttons — same tokens as admin Jobs list */
 export const JOB_ROW_CHIP: ViewStyle = {
-  borderRadius: 20,
+  borderRadius: radii.surface,
   paddingHorizontal: 8,
   paddingVertical: 3,
   borderWidth: 1,
@@ -24,7 +25,7 @@ export const JOB_ROW_CHIP_TEXT = {
 export const JOB_ROW_ACTION_BTN: ViewStyle = {
   width: 36,
   height: 36,
-  borderRadius: 11,
+  borderRadius: radii.compact,
   borderWidth: 1.5,
   borderColor: 'rgba(30,58,138,0.16)',
   backgroundColor: 'rgba(30,58,138,0.07)',
@@ -80,7 +81,7 @@ export function AdminStyleJobRow({
   const handlePressIn = onPressInCapture ? () => capture() : undefined;
 
   const shadowWrap: ViewStyle[] = [
-    { borderRadius: 20 },
+    { borderRadius: radii.surface },
     Platform.select({
       ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 3 } },
       android: { elevation: 3 },
@@ -94,7 +95,7 @@ export function AdminStyleJobRow({
       <View
         ref={measureRef}
         collapsable={false}
-        style={{ backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)', overflow: 'hidden' }}
+        style={{ backgroundColor: '#FFFFFF', borderRadius: radii.surface, borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)', overflow: 'hidden' }}
       >
         <View style={{ paddingHorizontal: 16, paddingTop: 15, paddingBottom: 13 }}>
           <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -112,7 +113,7 @@ export function AdminStyleJobRow({
                 <Text style={JOB_ROW_CHIP_TEXT}>{kindLabel}</Text>
               </View>
               <View style={[JOB_ROW_CHIP, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
-                <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: isCompleted ? '#34C759' : '#FF9500' }} />
+                <View style={{ width: 5, height: 5, borderRadius: radii.pill, backgroundColor: isCompleted ? '#34C759' : '#FF9500' }} />
                 <Text style={JOB_ROW_CHIP_TEXT}>{isCompleted ? 'הושלם' : 'ממתין'}</Text>
               </View>
             </View>

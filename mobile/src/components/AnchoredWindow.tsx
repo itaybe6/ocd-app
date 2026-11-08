@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -74,7 +75,7 @@ export function AnchoredWindow({
     const tx = interpolate(t.value, [0, 1], [dx, 0]);
     const ty = interpolate(t.value, [0, 1], [dy, 0]);
     const s = interpolate(t.value, [0, 1], [0.12, 1]);
-    const r = interpolate(t.value, [0, 1], [999, 18]);
+    const r = interpolate(t.value, [0, 1], [radii.pill, radii.sheet]);
     return {
       opacity: interpolate(t.value, [0, 1], [0, 1]),
       borderRadius: r,
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
   closeEyeBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: radii.pill,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,

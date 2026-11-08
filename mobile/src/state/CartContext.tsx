@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Toast from '../components/toast/Toast';
 import {
   addCartLines,
@@ -12,10 +12,12 @@ import {
   updateCartLines,
 } from '../lib/shopify';
 import { buildMobileAppCartOptions } from '../services/shopify';
+import { createCartQuantityStore } from '../lib/cartQuantityStore';
 
 const STORAGE_KEY = 'shopify-storefront-cart-id';
 
 export type CartProduct = ShopifyCartProduct;
+export type CartQuantityProduct = CartProduct & { availableForSale: boolean };
 
 export type CartItem = ShopifyCartLine;
 
@@ -30,7 +32,8 @@ type CartContextValue = {
   isMutating: boolean;
   addItem: (product: CartProduct, quantity?: number) => Promise<void>;
   removeItem: (productId: string) => Promise<void>;
-  updateQuantity: (productId: string, quantity: number) => Promise<void>;
+  updateQuantity: (productId: string, quantity: number, product?: CartQuantityProduct) => Promise<void>;
+  adjustQuantity: (productId: string, delta: number) => void;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
   /** Replace local cart state with a Shopify cart payload (e.g. after discount apply). */
@@ -39,6 +42,10 @@ type CartContextValue = {
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
+const CartQuantityContext = createContext<{
+  store: ReturnType<typeof createCartQuantityStore>;
+  updateQuantity: CartContextValue['updateQuantity'];
+} | null>(null);
 
 function getCurrencyCode(cart: ShopifyCart | null, items: CartItem[]) {
   return cart?.cost.currencyCode ?? items[0]?.product.currencyCode ?? 'ILS';
@@ -57,6 +64,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<ShopifyCart | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+  const [quantityStore] = useState(createCartQuantityStore);
 
   // Optimistic quantity overrides: productId → desired qty (shown instantly)
   const [optimisticQuantities, setOptimisticQuantities] = useState<Record<string, number>>({});
@@ -65,6 +73,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Refs for debounced API calls (avoid stale closures in timers)
   const cartRef = useRef<ShopifyCart | null>(null);
   const pendingUpdatesRef = useRef<Record<string, number>>({});
+  const quantityVersionsRef = useRef<Record<string, number>>({});
+  const optimisticQtyRef = useRef<Record<string, number>>({});
   const updateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const mutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const activeMutationsRef = useRef(0);
@@ -132,26 +142,41 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [syncCart]);
 
   const items = useMemo(() => {
+    return (cart?.lines ?? []).flatMap((item) => {
+      if (removingProductIds.includes(item.product.id)) return [];
+      const optimisticQty = optimisticQuantities[item.product.id];
+      const quantity = optimisticQty ?? item.quantity;
+      if (quantity <= 0) return [];
+      if (quantity === item.quantity) return [item];
+      const unit = item.cost.amountPerQuantity;
+      return [{
+        ...item,
+        quantity,
+        cost: {
+          ...item.cost,
+          totalAmount: Math.round(unit * quantity * 100) / 100,
+        },
+      }];
+    });
+  }, [cart?.lines, optimisticQuantities, removingProductIds]);
+
+  const itemCount = useMemo(
+    () => items.reduce((sum, item) => sum + item.quantity, 0),
+    [items],
+  );
+
+  const subtotal = useMemo(() => {
     const lines = cart?.lines ?? [];
-    if (!removingProductIds.length) return lines;
-    return lines.filter((item) => !removingProductIds.includes(item.product.id));
-  }, [cart?.lines, removingProductIds]);
-
-  const itemCount = useMemo(() => {
-    const base = removingProductIds.length
-      ? items.reduce((sum, item) => sum + item.quantity, 0)
-      : cart?.totalQuantity ?? items.reduce((sum, item) => sum + item.quantity, 0);
-    let delta = 0;
-    for (const [productId, optimisticQty] of Object.entries(optimisticQuantities)) {
-      const realQty = items.find((i) => i.product.id === productId)?.quantity ?? 0;
-      delta += optimisticQty - realQty;
+    let value = cart?.cost.subtotalAmount ?? lines.reduce((sum, line) => sum + line.cost.totalAmount, 0);
+    for (const line of lines) {
+      const removed = removingProductIds.includes(line.product.id);
+      const quantity = removed ? 0 : (optimisticQuantities[line.product.id] ?? line.quantity);
+      if (quantity === line.quantity) continue;
+      if (quantity <= 0) value -= line.cost.totalAmount;
+      else value += line.cost.amountPerQuantity * (quantity - line.quantity);
     }
-    return Math.max(0, base + delta);
-  }, [cart?.totalQuantity, items, optimisticQuantities, removingProductIds.length]);
-
-  const subtotal = removingProductIds.length
-    ? items.reduce((sum, item) => sum + item.cost.totalAmount, 0)
-    : cart?.cost.subtotalAmount ?? items.reduce((sum, item) => sum + item.cost.totalAmount, 0);
+    return Math.max(0, Math.round(value * 100) / 100);
+  }, [cart, optimisticQuantities, removingProductIds]);
   const currencyCode = getCurrencyCode(cart, items);
 
   const enqueueCartMutation = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
@@ -215,23 +240,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       const qty = Math.max(1, Math.round(quantity));
 
-      // Optimistic: show qty immediately
-      setOptimisticQuantities((prev) => ({ ...prev, [product.id]: qty }));
+      setOptimisticQuantities((prev) => {
+        const inCart = cartRef.current?.lines.find((line) => line.product.id === product.id)?.quantity ?? 0;
+        const base = product.id in prev ? prev[product.id] : inCart;
+        return { ...prev, [product.id]: base + qty };
+      });
 
       try {
         const nextCart = await runCartMutation(async () => {
           const currentCart = cartRef.current;
-          if (currentCart?.id) {
-            return addCartLines(currentCart.id, [{ merchandiseId: product.variantId, quantity: qty }]);
-          }
-
-          return createCart(
-            [{ merchandiseId: product.variantId, quantity: qty }],
-            buildMobileAppCartOptions(),
-          );
+          const cart = currentCart?.id
+            ? await addCartLines(currentCart.id, [{ merchandiseId: product.variantId, quantity: qty }])
+            : await createCart(
+                [{ merchandiseId: product.variantId, quantity: qty }],
+                buildMobileAppCartOptions(),
+              );
+          if (cart) cartRef.current = cart;
+          return cart;
         });
 
-        setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[product.id]; return n; });
+        setOptimisticQuantities((prev) => {
+          const serverQty = nextCart?.lines.find((line) => line.product.id === product.id)?.quantity;
+          if (serverQty != null && prev[product.id] != null && prev[product.id] > serverQty) return prev;
+          const next = { ...prev };
+          delete next[product.id];
+          return next;
+        });
         await syncCart(nextCart);
       } catch (error: any) {
         setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[product.id]; return n; });
@@ -271,18 +305,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateQuantity = useCallback(
-    (productId: string, quantity: number): Promise<void> => {
+    (productId: string, quantity: number, product?: CartQuantityProduct): Promise<void> => {
+      const nextQty = Math.max(0, quantity);
+      const version = (quantityVersionsRef.current[productId] ?? 0) + 1;
+      quantityVersionsRef.current[productId] = version;
+      optimisticQtyRef.current = { ...optimisticQtyRef.current, [productId]: nextQty };
       // Show new quantity instantly
-      setOptimisticQuantities((prev) => {
-        if (quantity <= 0) {
-          const n = { ...prev };
-          delete n[productId];
-          return n;
-        }
-        return { ...prev, [productId]: quantity };
-      });
+      setOptimisticQuantities((prev) => ({ ...prev, [productId]: nextQty }));
 
-      pendingUpdatesRef.current[productId] = quantity;
+      pendingUpdatesRef.current[productId] = nextQty;
 
       // Debounce: wait 350ms after the last press before hitting the API
       if (updateTimersRef.current[productId]) {
@@ -295,10 +326,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         delete pendingUpdatesRef.current[productId];
         if (targetQty === undefined) return;
 
-        const clearOptimistic = () =>
-          setOptimisticQuantities((prev) => { const n = { ...prev }; delete n[productId]; return n; });
+        const releaseOptimistic = () =>
+          setOptimisticQuantities((prev) => {
+            if (quantityVersionsRef.current[productId] !== version) return prev;
+            if (pendingUpdatesRef.current[productId] != null) return prev;
+            if (prev[productId] != null && prev[productId] !== targetQty) return prev;
+            const next = { ...prev };
+            delete next[productId];
+            const refNext = { ...optimisticQtyRef.current };
+            delete refNext[productId];
+            optimisticQtyRef.current = refNext;
+            return next;
+          });
 
         void enqueueCartMutation(async () => {
+          // A slow request may leave several edits queued. Send only the newest
+          // intent instead of making the user wait for obsolete quantities.
+          if (quantityVersionsRef.current[productId] !== version) return;
           const applyUpdate = async () => {
             const currentCart = cartRef.current;
             const currentItems = currentCart?.lines ?? [];
@@ -309,6 +353,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               return removeCartLines(currentCart.id, [line.id]);
             }
 
+            if (!line && product?.id === productId && product.availableForSale && product.variantId) {
+              const lines = [{ merchandiseId: product.variantId, quantity: targetQty }];
+              return currentCart?.id
+                ? addCartLines(currentCart.id, lines)
+                : createCart(lines, buildMobileAppCartOptions());
+            }
             if (!currentCart?.id || !line) return null;
             return updateCartLines(currentCart.id, [{ id: line.id, quantity: targetQty }]);
           };
@@ -316,12 +366,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           try {
             let nextCart = await applyUpdate();
             if (!nextCart) {
-              clearOptimistic();
+              releaseOptimistic();
               return;
             }
 
-            clearOptimistic();
+            cartRef.current = nextCart;
             await syncCart(nextCart);
+            releaseOptimistic();
           } catch (error: unknown) {
             if (isCartConflictError(error) && cartRef.current?.id) {
               try {
@@ -331,10 +382,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                   setCart(refreshedCart);
                 }
                 await delay(180);
+                if (quantityVersionsRef.current[productId] !== version) return;
                 const nextCart = await applyUpdate();
                 if (nextCart) {
-                  clearOptimistic();
+                  cartRef.current = nextCart;
                   await syncCart(nextCart);
+                  releaseOptimistic();
                   return;
                 }
               } catch {
@@ -342,7 +395,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            clearOptimistic();
+            releaseOptimistic();
             const message = error instanceof Error ? error.message : 'נסה שוב בעוד רגע';
             Toast.show({
               type: 'error',
@@ -356,6 +409,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return Promise.resolve();
     },
     [enqueueCartMutation, syncCart]
+  );
+
+  const adjustQuantity = useCallback(
+    (productId: string, delta: number) => {
+      const inCart = cartRef.current?.lines.find((line) => line.product.id === productId)?.quantity ?? 0;
+      const base = productId in optimisticQtyRef.current ? optimisticQtyRef.current[productId] : inCart;
+      void updateQuantity(productId, base + delta);
+    },
+    [updateQuantity],
   );
 
   const clearCart = useCallback(async () => {
@@ -398,6 +460,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       addItem,
       removeItem,
       updateQuantity,
+      adjustQuantity,
       clearCart,
       refreshCart,
       setCartSnapshot,
@@ -405,6 +468,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       addItem,
+      adjustQuantity,
       cart?.checkoutUrl,
       cart?.id,
       clearCart,
@@ -422,7 +486,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     ]
   );
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  const quantityContext = useMemo(() => ({ store: quantityStore, updateQuantity }), [quantityStore, updateQuantity]);
+  useLayoutEffect(() => {
+    const quantities: Record<string, number> = {};
+    for (const item of items) quantities[item.product.id] = item.quantity;
+    Object.assign(quantities, optimisticQuantities);
+    for (const id of removingProductIds) quantities[id] = 0;
+    quantityStore.publish(quantities, isBootstrapping);
+  }, [quantityStore, items, optimisticQuantities, removingProductIds, isBootstrapping]);
+
+  return <CartContext.Provider value={value}>
+    <CartQuantityContext.Provider value={quantityContext}>{children}</CartQuantityContext.Provider>
+  </CartContext.Provider>;
+}
+
+export function useProductCartQuantity(productId: string) {
+  const context = useContext(CartQuantityContext);
+  if (!context) throw new Error('useProductCartQuantity must be used within CartProvider');
+  const { store, updateQuantity } = context;
+  const subscribe = useCallback((listener: () => void) => store.subscribe(productId, listener), [store, productId]);
+  const read = useCallback(() => store.read(productId), [store, productId]);
+  const snapshot = useSyncExternalStore(subscribe, read, read);
+  return { ...snapshot, updateQuantity };
 }
 
 export function useCart(): CartContextValue {

@@ -1,25 +1,7 @@
-/**
- * Hyp payment adapter (server-only).
- *
- * ⚠️ IMPLEMENTATION IS INTENTIONALLY STUBBED.
- *
- * The exact Hyp (הופ / HYP) API endpoints, request shape, signing method and
- * field names are NOT hard-coded here on purpose — inventing them would produce
- * a broken integration. Fill in the TODOs once you have the Hyp merchant docs
- * and credentials. Everything below the adapter (DB state machine, idempotency,
- * Shopify tagging) already works and only depends on this adapter's return
- * shapes, so wiring the real calls in is isolated to this file.
- *
- * Required secrets (set via `supabase secrets set` — NEVER in the app bundle):
- *   HYP_API_BASE_URL       Hyp API base URL (from Hyp)
- *   HYP_MASOF / HYP_TERMINAL   terminal / masof number (from Hyp)
- *   HYP_API_KEY            API key / password (from Hyp)
- *   HYP_CALLBACK_SECRET    shared secret used to verify server-to-server callbacks
- *
- * The 49₪ monthly membership charge is created as a recurring/tokenized payment
- * (Hyp "הוראת קבע" / recurring). Use the recurring flow so renewals bill
- * automatically — do NOT store the card yourself.
+/** Server-only OCD+ adapter for Hyp Pay. See hypPay.ts for protocol sources.
+ * Checkout stays disabled until the terminal and renewal delivery are verified.
  */
+import { createHypPayAgreement, verifyHypPayCompletion, stopHypPayAgreement } from './hypPay.ts';
 
 export const OCD_PLUS_PRICE_ILS = 49;
 export const OCD_PLUS_CURRENCY = 'ILS';
@@ -27,12 +9,12 @@ export const OCD_PLUS_CURRENCY = 'ILS';
 export type HypCreatePaymentArgs = {
   amount: number;
   currency: string;
-  /** Our internal subscription row id — echoed back on the callback. */
+  /** Unique checkout-attempt id — echoed back in Order, not the customer id. */
   subscriptionId: string;
   userId: string;
   /** Where Hyp should send the browser after payment (app deep link / web). */
   returnUrl?: string;
-  /** Server-to-server callback URL Hyp should POST the result to. */
+  /** Success URL configured in the Hyp terminal settings (not an API parameter). */
   callbackUrl: string;
   customer?: { name?: string | null; phone?: string | null };
 };
@@ -48,90 +30,67 @@ export type HypVerifiedTransaction = {
   success: boolean;
   /** Unique transaction id from Hyp — used as the idempotency key. */
   transactionId: string;
-  /** Our subscription id, echoed back by Hyp (from `subscriptionId` above). */
+  /** Checkout-attempt reference echoed back by Hyp in Order. */
   subscriptionId?: string;
   /** Recurring/subscription token id from Hyp, if this created a standing order. */
   hypSubscriptionId?: string;
   amount?: number;
   currency?: string;
-  /** Raw provider payload, stored for auditing. */
+  /** Allowlisted transaction metadata only, without payment instruments. */
   raw?: unknown;
 };
 
+
 function getConfig() {
   return {
-    baseUrl: (Deno.env.get('HYP_API_BASE_URL') ?? '').trim(),
     terminal: (Deno.env.get('HYP_MASOF') ?? Deno.env.get('HYP_TERMINAL') ?? '').trim(),
     apiKey: (Deno.env.get('HYP_API_KEY') ?? '').trim(),
-    callbackSecret: (Deno.env.get('HYP_CALLBACK_SECRET') ?? '').trim(),
+    passP: (Deno.env.get('HYP_PASS_P') ?? '').trim(),
   };
 }
 
 export function isHypConfigured(): boolean {
   const c = getConfig();
-  return !!(c.baseUrl && c.terminal && c.apiKey);
+  return /^\d{10}$/.test(c.terminal) && !!c.apiKey && !!c.passP;
 }
 
-/**
- * Create a Hyp payment session for the 49₪ monthly membership and return a
- * paymentUrl to open in the app.
- */
-export async function createHypPayment(
-  _args: HypCreatePaymentArgs,
-): Promise<HypCreatePaymentResult> {
-  const c = getConfig();
-  if (!isHypConfigured()) {
-    throw new Error(
-      'Hyp is not configured. Set HYP_API_BASE_URL, HYP_MASOF/HYP_TERMINAL and HYP_API_KEY as Edge Function secrets.',
-    );
-  }
-
-  // TODO(Hyp): Build and POST the real "create payment / recurring order"
-  // request to `${c.baseUrl}` using the terminal + apiKey. Map _args.amount,
-  // currency, callbackUrl and subscriptionId (as a passthrough param that Hyp
-  // echoes back on the callback) into Hyp's expected fields. Parse Hyp's
-  // response into { paymentUrl, hypReference }.
-  //
-  // Reference the Hyp merchant integration docs for the exact endpoint,
-  // parameter names and signature. Do NOT guess.
-  void c;
-  throw new Error('createHypPayment not implemented — fill in the Hyp adapter (see _shared/hyp.ts).');
+export function isHypCheckoutEnabledForUser(userId?: string): boolean {
+  if (Deno.env.get('HYP_CHECKOUT_ENABLED') === 'true') return true;
+  // Only a verified server session may supply this id. Local demo identities
+  // cannot be allowlisted, and the list is never sent to the client.
+  if (!userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) return false;
+  const customerIds = (Deno.env.get('HYP_CHECKOUT_CUSTOMER_IDS') ?? '').split(',').map(id => id.trim());
+  return customerIds.includes(userId);
 }
 
-/**
- * Verify a payment server-to-server. Never trust the browser redirect — this
- * must independently confirm the transaction against Hyp (or verify a signed
- * callback with HYP_CALLBACK_SECRET).
- */
-export async function verifyHypTransaction(
-  _callbackPayload: Record<string, unknown>,
-): Promise<HypVerifiedTransaction> {
-  const c = getConfig();
-  if (!isHypConfigured()) {
-    throw new Error('Hyp is not configured. Cannot verify transaction.');
+export function assertHypCheckoutReady(userId?: string): void {
+  if (!isHypConfigured() || !isHypCheckoutEnabledForUser(userId)) {
+    throw new Error('Hyp is not configured for checkout.');
   }
-
-  // TODO(Hyp): Verify the callback authenticity (validate the signature/HMAC
-  // using HYP_CALLBACK_SECRET, or call Hyp's "get transaction status" endpoint
-  // with the transaction id from the payload). Return a normalised
-  // HypVerifiedTransaction. Extract: transactionId, subscriptionId (our
-  // passthrough), hypSubscriptionId (recurring token), amount, currency, and
-  // whether the payment truly succeeded.
-  void c;
-  throw new Error('verifyHypTransaction not implemented — fill in the Hyp adapter (see _shared/hyp.ts).');
 }
 
-/**
- * Cancel a recurring Hyp subscription (standing order). Returns true if Hyp
- * confirmed cancellation. If Hyp has no cancel API for your plan type, keep the
- * cancel_at_period_end flow in the DB and stop renewals on your side.
- */
-export async function cancelHypSubscription(_hypSubscriptionId: string): Promise<{ ok: boolean }> {
-  if (!isHypConfigured()) {
-    // Allow local cancellation to proceed even when Hyp isn't wired yet.
-    return { ok: false };
-  }
+export async function createHypPayment(args: HypCreatePaymentArgs): Promise<HypCreatePaymentResult> {
+  assertHypCheckoutReady(args.userId);
+  return { paymentUrl: await createHypPayAgreement(getConfig(), {
+    amount: args.amount, currency: args.currency, reference: args.subscriptionId,
+    name: args.customer?.name, phone: args.customer?.phone,
+  }) };
+}
 
-  // TODO(Hyp): Call Hyp's cancel-recurring endpoint with _hypSubscriptionId.
-  throw new Error('cancelHypSubscription not implemented — fill in the Hyp adapter (see _shared/hyp.ts).');
+export async function verifyHypTransaction(payload: string): Promise<HypVerifiedTransaction> {
+  return verifyHypPayCompletion(getConfig(), payload);
+}
+
+export async function cancelHypSubscription(id: string): Promise<{ ok: boolean }> {
+  return stopHypPayAgreement(getConfig(), id);
+}
+
+/** Non-charging server diagnostic. APISign generates a URL only. The URL is
+ * neither opened nor returned, and no customer or agreement is created.
+ */
+export async function checkHypSigning(): Promise<void> {
+  await createHypPayAgreement(getConfig(), {
+    amount: OCD_PLUS_PRICE_ILS, currency: OCD_PLUS_CURRENCY,
+    reference: crypto.randomUUID(),
+  });
 }

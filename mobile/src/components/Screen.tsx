@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StatusBar, View, type StatusBarStyle, type ViewProps } from 'react-native';
+import { StatusBar, View, type StatusBarStyle, type ViewProps } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 
@@ -21,11 +21,7 @@ export function Screen({
 }: ScreenProps) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={safeAreaEdges}>
-      {Platform.OS === 'android' ? (
-        <StatusBar barStyle={statusBarStyle} backgroundColor={backgroundColor} />
-      ) : (
-        <StatusBar barStyle={statusBarStyle} />
-      )}
+      <StatusBar barStyle={statusBarStyle} />
       <View
         {...rest}
         style={[

@@ -1,32 +1,13 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from '../../components/toast/Toast';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../state/AuthContext';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
-
-/* ─── palette (minimal, monochrome — matches profile) ─────────────────────── */
-const P = {
-  bg: '#F5F5F5',
-  card: '#FFFFFF',
-  separator: '#ECECEC',
-  label: '#111111',
-  secondaryLabel: '#555555',
-  tertiaryLabel: '#999999',
-  iconBg: '#F0F0F0',
-  iconColor: '#444444',
-};
+import { AccountHeader, AccountIntro, AccountButton, AccountEmpty, accountColors as C } from './AccountUI';
 
 export function CustomerAddressesScreen({
   onBack,
@@ -94,47 +75,19 @@ export function CustomerAddressesScreen({
 
   return (
     <View style={styles.root}>
-      {/* header — black slab with rounded bottom corners */}
-      <View style={[styles.headerBg, { paddingTop: insets.top }]}>
-        <View style={styles.headerBar}>
-          <Pressable
-            onPress={onBack}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="חזרה"
-            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
-          >
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-          </Pressable>
-
-          <View style={styles.headerTitles}>
-            <Text style={styles.headerTitle}>כתובות שמורות</Text>
-            <Text style={styles.headerSubtitle}>הכתובת תשמש למשלוחים ולשירותים</Text>
-          </View>
-
-          <View style={{ width: 40 }} />
-        </View>
-      </View>
-
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            paddingTop: 16,
-            paddingHorizontal: 20,
-            paddingBottom: contentPaddingBottom + 16,
-            gap: 12,
-          }}
-        >
+      <AccountHeader onBack={onBack} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: contentPaddingBottom + 24 }}>
+          <AccountIntro title="הכתובת שלי" subtitle="כאן אפשר לעדכן את הכתובת השמורה בחשבון." />
           {editing ? (
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>כתובת</Text>
+            <View>
+              <Text style={styles.fieldLabel}>כתובת מלאה</Text>
               <TextInput
                 value={draft}
                 onChangeText={setDraft}
-                placeholder="רחוב, מספר בית, עיר"
-                placeholderTextColor="#B9BEC6"
+                placeholder="רחוב, מספר בית, דירה ועיר"
+                placeholderTextColor="#929292"
+                accessibilityLabel="כתובת מלאה"
                 textContentType="fullStreetAddress"
                 autoComplete="street-address"
                 autoFocus
@@ -142,190 +95,46 @@ export function CustomerAddressesScreen({
                 multiline
                 style={styles.input}
               />
-
-              <View style={styles.actionsRow}>
-                <Pressable
-                  onPress={saveAddress}
-                  disabled={saving || draft.trim().length < 3}
-                  style={({ pressed }) => [
-                    styles.primaryAction,
-                    (saving || draft.trim().length < 3) && styles.primaryActionDisabled,
-                    pressed && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.primaryActionText,
-                      (saving || draft.trim().length < 3) && { color: '#A6ABB3' },
-                    ]}
-                  >
-                    {saving ? 'שומר…' : 'שמירת כתובת'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={cancelEdit}
-                  disabled={saving}
-                  style={({ pressed }) => [styles.secondaryAction, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={styles.secondaryActionText}>ביטול</Text>
-                </Pressable>
-              </View>
+              <Text style={styles.fieldHint}>כדאי לכלול מספר דירה וקומה, אם יש.</Text>
+              <AccountButton label={saving ? 'שומרים את הכתובת…' : 'שמירת כתובת'} onPress={saveAddress} busy={saving} disabled={draft.trim().length < 3} />
+              <Pressable onPress={cancelEdit} disabled={saving} accessibilityRole="button" accessibilityState={{ disabled: saving }} style={styles.textAction}>
+                <Text style={styles.textActionLabel}>ביטול</Text>
+              </Pressable>
             </View>
           ) : savedAddress ? (
-            <View style={styles.card}>
-              <View style={styles.addressRow}>
-                <View style={styles.iconSlot}>
-                  <Ionicons name="location-outline" size={22} color={P.iconColor} />
-                </View>
-                <View style={styles.addressMeta}>
-                  <Text style={styles.addressTitle}>כתובת ראשית</Text>
-                  <Text style={styles.addressText}>{savedAddress}</Text>
-                </View>
+            <View>
+              <View style={styles.address}>
+                <View style={styles.addressHeading}><Ionicons name="location-outline" size={21} color={C.ink} /><Text style={styles.addressLabel}>כתובת שמורה</Text></View>
+                <Text style={styles.addressText}>{savedAddress}</Text>
               </View>
-
-              <View style={styles.divider} />
-
-              <View style={styles.actionsRow}>
-                <Pressable
-                  onPress={startEdit}
-                  disabled={saving}
-                  style={({ pressed }) => [styles.primaryAction, pressed && { opacity: 0.9 }]}
-                >
-                  <Text style={styles.primaryActionText}>עריכת כתובת</Text>
-                </Pressable>
-                <Pressable
-                  onPress={removeAddress}
-                  disabled={saving}
-                  style={({ pressed }) => [styles.secondaryAction, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={[styles.secondaryActionText, { color: '#D94040' }]}>{saving ? 'מסיר…' : 'הסרה'}</Text>
-                </Pressable>
-              </View>
+              <AccountButton label="עריכת כתובת" onPress={startEdit} disabled={saving} />
+              <Pressable onPress={removeAddress} disabled={saving} accessibilityRole="button" accessibilityState={{ disabled: saving, busy: saving }} style={styles.textAction}>
+                <Text style={[styles.textActionLabel, { color: C.red }]}>{saving ? 'מסירים את הכתובת…' : 'הסרת הכתובת'}</Text>
+              </Pressable>
             </View>
           ) : (
-            <View style={[styles.card, styles.emptyCard]}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="location-outline" size={30} color={P.tertiaryLabel} />
-              </View>
-              <Text style={styles.emptyTitle}>אין כתובת שמורה</Text>
-              <Text style={styles.emptyText}>הוסף כתובת כדי שנוכל להשתמש בה במשלוחים.</Text>
-              <Pressable
-                onPress={startEdit}
-                style={({ pressed }) => [styles.primaryAction, { marginTop: 6 }, pressed && { opacity: 0.9 }]}
-              >
-                <Text style={styles.primaryActionText}>הוספת כתובת</Text>
-              </Pressable>
+            <View>
+              <AccountEmpty icon="location-outline" title="לאן לשלוח?" description="שמרו את הכתובת שלכם כדי שיהיה קל למצוא ולעדכן אותה בפעם הבאה." />
+              <AccountButton label="הוספת כתובת" onPress={startEdit} />
             </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
-
       <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: P.bg },
-
-  headerBg: {
-    backgroundColor: '#000000',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-  },
-  headerBar: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 22,
-    gap: 10,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  headerTitles: { flex: 1, alignItems: 'center', gap: 3 },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', textAlign: 'center' },
-  headerSubtitle: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '600', textAlign: 'center' },
-
-  card: {
-    backgroundColor: P.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: P.separator,
-    padding: 16,
-    gap: 12,
-  },
-
-  addressRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 12 },
-  iconSlot: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: P.iconBg,
-  },
-  addressMeta: { flex: 1, alignItems: 'flex-end', gap: 4 },
-  addressTitle: { fontSize: 12, fontWeight: '700', color: P.tertiaryLabel, textAlign: 'right' },
-  addressText: { fontSize: 16, fontWeight: '600', color: P.label, textAlign: 'right', lineHeight: 23 },
-
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: P.separator },
-
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: P.tertiaryLabel, textAlign: 'right' },
-  input: {
-    minHeight: 84,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: P.separator,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: P.label,
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'right',
-    textAlignVertical: 'top',
-  },
-
-  actionsRow: { flexDirection: 'row-reverse', gap: 10 },
-  primaryAction: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#111111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryActionDisabled: { backgroundColor: '#E9EAEC' },
-  primaryActionText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  secondaryAction: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: P.separator,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryActionText: { color: P.label, fontSize: 14, fontWeight: '700' },
-
-  emptyCard: { alignItems: 'center', paddingVertical: 36, gap: 10 },
-  emptyIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: P.iconBg,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: P.label },
-  emptyText: { fontSize: 13, color: P.tertiaryLabel, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: C.bg },
+  fill: { flex: 1 },
+  fieldLabel: { color: C.ink, fontSize: 14, fontWeight: '600', lineHeight: 22, textAlign: 'right', marginBottom: 10 },
+  input: { minHeight: 126, borderWidth: 1, borderColor: '#D5D6D8', borderRadius: radii.surface, backgroundColor: '#FAFAFA', padding: 16, fontSize: 16, lineHeight: 26, color: C.ink, textAlign: 'right', textAlignVertical: 'top' },
+  fieldHint: { color: C.muted, fontSize: 12, lineHeight: 20, textAlign: 'right', marginTop: 10, marginBottom: 28 },
+  address: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.line, paddingVertical: 24, marginBottom: 28, gap: 18 },
+  addressHeading: { flexDirection: 'row-reverse', alignItems: 'center', gap: 9 },
+  addressLabel: { color: C.muted, fontSize: 12, lineHeight: 20, textAlign: 'right' },
+  addressText: { color: C.ink, fontSize: 21, lineHeight: 32, fontWeight: '500', textAlign: 'right' },
+  textAction: { minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, marginTop: 8 },
+  textActionLabel: { color: C.muted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 });

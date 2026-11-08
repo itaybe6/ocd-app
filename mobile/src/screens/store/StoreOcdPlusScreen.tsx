@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useMemo } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -69,7 +70,7 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                   backgroundColor: '#EEF2FF',
                   paddingHorizontal: 14,
                   paddingVertical: 8,
-                  borderRadius: 999,
+                  borderRadius: radii.pill,
                 }}
               >
                 <OcdPlusMark size={22} />
@@ -95,7 +96,7 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
               <View
                 style={{
                   backgroundColor: colors.card,
-                  borderRadius: 20,
+                  borderRadius: radii.surface,
                   padding: 22,
                   borderWidth: 1,
                   borderColor: colors.border,
@@ -122,7 +123,7 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                   style={({ pressed }) => ({
                     marginTop: 8,
                     backgroundColor: '#000000',
-                    borderRadius: 999,
+                    borderRadius: radii.pill,
                     paddingVertical: 14,
                     paddingHorizontal: 28,
                     opacity: pressed ? 0.88 : 1,
@@ -163,7 +164,7 @@ export function StoreOcdPlusScreen({ navigation, onBottomTabPress }: Props) {
                   style={({ pressed }) => ({
                     marginTop: 8,
                     backgroundColor: '#FFFFFF',
-                    borderRadius: 999,
+                    borderRadius: radii.surface,
                     borderWidth: 1,
                     borderColor: colors.border,
                     opacity: pressed || busy ? 0.88 : 1,

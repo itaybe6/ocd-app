@@ -1,3 +1,5 @@
+import { radii } from '../theme/radii';
+import { ScreenFade } from '../components/ScreenFade';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View, Pressable, StyleSheet } from 'react-native';
 import {
@@ -267,6 +269,7 @@ function WorkerDrawerContent(props: DrawerContentComponentProps) {
 export function WorkerDrawer() {
   return (
     <Drawer.Navigator
+      screenLayout={({ children, route }) => <ScreenFade skipInitialAnimation={route.name === 'Schedule'}>{children}</ScreenFade>}
       drawerContent={(p) => <WorkerDrawerContent {...p} />}
       screenOptions={{
         header: ({ navigation }) => (
@@ -308,7 +311,7 @@ const styles = StyleSheet.create({
   header: {
     marginHorizontal: 14,
     marginBottom: 6,
-    borderRadius: 24,
+    borderRadius: radii.surface,
     backgroundColor: D.surface,
     borderWidth: 1,
     borderColor: D.border,
@@ -323,7 +326,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 160,
     height: 160,
-    borderRadius: 80,
+    borderRadius: radii.pill,
     backgroundColor: D.primary,
     opacity: 0.08,
     top: -60,
@@ -333,7 +336,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: radii.pill,
     backgroundColor: D.accent,
     opacity: 0.06,
     bottom: -30,
@@ -349,7 +352,7 @@ const styles = StyleSheet.create({
   brandDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: radii.pill,
     backgroundColor: D.primary,
     shadowColor: D.primary,
     shadowOpacity: 0.9,
@@ -388,7 +391,7 @@ const styles = StyleSheet.create({
     backgroundColor: D.primarySoft,
     borderWidth: 1,
     borderColor: D.primaryBorder,
-    borderRadius: 20,
+    borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
     alignSelf: 'flex-end',
@@ -400,7 +403,7 @@ const styles = StyleSheet.create({
   },
   avatarOuter: {
     padding: 2,
-    borderRadius: 26,
+    borderRadius: radii.pill,
     borderWidth: 1.5,
     borderColor: D.primaryBorder,
     backgroundColor: D.primarySoft,
@@ -408,7 +411,7 @@ const styles = StyleSheet.create({
   avatarInner: {
     width: 46,
     height: 46,
-    borderRadius: 23,
+    borderRadius: radii.pill,
     backgroundColor: D.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',
@@ -423,7 +426,7 @@ const styles = StyleSheet.create({
   section: { marginTop: 14 },
   sectionCard: {
     backgroundColor: D.surface,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: D.border,
     overflow: 'hidden',
@@ -443,7 +446,7 @@ const styles = StyleSheet.create({
     height: 58,
     paddingHorizontal: 14,
     marginHorizontal: 0,
-    borderRadius: 12,
+    borderRadius: radii.surface,
     gap: 10,
     position: 'relative',
     overflow: 'hidden',
@@ -466,7 +469,7 @@ const styles = StyleSheet.create({
   iconBubble: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: radii.compact,
     backgroundColor: D.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',
@@ -513,7 +516,7 @@ const styles = StyleSheet.create({
   },
   logoutBtn: {
     backgroundColor: D.surface,
-    borderRadius: 18,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: D.dangerBorder,
     paddingHorizontal: 14,
@@ -534,7 +537,7 @@ const styles = StyleSheet.create({
   logoutIconWrap: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: radii.compact,
     backgroundColor: D.dangerSoft,
     borderWidth: 1,
     borderColor: D.dangerBorder,

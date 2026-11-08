@@ -1,12 +1,17 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { colors } from '../theme/colors';
+import { OCD_PLUS_DISCOUNT, OCD_PLUS_FREE_SHIPPING_AT } from './OcdPlusProductPriceBlock';
+
+const OCD_PLUS_DISCOUNT_PERCENT = Math.round(OCD_PLUS_DISCOUNT * 100);
 
 export const OCD_PLUS_HEADLINE = 'OCD+ הדרך החכמה לקנות';
 
-export const OCD_PLUS_SUBTITLE = 'מנוי חודשי ב-69 ₪ בלבד';
+export const OCD_PLUS_MONTHLY_PRICE_ILS = 49;
 
-export const OCD_PLUS_CHECKLIST_SUMMARY = 'הכל בלי התחייבות. הכל ב-69 ₪.';
+export const OCD_PLUS_SUBTITLE = `מנוי חודשי ב-${OCD_PLUS_MONTHLY_PRICE_ILS} ₪ בלבד`;
+
+export const OCD_PLUS_CHECKLIST_SUMMARY = `הכל בלי התחייבות. הכל ב-${OCD_PLUS_MONTHLY_PRICE_ILS} ₪.`;
 
 export const OCD_PLUS_SUBSCRIBE_BUTTON_LABEL = 'לחצו כאן כדי להצטרף >>';
 
@@ -16,7 +21,8 @@ export const OCD_PLUS_CHECKLIST_ITEMS: {
   /** Lighter continuation (leading space where needed) */
   tail: string;
 }[] = [
-  { lead: 'הנחה', tail: ' קבועה על כל מוצר' },
+  { lead: `${OCD_PLUS_DISCOUNT_PERCENT}% הנחה`, tail: ' קבועה על כל מוצר' },
+  { lead: 'משלוח חינם', tail: ` בהזמנות מעל ${OCD_PLUS_FREE_SHIPPING_AT} ₪` },
   { lead: 'גישה', tail: ' ראשונה להשקות ומבצעים' },
   { lead: 'ביטול', tail: ' בכל רגע, בלי התחייבות' },
   { lead: 'שירות', tail: ' מועדף ומהיר' },

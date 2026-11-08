@@ -9,6 +9,8 @@ export type OcdPlusSubscription = {
   next_billing_at: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  cancellation_pending?: boolean;
+  sync_pending?: boolean;
 };
 
 export type OcdPlusStatusResult = {
@@ -21,6 +23,7 @@ export class OcdPlusNotConfiguredError extends Error {}
 
 /** Thrown when there is no valid app session (user must (re)login). */
 export class OcdPlusUnauthorizedError extends Error {}
+export class OcdPlusCancellationPendingError extends Error {}
 
 async function callEdgeFunction<T>(name: string, body: Record<string, unknown> = {}): Promise<T> {
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -64,6 +67,7 @@ async function callEdgeFunction<T>(name: string, body: Record<string, unknown> =
   }
 
   if (!res.ok || !parsed || parsed.ok === false) {
+    if (parsed?.code === 'CANCEL_PENDING') throw new OcdPlusCancellationPendingError(parsed.error);
     const message = parsed?.error ?? parsed?.message ?? `${name} החזיר ${res.status}`;
     throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
   }

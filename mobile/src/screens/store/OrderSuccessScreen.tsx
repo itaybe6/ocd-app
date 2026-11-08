@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -62,7 +63,7 @@ export function OrderSuccessScreen({ navigation, route }: Props) {
           style={{
             width: 44,
             height: 44,
-            borderRadius: 12,
+            borderRadius: radii.compact,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: '#FFFFFF',
@@ -98,7 +99,7 @@ export function OrderSuccessScreen({ navigation, route }: Props) {
           style={{
             width: 64,
             height: 64,
-            borderRadius: 32,
+            borderRadius: radii.pill,
             alignSelf: 'center',
             alignItems: 'center',
             justifyContent: 'center',
@@ -139,7 +140,7 @@ export function OrderSuccessScreen({ navigation, route }: Props) {
         {orderNumber ? (
           <View
             style={{
-              borderRadius: 20,
+              borderRadius: radii.surface,
               paddingVertical: 18,
               paddingHorizontal: 20,
               backgroundColor: '#FFFFFF',
@@ -183,7 +184,7 @@ export function OrderSuccessScreen({ navigation, route }: Props) {
           accessibilityLabel={primaryLabel}
           style={{
             minHeight: 58,
-            borderRadius: 18,
+            borderRadius: radii.surface,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: '#111111',

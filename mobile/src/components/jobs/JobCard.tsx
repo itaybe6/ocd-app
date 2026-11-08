@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useRef } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
@@ -50,7 +51,7 @@ export function JobCardAction({
     if (!onOriginRect) return;
     innerRef.current?.measureInWindow((x, y, width, height) => {
       if (width > 0 && height > 0) {
-        onOriginRect({ x, y, width, height, borderRadius: 13 });
+        onOriginRect({ x, y, width, height, borderRadius: radii.surface });
       }
     });
   };
@@ -73,7 +74,7 @@ export function JobCardAction({
         style={{
           width: 40,
           height: 40,
-          borderRadius: 13,
+          borderRadius: radii.compact,
           backgroundColor: variant === 'danger' ? 'rgba(239,68,68,0.09)' : 'rgba(15,23,42,0.05)',
           alignItems: 'center',
           justifyContent: 'center',
@@ -106,7 +107,7 @@ export function JobChip({
     <View
       style={{
         backgroundColor: c ? c.bg : muted ? 'rgba(0,0,0,0.05)' : 'rgba(0,88,188,0.08)',
-        borderRadius: 10,
+        borderRadius: radii.compact,
         paddingHorizontal: 9,
         paddingVertical: 5,
         borderWidth: 1,
@@ -161,7 +162,7 @@ export function JobCard({
     if (!onOriginRect) return;
     outerRef.current?.measureInWindow((x, y, width, height) => {
       if (width > 0 && height > 0) {
-        onOriginRect({ x, y, width, height, borderRadius: 20 });
+        onOriginRect({ x, y, width, height, borderRadius: radii.surface });
       }
     });
   };
@@ -209,7 +210,7 @@ export function JobCard({
                 backgroundColor: statusMeta(status).bg,
                 borderColor: statusMeta(status).border,
                 borderWidth: 1,
-                borderRadius: 20,
+                borderRadius: radii.surface,
                 paddingHorizontal: 10,
                 paddingVertical: 4,
               }}
@@ -261,7 +262,7 @@ export function JobCard({
         shadow,
         {
           backgroundColor: '#FFFFFF',
-          borderRadius: 20,
+          borderRadius: radii.surface,
           borderWidth: 1,
           borderColor: 'rgba(0,0,0,0.06)',
           opacity: faded ? 0.72 : 1,

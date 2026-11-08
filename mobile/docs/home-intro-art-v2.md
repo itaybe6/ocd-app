@@ -1,0 +1,12 @@
+# Home intro art v2
+
+Generated with the built-in image_gen tool. Asset: `../assets/home-intro-products-v2.png`.
+Native app heading: כל מה שטוב לבית. The heading is not baked into the image.
+
+## Generation prompt
+
+Create a premium, restrained ecommerce product cutout cluster for the Israeli OCD home shopping app. Transparent PNG, actual alpha, landscape 3:2 canvas, all objects fully contained with 5% breathing room, no clipping. Use the provided existing store images as product identity references. Exactly THREE objects: (1) white VITRO PLUS cleaning spray bottle with blue trigger from reference 1, preserving the bottle proportions and blue SUCITESA branding; (2) compact silver cylindrical scent diffuser with blue glass reservoir from reference 2, preserve its real design; (3) short rounded stone-look taupe vase from reference 3, specifically the medium short vase to the left of the candle, NOT the tall vase. Arrange a tasteful tightly grouped still life, blue-trigger spray taller in the back-left, silver-blue scent diffuser in front-center, short neutral stone vase to the right, gentle depth and subtle rotation rather than flying exaggerated poses. Package labels and shapes should stay faithful. Natural studio soft lighting, precise isolated edges, faint contact shadows only, no white outline or halo. The design will sit at about 160px wide and 100px tall next to native Hebrew text, so clean silhouette and recognizable products matter. No headline or added typography anywhere; retain only original package markings. Absolutely NO background, floor, pedestal, surface, room, wall, plants, foliage, extra products, promotional badges, prices, sparkles, confetti, border, glow, or drawn checkerboard. This is a calm versatile home-store introduction, not a sale poster.
+
+## Final refinement prompt
+
+Precise background extraction edit. Keep the exact three objects and their current positions, shapes, detail, and labels unchanged. REMOVE ALL of the diffuse blue, gray, beige and white glow/halo surrounding the objects. Remove all floor/shadow outside their silhouettes. Every pixel outside the three physical objects must be fully transparent alpha, with only 1-2px edge antialiasing. No glow, no backdrop, no vignette, no contact shadow. Keep transparent gaps between shapes. Output a clean professional cutout, same canvas and proportions, with all three objects fully contained. Do not repaint the products. This will be placed on a pure white UI background and no foggy rectangle should be visible.

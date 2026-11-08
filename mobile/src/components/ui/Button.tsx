@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React from 'react';
 import { Pressable, Text, View, type PressableProps, type ViewStyle } from 'react-native';
 import { colors } from '../../theme/colors';
@@ -32,7 +33,7 @@ export function Button({ title, variant = 'primary', fullWidth = true, disabled,
         style={[
           {
             backgroundColor: disabled ? disabledBackground : backgroundColor,
-            borderRadius: 18,
+            borderRadius: radii.surface,
             paddingVertical: 14,
             paddingHorizontal: 16,
             minHeight: 52,

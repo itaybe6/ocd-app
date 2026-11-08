@@ -1,0 +1,170 @@
+animations/adidas/adidas/components/product/divider.tsx(1,20): error TS2307: Cannot find module '@/src/shared/lib/utils/cn' or its corresponding type declarations.
+animations/adidas/adidas/components/product/product-image.tsx(2,23): error TS2307: Cannot find module 'expo-image' or its corresponding type declarations.
+animations/adidas/adidas/routes/home.tsx(4,22): error TS2307: Cannot find module 'react-native-collapsible-tab-view' or its corresponding type declarations.
+animations/adidas/adidas/routes/home.tsx(5,20): error TS2307: Cannot find module '@/src/shared/lib/utils/cn' or its corresponding type declarations.
+animations/adidas/adidas/routes/home.tsx(6,25): error TS2307: Cannot find module '@/src/shared/components/marquee' or its corresponding type declarations.
+animations/adidas/adidas/routes/product.tsx(2,54): error TS2305: Module '"react-native"' has no exported member 'ViewToken'.
+animations/adidas/adidas/routes/product.tsx(4,43): error TS2307: Cannot find module '@legendapp/list' or its corresponding type declarations.
+animations/adidas/adidas/routes/product.tsx(11,31): error TS2307: Cannot find module '@/src/shared/lib/utils/simulate-press' or its corresponding type declarations.
+animations/adidas/adidas/routes/product.tsx(111,26): error TS7031: Binding element 'item' implicitly has an 'any' type.
+animations/adidas/adidas/routes/product.tsx(122,26): error TS7006: Parameter 'item' implicitly has an 'any' type.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(1,35): error TS2307: Cannot find module '@react-navigation/bottom-tabs' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(6,25): error TS2307: Cannot find module '@/src/apps/(s-t)/shopify/lib/providers/menu-provider' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(7,19): error TS2307: Cannot find module '@/src/apps/(s-t)/shopify/components/icons/house-icon' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(8,19): error TS2307: Cannot find module '@/src/apps/(s-t)/shopify/components/icons/inbox-icon' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(9,17): error TS2307: Cannot find module '@/src/apps/(s-t)/shopify/components/icons/tag-icon' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(11,47): error TS2307: Cannot find module '@/src/apps/(s-t)/shopify/lib/constants/animation-configs' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(13,27): error TS2307: Cannot find module 'expo-router' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(14,26): error TS2307: Cannot find module 'reanimated-color-picker' or its corresponding type declarations.
+animations/shopify/shopify/components/custom-tab-bar/index.tsx(35,43): error TS7006: Parameter 'route' implicitly has an 'any' type.
+animations/shopify/shopify/components/shared-tabs-header/home.tsx(1,31): error TS2307: Cannot find module '@/src/shared/lib/utils/simulate-press' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/index.tsx(2,29): error TS2307: Cannot find module 'expo-router' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/orders-products.tsx(4,29): error TS2307: Cannot find module 'expo-router' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/orders-products.tsx(5,31): error TS2307: Cannot find module '@/src/shared/lib/utils/simulate-press' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/search/index.tsx(4,50): error TS2307: Cannot find module 'expo-router' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/search/index.tsx(10,36): error TS2307: Cannot find module 'react-native-keyboard-controller' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/search/search-bar.tsx(6,27): error TS2307: Cannot find module 'expo-router' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/search/search-filter-item.tsx(7,20): error TS2307: Cannot find module '@/src/shared/lib/utils/cn' or its corresponding type declarations.
+animations/shopify/shopify/components/shared-tabs-header/search/search-filters.tsx(5,27): error TS2307: Cannot find module 'expo-router' or its corresponding type declarations.
+index.ts(2,8): error TS2882: Cannot find module or type declarations for side-effect import of './global.css'.
+src/components/HebrewMonthCalendar.tsx(5,25): error TS2305: Module '"react-native-calendars"' has no exported member 'MarkedDates'.
+src/components/jobs/AdminStyleJobRow.tsx(76,25): error TS2339: Property 'measureInWindow' does not exist on type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode'.
+src/components/jobs/AdminStyleJobRow.tsx(76,42): error TS7006: Parameter 'x' implicitly has an 'any' type.
+src/components/jobs/AdminStyleJobRow.tsx(76,45): error TS7006: Parameter 'y' implicitly has an 'any' type.
+src/components/jobs/AdminStyleJobRow.tsx(76,48): error TS7006: Parameter 'width' implicitly has an 'any' type.
+src/components/jobs/AdminStyleJobRow.tsx(76,55): error TS7006: Parameter 'height' implicitly has an 'any' type.
+src/components/jobs/AdminStyleJobRow.tsx(96,9): error TS2322: Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'Ref<ReactNativeElement> | undefined'.
+  Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'RefObject<ReactNativeElement | null>'.
+    Type '((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null' is not assignable to type 'ReactNativeElement | null'.
+      Type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode' is not assignable to type 'ReactNativeElement'.
+src/components/jobs/JobCard.tsx(52,23): error TS2339: Property 'measureInWindow' does not exist on type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode'.
+src/components/jobs/JobCard.tsx(52,40): error TS7006: Parameter 'x' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(52,43): error TS7006: Parameter 'y' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(52,46): error TS7006: Parameter 'width' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(52,53): error TS7006: Parameter 'height' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(72,9): error TS2322: Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'Ref<ReactNativeElement> | undefined'.
+  Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'RefObject<ReactNativeElement | null>'.
+    Type '((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null' is not assignable to type 'ReactNativeElement | null'.
+      Type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode' is not assignable to type 'ReactNativeElement'.
+src/components/jobs/JobCard.tsx(163,23): error TS2339: Property 'measureInWindow' does not exist on type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode'.
+src/components/jobs/JobCard.tsx(163,40): error TS7006: Parameter 'x' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(163,43): error TS7006: Parameter 'y' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(163,46): error TS7006: Parameter 'width' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(163,53): error TS7006: Parameter 'height' implicitly has an 'any' type.
+src/components/jobs/JobCard.tsx(259,7): error TS2322: Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'Ref<ReactNativeElement> | undefined'.
+  Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'RefObject<ReactNativeElement | null>'.
+    Type '((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null' is not assignable to type 'ReactNativeElement | null'.
+      Type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode' is not assignable to type 'ReactNativeElement'.
+src/components/LavaLampDark.tsx(84,26): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/components/LavaLampDark.tsx(133,20): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/components/ModalDialog.tsx(49,30): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/components/ModalDialog.tsx(52,38): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/components/OriginWindow.tsx(139,30): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/components/OriginWindow.tsx(141,38): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/lib/shopify.ts(918,11): error TS7022: 'payload' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(930,11): error TS7022: 'conn' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(976,11): error TS7022: 'payload' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(985,11): error TS7022: 'conn' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(1030,11): error TS7022: 'payload' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(1040,11): error TS7022: 'conn' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(1092,11): error TS7022: 'payload' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(1101,11): error TS7022: 'conn' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(1233,11): error TS7022: 'payload' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/lib/shopify.ts(1245,11): error TS7022: 'conn' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/screens/admin/DailyScheduleScreen.tsx(242,28): error TS2339: Property 'scrollTo' does not exist on type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>'.
+src/screens/admin/DailyScheduleScreen.tsx(672,13): error TS2322: Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'Ref<ScrollViewInstance> | undefined'.
+  Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'RefObject<ScrollViewInstance | null>'.
+    Type '(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ ...; }>) | null' is not assignable to type 'ScrollViewInstance | null'.
+      Type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>' is not assignable to type 'ScrollViewInstance | null'.
+src/screens/admin/DevicesAndScentsScreen.tsx(526,42): error TS2352: Conversion of type 'ListRenderItemInfo<Scent>' to type '{ item: Device; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Types of property 'item' are incompatible.
+    Property 'refill_amount' is missing in type 'Scent' but required in type 'Device'.
+src/screens/admin/StoreManagementScreen.tsx(622,21): error TS2353: Object literal may only specify known properties, and ''stylesheet.calendar.main'' does not exist in type 'Theme'.
+src/screens/admin/StoreManagementScreen.tsx(745,19): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/screens/admin/UsersScreen.tsx(566,9): error TS2322: Type 'Element | null' is not assignable to type 'Element | ComponentType<any> | undefined'.
+  Type 'null' is not assignable to type 'Element | ComponentType<any> | undefined'.
+src/screens/admin/WorkScheduleScreen.tsx(968,19): error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof import("C:/Users/user/OneDrive/Desktop/ocd-app/mobile/node_modules/react-native/types_generated/Libraries/StyleSheet/StyleSheetExports")'. Did you mean 'absoluteFill'?
+src/screens/auth/authScreenUi.tsx(116,49): error TS2339: Property 'focus' does not exist on type 'TextInputType'.
+src/screens/auth/authScreenUi.tsx(147,9): error TS2322: Type 'RefObject<TextInputType | null>' is not assignable to type 'Ref<_TextInputInstance> | undefined'.
+  Type 'RefObject<TextInputType | null>' is not assignable to type 'RefObject<_TextInputInstance | null>'.
+    Type 'TextInputType | null' is not assignable to type '_TextInputInstance | null'.
+      Type 'TextInputType' is not assignable to type '_TextInputInstance | null'.
+src/screens/store/CheckoutScreen.tsx(635,12): error TS2769: No overload matches this call.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'RefObject<WebView<undefined> | null>' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'number' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '{ flex: number; backgroundColor: string; }' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '{ uri: string; }' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'string' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'true' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'true' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'false' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'string' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type 'string' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '() => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '() => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '({ nativeEvent }: { nativeEvent: any; }) => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '() => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '(e: any) => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '(event: { nativeEvent: { data: string; }; }) => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '(state: WebViewNavigation) => void' is not assignable to type 'never'.
+  Overload 2 of 2, '(props: never, context: any): WebView<undefined>', gave the following error.
+    Type '(req: any) => boolean' is not assignable to type 'never'.
+src/screens/store/CheckoutScreen.tsx(650,32): error TS7031: Binding element 'nativeEvent' implicitly has an 'any' type.
+src/screens/store/CheckoutScreen.tsx(659,27): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/screens/store/CheckoutScreen.tsx(667,44): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/screens/store/StoreHomeScreen.tsx(492,28): error TS2339: Property 'scrollTo' does not exist on type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>'.
+src/screens/store/StoreHomeScreen.tsx(527,11): error TS2322: Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'Ref<ScrollViewInstance> | undefined'.
+  Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'RefObject<ScrollViewInstance | null>'.
+    Type '(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ ...; }>) | null' is not assignable to type 'ScrollViewInstance | null'.
+      Type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>' is not assignable to type 'ScrollViewInstance | null'.
+src/screens/store/StoreHomeScreen.tsx(1070,11): error TS2322: Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null> | undefined' is not assignable to type 'Ref<ScrollViewInstance> | undefined'.
+  Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'Ref<ScrollViewInstance> | undefined'.
+    Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'RefObject<ScrollViewInstance | null>'.
+      Type '(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ ...; }>) | null' is not assignable to type 'ScrollViewInstance | null'.
+        Type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>' is not assignable to type 'ScrollViewInstance | null'.
+src/screens/store/StoreHomeScreen.tsx(1078,45): error TS2339: Property 'scrollToEnd' does not exist on type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>'.
+src/screens/worker/JobsScreen.tsx(154,26): error TS2339: Property 'measureInWindow' does not exist on type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode'.
+src/screens/worker/JobsScreen.tsx(154,43): error TS7006: Parameter 'x' implicitly has an 'any' type.
+src/screens/worker/JobsScreen.tsx(154,46): error TS7006: Parameter 'y' implicitly has an 'any' type.
+src/screens/worker/JobsScreen.tsx(154,49): error TS7006: Parameter 'width' implicitly has an 'any' type.
+src/screens/worker/JobsScreen.tsx(154,56): error TS7006: Parameter 'height' implicitly has an 'any' type.
+src/screens/worker/JobsScreen.tsx(164,15): error TS2322: Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'Ref<ReactNativeElement> | undefined'.
+  Type 'RefObject<((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null>' is not assignable to type 'RefObject<ReactNativeElement | null>'.
+    Type '((props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode) | null' is not assignable to type 'ReactNativeElement | null'.
+      Type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode' is not assignable to type 'ReactNativeElement'.
+src/screens/worker/ScheduleScreen.tsx(370,28): error TS2339: Property 'scrollTo' does not exist on type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>'.
+src/screens/worker/ScheduleScreen.tsx(559,19): error TS2339: Property 'openJobId' does not exist on type 'never'.
+src/screens/worker/ScheduleScreen.tsx(559,40): error TS2339: Property 'openJobKind' does not exist on type 'never'.
+src/screens/worker/ScheduleScreen.tsx(559,63): error TS2339: Property 'openJobDayYmd' does not exist on type 'never'.
+src/screens/worker/ScheduleScreen.tsx(560,50): error TS2339: Property 'openJobId' does not exist on type 'never'.
+src/screens/worker/ScheduleScreen.tsx(560,74): error TS2339: Property 'openJobKind' does not exist on type 'never'.
+src/screens/worker/ScheduleScreen.tsx(561,28): error TS2339: Property 'openJobDayYmd' does not exist on type 'never'.
+src/screens/worker/ScheduleScreen.tsx(899,13): error TS2322: Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'Ref<ScrollViewInstance> | undefined'.
+  Type 'RefObject<(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<...>) | null>' is not assignable to type 'RefObject<ScrollViewInstance | null>'.
+    Type '(((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ ...; }>) | null' is not assignable to type 'ScrollViewInstance | null'.
+      Type '((props: Omit<ScrollViewProps, "ref"> & { ref?: Ref<ScrollViewInstance> | undefined; }) => ReactNode) & Readonly<{ Context: Context<...>; }>' is not assignable to type 'ScrollViewInstance | null'.
+src/screens/worker/ScheduleScreen.tsx(1122,20): error TS2339: Property 'measureInWindow' does not exist on type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode'.
+src/screens/worker/ScheduleScreen.tsx(1122,37): error TS7006: Parameter 'x' implicitly has an 'any' type.
+src/screens/worker/ScheduleScreen.tsx(1122,40): error TS7006: Parameter 'y' implicitly has an 'any' type.
+src/screens/worker/ScheduleScreen.tsx(1122,43): error TS7006: Parameter 'w' implicitly has an 'any' type.
+src/screens/worker/ScheduleScreen.tsx(1122,46): error TS7006: Parameter 'h' implicitly has an 'any' type.
+src/screens/worker/ScheduleScreen.tsx(1139,59): error TS2345: Argument of type 'ReactNativeElement' is not assignable to parameter of type '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }) => ReactNode'.
+  Type 'ReactNativeElement' provides no match for the signature '(props: Omit<ViewProps, "ref"> & { ref?: Ref<ReactNativeElement> | undefined; }): ReactNode'.
+src/screens/worker/WorkerNotificationsScreen.tsx(219,11): error TS2345: Argument of type '[never, never]' is not assignable to parameter of type 'never'.

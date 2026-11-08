@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -105,7 +106,7 @@ export function WorkTemplatesScreen({ navigation }: NativeStackScreenProps<WorkT
                       backgroundColor: colors.card,
                       borderColor: colors.border,
                       borderWidth: 1,
-                      borderRadius: 18,
+                      borderRadius: radii.surface,
                       padding: 14,
                       minHeight: 92,
                       transform: [{ scale: pressed ? 0.98 : 1 }],
@@ -121,7 +122,7 @@ export function WorkTemplatesScreen({ navigation }: NativeStackScreenProps<WorkT
                       <View
                         style={{
                           backgroundColor: 'rgba(37, 99, 235, 0.10)',
-                          borderRadius: 999,
+                          borderRadius: radii.pill,
                           paddingHorizontal: 10,
                           paddingVertical: 6,
                         }}

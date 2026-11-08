@@ -1,4 +1,10 @@
 import { normalizeCheckoutUrl } from './checkoutUrl';
+import {
+  isCatalogBundleProduct,
+  parseBundleVariantNodes,
+  type BundleVariantNode,
+  type ProductBundleTier,
+} from './productBundles';
 
 /** Pinned Storefront API version (see https://shopify.dev/docs/api/usage/versioning) */
 const SHOPIFY_API_VERSION = '2026-04';
@@ -877,10 +883,16 @@ function getNextPageSize(collected: number, limit: number | undefined): number {
  *
  * When `limit` is omitted, ALL products are fetched via cursor pagination.
  */
-export async function fetchProducts(limit?: number): Promise<ShopifyProduct[]> {
+export async function fetchProducts(limit?: number, options?: {
+  firstPageSize?: number;
+  onPage?: (products: ShopifyProduct[]) => void;
+  query?: string;
+  sortKey?: 'BEST_SELLING' | 'CREATED_AT' | 'ID' | 'PRICE' | 'TITLE';
+  reverse?: boolean;
+}): Promise<ShopifyProduct[]> {
   const query = `
-    query GetProducts($first: Int!, $after: String) {
-      products(first: $first, after: $after, sortKey: BEST_SELLING) {
+    query GetProducts($first: Int!, $after: String, $query: String, $sortKey: ProductSortKeys!, $reverse: Boolean!) {
+      products(first: $first, after: $after, query: $query, sortKey: $sortKey, reverse: $reverse) {
         edges {
           node {
             ${PRODUCT_FIELDS}
@@ -898,12 +910,17 @@ export async function fetchProducts(limit?: number): Promise<ShopifyProduct[]> {
   let cursor: string | null = null;
 
   while (true) {
-    const first = getNextPageSize(out.length, limit);
+    const pageSize = getNextPageSize(out.length, limit);
+    const first: number = cursor === null && options?.firstPageSize
+      ? Math.min(pageSize, Math.max(1, options.firstPageSize)) : pageSize;
     if (first <= 0) break;
 
     const payload = await storefrontRequest<ShopifyProductsQueryResponse>(query, {
       first,
       after: cursor,
+      query: options?.query,
+      sortKey: options?.sortKey ?? 'BEST_SELLING',
+      reverse: options?.reverse ?? false,
     });
     const messages = getGraphQlErrors(payload.errors);
     if (messages.length) {
@@ -914,10 +931,12 @@ export async function fetchProducts(limit?: number): Promise<ShopifyProduct[]> {
     if (!conn) break;
 
     for (const edge of conn.edges) {
+      if (isCatalogBundleProduct(edge.node.tags)) continue;
       out.push(normalizeProduct(edge.node));
       if (limit !== undefined && out.length >= limit) break;
     }
 
+    options?.onPage?.([...out]);
     if (limit !== undefined && out.length >= limit) break;
     if (!conn.pageInfo.hasNextPage || !conn.pageInfo.endCursor) break;
     cursor = conn.pageInfo.endCursor;
@@ -967,6 +986,7 @@ export async function fetchNewestProducts(limit?: number): Promise<ShopifyProduc
     if (!conn) break;
 
     for (const edge of conn.edges) {
+      if (isCatalogBundleProduct(edge.node.tags)) continue;
       out.push(normalizeProduct(edge.node));
       if (limit !== undefined && out.length >= limit) break;
     }
@@ -1021,6 +1041,7 @@ export async function searchProducts(searchQuery: string, limit?: number): Promi
     if (!conn) break;
 
     for (const edge of conn.edges) {
+      if (isCatalogBundleProduct(edge.node.tags)) continue;
       out.push(normalizeProduct(edge.node));
       if (limit !== undefined && out.length >= limit) break;
     }
@@ -1166,6 +1187,12 @@ export type FetchCollectionProductsOptions = {
   reverse?: boolean;
 };
 
+// The website exposes this brand as a collection route, but Shopify has no
+// matching collection. Its products are assigned via vendor / the `molla` tag.
+const BRAND_COLLECTION_QUERIES: Record<string, string> = {
+  'cereria-molla': 'vendor:"Cereria Mollá" OR tag:"molla"',
+};
+
 /**
  * Fetch products inside a single collection. When `limit` is omitted, ALL
  * products in the collection are fetched via cursor pagination.
@@ -1216,9 +1243,19 @@ export async function fetchCollectionProducts(
     }
 
     const conn = payload.data?.collection?.products;
-    if (!conn) break;
+    if (!conn) {
+      const brandQuery = BRAND_COLLECTION_QUERIES[handle];
+      if (!brandQuery) break;
+      return fetchProducts(limit, {
+        query: brandQuery,
+        sortKey: sortKey === 'CREATED' ? 'CREATED_AT'
+          : sortKey === 'COLLECTION_DEFAULT' || sortKey === 'MANUAL' ? 'BEST_SELLING' : sortKey,
+        reverse,
+      });
+    }
 
     for (const edge of conn.edges) {
+      if (isCatalogBundleProduct(edge.node.tags)) continue;
       out.push(normalizeProduct(edge.node));
       if (limit !== undefined && out.length >= limit) break;
     }
@@ -1284,6 +1321,64 @@ export async function fetchProductByHandle(handle: string): Promise<ShopifyProdu
 
   const node = payload.data?.productByHandle ?? null;
   return node ? normalizeProduct(node) : null;
+}
+
+/**
+ * באנדלים שהאתר מצמיד למוצר: מוצר Shopify נפרד עם תגית `bundle-of:<handle>`
+ * והווריאציות שלו הן מדרגות הכמות (2 יחידות, 3 יחידות, ולעיתים גם וריאציית מקור).
+ */
+export async function fetchProductBundleTiers(handle: string): Promise<ProductBundleTier[]> {
+  const normalizedHandle = handle.trim();
+  if (!normalizedHandle) return [];
+
+  const query = `
+    query ProductBundles($query: String!) {
+      products(first: 5, query: $query) {
+        edges {
+          node {
+            tags
+            variants(first: 100) {
+              edges {
+                node {
+                  id
+                  title
+                  availableForSale
+                  price { amount currencyCode }
+                  selectedOptions { name value }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const wantedTag = `bundle-of:${normalizedHandle}`;
+  const payload = await storefrontRequest<{
+    data?: {
+      products?: {
+        edges: Array<{
+          node: {
+            tags?: string[];
+            variants?: { edges: Array<{ node: BundleVariantNode }> };
+          };
+        }>;
+      };
+    };
+    errors?: Array<{ message: string }>;
+  }>(query, { query: `tag:"${wantedTag.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` });
+
+  const messages = getGraphQlErrors(payload.errors);
+  if (messages.length) {
+    throw new Error(messages.join(', '));
+  }
+
+  const nodes = (payload.data?.products?.edges ?? [])
+    .filter((edge) => (edge.node.tags ?? []).includes(wantedTag))
+    .flatMap((edge) => edge.node.variants?.edges.map((variant) => variant.node) ?? []);
+
+  return parseBundleVariantNodes(nodes);
 }
 
 export async function fetchCart(cartId: string): Promise<ShopifyCart | null> {
@@ -1465,6 +1560,95 @@ export async function updateCartDiscountCodes(
     discountCodes,
   });
   return assertCartMutation(payload.data?.cartDiscountCodesUpdate, payload.errors);
+}
+
+export type CartRecommendation = {
+  id: string;
+  title: string;
+  handle: string;
+  description: string;
+  price: number;
+  currencyCode: string;
+  imageUrl: string | null;
+  imageAltText: string | null;
+  variantId: string;
+  variantTitle: string | null;
+  availableForSale: boolean;
+  tags: string[];
+};
+
+/** המלצות Shopify לאותו מוצר — אותה שאילתה כמו קרוסלת «הוסיפו עוד משהו» באתר. */
+export async function fetchCartRecommendations(productId: string): Promise<CartRecommendation[]> {
+  const query = `
+    query Recommendations($productId: ID!) {
+      productRecommendations(productId: $productId) {
+        id
+        title
+        description
+        handle
+        tags
+        priceRange { minVariantPrice { amount currencyCode } }
+        images(first: 1) { edges { node { url altText } } }
+        variants(first: 1) {
+          edges {
+            node {
+              id
+              title
+              availableForSale
+              price { amount currencyCode }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await storefrontRequest<{
+    data?: {
+      productRecommendations?: Array<{
+        id: string;
+        title: string;
+        description?: string | null;
+        handle: string;
+        tags?: string[] | null;
+        priceRange?: { minVariantPrice?: { amount: string; currencyCode: string } | null } | null;
+        images?: { edges: Array<{ node?: { url?: string | null; altText?: string | null } | null }> };
+        variants?: {
+          edges: Array<{
+            node?: {
+              id: string;
+              title?: string | null;
+              availableForSale?: boolean;
+              price?: { amount: string; currencyCode: string } | null;
+            } | null;
+          }>;
+        };
+      } | null> | null;
+    };
+  }>(query, { productId });
+
+  return (payload.data?.productRecommendations ?? []).flatMap((node) => {
+    if (!node) return [];
+    const variant = node.variants?.edges?.[0]?.node;
+    if (!variant?.id) return [];
+    const image = node.images?.edges?.[0]?.node;
+    const amount = variant.price?.amount ?? node.priceRange?.minVariantPrice?.amount ?? '0';
+    const currencyCode = variant.price?.currencyCode ?? node.priceRange?.minVariantPrice?.currencyCode ?? 'ILS';
+    return [{
+      id: node.id,
+      title: node.title,
+      handle: node.handle,
+      description: node.description ?? '',
+      price: toNumber(amount),
+      currencyCode,
+      imageUrl: image?.url ?? null,
+      imageAltText: image?.altText ?? null,
+      variantId: variant.id,
+      variantTitle: variant.title ?? null,
+      availableForSale: variant.availableForSale ?? false,
+      tags: node.tags ?? [],
+    }];
+  });
 }
 
 /** Public Storefront GraphQL helper (Lovable / shop menu pipeline) */

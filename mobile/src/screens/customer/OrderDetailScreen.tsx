@@ -1,38 +1,13 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from '../../components/toast/Toast';
-import {
-  fetchCustomerOrderWithItems,
-  formatOrderDate,
-  formatOrderPrice,
-  getOrderStatusHeadline,
-  getOrderStatusLabel,
-  type CustomerOrderWithItems,
-} from '../../lib/orders';
+import { fetchCustomerOrderWithItems, formatOrderDate, formatOrderPrice, getOrderStatusLabel, type CustomerOrderWithItems } from '../../lib/orders';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
-
-const P = {
-  bg: '#F5F5F5',
-  card: '#FFFFFF',
-  separator: '#ECECEC',
-  label: '#111111',
-  secondaryLabel: '#555555',
-  tertiaryLabel: '#999999',
-  iconBg: '#F0F0F0',
-  iconColor: '#444444',
-  destructive: '#D94040',
-};
+import { AccountHeader, AccountIntro, AccountSection, AccountLoading, AccountEmpty, accountColors as C } from './AccountUI';
 
 export function CustomerOrderDetailScreen({
   orderId,
@@ -74,261 +49,66 @@ export function CustomerOrderDetailScreen({
 
   return (
     <View style={styles.root}>
-      <View style={[styles.headerBg, { paddingTop: insets.top }]}>
-        <View style={styles.headerBar}>
-          <Pressable
-            onPress={onBack}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="חזרה"
-            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
-          >
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-          </Pressable>
-
-          <View style={styles.headerTitles}>
-            <Text style={styles.headerTitle}>
-              {order ? `הזמנה #${order.order_number}` : 'פרטי הזמנה'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {order ? formatOrderDate(order.created_at) : 'טוען פרטים…'}
-            </Text>
-          </View>
-
-          <View style={{ width: 40 }} />
-        </View>
-      </View>
-
-      {loading && !order ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="small" color={P.iconColor} />
-          <Text style={styles.loadingText}>טוען פרטי הזמנה…</Text>
-        </View>
-      ) : !order ? (
-        <View style={styles.loadingWrap}>
-          <Ionicons name="alert-circle-outline" size={34} color={P.tertiaryLabel} />
-          <Text style={styles.emptyTitle}>ההזמנה לא נמצאה</Text>
-          <Pressable onPress={onBack} style={styles.emptyButton}>
-            <Text style={styles.emptyButtonText}>חזרה</Text>
-          </Pressable>
-        </View>
+      <AccountHeader onBack={onBack} />
+      {loading && !order ? <AccountLoading label="טוען פרטי הזמנה…" /> : !order ? (
+        <AccountEmpty icon="receipt-outline" title="ההזמנה לא נמצאה" description="אפשר לחזור לרשימת ההזמנות ולנסות שוב." action="חזרה להזמנות" onPress={onBack} />
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: 20,
-            paddingTop: 18,
-            paddingBottom: contentPaddingBottom + 20,
-            gap: 14,
-          }}
-        >
-          <View style={styles.statusCard}>
-            <View
-              style={[
-                styles.statusIcon,
-                { backgroundColor: isCancelled ? '#FFF0F0' : '#111111' },
-              ]}
-            >
-              <Ionicons
-                name={isCancelled ? 'close' : 'checkmark'}
-                size={22}
-                color={isCancelled ? P.destructive : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.statusMeta}>
-              <Text style={styles.statusTitle}>{getOrderStatusHeadline(order.status)}</Text>
-              <Text style={styles.statusSub}>{getOrderStatusLabel(order.status)}</Text>
-            </View>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>{order.item_count} פריטים</Text>
-            </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: contentPaddingBottom + 24 }}>
+          <AccountIntro title={'הזמנה #' + order.order_number} subtitle={formatOrderDate(order.created_at)} />
+          <View style={styles.statusRow}>
+            <Ionicons name={isCancelled ? 'close-circle-outline' : order.status === 'confirmed' ? 'checkmark-circle-outline' : 'time-outline'} size={23} color={isCancelled ? C.red : C.ink} />
+            <Text style={styles.statusLabel}>סטטוס ההזמנה</Text>
+            <Text style={[styles.statusValue, isCancelled && { color: C.red }]}>{getOrderStatusLabel(order.status)}</Text>
           </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>פריטים בהזמנה</Text>
-            <View style={styles.itemsList}>
-              {order.items.map((item, index) => (
-                <View key={item.id}>
-                  {index > 0 ? <View style={styles.itemDivider} /> : null}
-                  <View style={styles.itemRow}>
-                    <View style={styles.itemThumbWrap}>
-                      {item.image_url ? (
-                        <Image source={{ uri: item.image_url }} style={styles.itemThumb} />
-                      ) : (
-                        <Ionicons name="cube-outline" size={22} color={P.tertiaryLabel} />
-                      )}
-                    </View>
-
-                    <View style={styles.itemMeta}>
-                      <Text style={styles.itemTitle} numberOfLines={2}>
-                        {item.product_title}
-                      </Text>
-                      <Text style={styles.itemSub}>
-                        {item.quantity} × {formatOrderPrice(item.unit_price, order.currency_code)}
-                      </Text>
-                    </View>
-
-                    <Text style={styles.itemPrice}>
-                      {formatOrderPrice(item.line_total, order.currency_code)}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-
-              {!order.items.length ? (
-                <Text style={styles.emptyItems}>לא נמצאו פריטים להזמנה זו.</Text>
-              ) : null}
+          <AccountSection title="מה בהזמנה" />
+          {order.items.map((item) => (
+            <View key={item.id} style={styles.item}>
+              <View style={styles.imageWrap}>
+                {item.image_url ? <Image source={{ uri: item.image_url }} style={styles.image} resizeMode="contain" accessibilityLabel={item.product_title} /> : <Ionicons name="cube-outline" size={28} color="#A0A0A0" />}
+              </View>
+              <View style={styles.itemCopy}>
+                <Text style={styles.itemTitle}>{item.product_title}</Text>
+                <Text style={styles.itemQuantity}>{item.quantity} × {formatOrderPrice(item.unit_price, order.currency_code)}</Text>
+                <Text style={styles.itemPrice}>{formatOrderPrice(item.line_total, order.currency_code)}</Text>
+              </View>
             </View>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>סיכום תשלום</Text>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>מספר הזמנה</Text>
-              <Text style={styles.summaryValue}>#{order.order_number}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>תאריך</Text>
-              <Text style={styles.summaryValue}>{formatOrderDate(order.created_at)}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>פריטים</Text>
-              <Text style={styles.summaryValue}>{order.item_count}</Text>
-            </View>
-            <View style={styles.totalDivider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>סה״כ שולם</Text>
-              <Text style={styles.totalValue}>
-                {formatOrderPrice(order.total_amount, order.currency_code)}
-              </Text>
+          ))}
+          {!order.items.length ? <Text style={styles.emptyItems}>לא נמצאו פריטים להזמנה זו.</Text> : null}
+          <AccountSection title="סיכום ההזמנה" />
+          <View style={styles.receipt}>
+            <View style={styles.summaryRow}><Text style={styles.summaryLabel}>מספר הזמנה</Text><Text style={styles.summaryValue}>#{order.order_number}</Text></View>
+            <View style={styles.summaryRow}><Text style={styles.summaryLabel}>תאריך</Text><Text style={styles.summaryValue}>{formatOrderDate(order.created_at)}</Text></View>
+            <View style={styles.summaryRow}><Text style={styles.summaryLabel}>מספר פריטים</Text><Text style={styles.summaryValue}>{order.item_count}</Text></View>
+            <View style={styles.total}>
+              <Text style={styles.totalLabel}>סה״כ ההזמנה</Text>
+              <Text style={styles.totalValue}>{formatOrderPrice(order.total_amount, order.currency_code)}</Text>
             </View>
           </View>
         </ScrollView>
       )}
-
       <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: P.bg },
-  headerBg: {
-    backgroundColor: '#000000',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-  },
-  headerBar: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 22,
-    gap: 10,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  headerTitles: { flex: 1, alignItems: 'center', gap: 3 },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', textAlign: 'center' },
-  headerSubtitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 24 },
-  loadingText: { color: P.tertiaryLabel, fontSize: 14, fontWeight: '600' },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: P.label },
-  emptyButton: {
-    marginTop: 8,
-    minHeight: 44,
-    paddingHorizontal: 18,
-    borderRadius: 14,
-    backgroundColor: '#111111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
-  statusCard: {
-    backgroundColor: P.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: P.separator,
-    padding: 16,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-  },
-  statusIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusMeta: { flex: 1, alignItems: 'flex-end', gap: 2 },
-  statusTitle: { fontSize: 17, fontWeight: '800', color: P.label, textAlign: 'right' },
-  statusSub: { fontSize: 13, color: P.tertiaryLabel, textAlign: 'right' },
-  statusBadge: {
-    borderRadius: 999,
-    backgroundColor: P.iconBg,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  statusBadgeText: { fontSize: 12, fontWeight: '700', color: P.secondaryLabel },
-  card: {
-    backgroundColor: P.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: P.separator,
-    padding: 16,
-    gap: 14,
-  },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: P.tertiaryLabel,
-    textAlign: 'right',
-    letterSpacing: 0.3,
-  },
-  itemsList: { gap: 0 },
-  itemRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  itemDivider: { height: StyleSheet.hairlineWidth, backgroundColor: P.separator },
-  itemThumbWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 14,
-    backgroundColor: P.iconBg,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemThumb: { width: '100%', height: '100%' },
-  itemMeta: { flex: 1, alignItems: 'flex-end', gap: 4 },
-  itemTitle: { fontSize: 15, fontWeight: '700', color: P.label, textAlign: 'right' },
-  itemSub: { fontSize: 12, color: P.tertiaryLabel, textAlign: 'right' },
-  itemPrice: { fontSize: 15, fontWeight: '800', color: P.label },
-  emptyItems: { color: P.tertiaryLabel, textAlign: 'center', paddingVertical: 12 },
-  summaryRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryLabel: { fontSize: 14, color: P.tertiaryLabel, fontWeight: '600' },
-  summaryValue: { fontSize: 14, color: P.label, fontWeight: '700' },
-  totalDivider: { height: StyleSheet.hairlineWidth, backgroundColor: P.separator },
-  totalLabel: { fontSize: 16, color: P.label, fontWeight: '800' },
-  totalValue: { fontSize: 18, color: P.label, fontWeight: '900' },
+  root: { flex: 1, backgroundColor: C.bg },
+  statusRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingVertical: 18, borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.line },
+  statusLabel: { color: C.muted, fontSize: 13, lineHeight: 20, flex: 1, textAlign: 'right' },
+  statusValue: { color: C.ink, fontSize: 13, lineHeight: 20, fontWeight: '600', textAlign: 'right' },
+  item: { flexDirection: 'row-reverse', alignItems: 'center', gap: 18, paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: C.line },
+  imageWrap: { width: 76, height: 92, borderRadius: radii.compact, backgroundColor: '#F6F6F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  image: { width: '100%', height: '100%' },
+  itemCopy: { flex: 1, gap: 7 },
+  itemTitle: { fontSize: 15, lineHeight: 23, color: C.ink, fontWeight: '600', textAlign: 'right' },
+  itemQuantity: { fontSize: 12, lineHeight: 19, color: C.muted, textAlign: 'right' },
+  itemPrice: { fontSize: 16, lineHeight: 22, color: C.ink, fontWeight: '600', textAlign: 'right' },
+  emptyItems: { color: C.muted, fontSize: 13, lineHeight: 22, textAlign: 'right', paddingVertical: 20 },
+  receipt: { backgroundColor: '#F7F7F7', padding: 20, marginTop: 8, borderRadius: radii.surface, gap: 16 },
+  summaryRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  summaryLabel: { fontSize: 12, lineHeight: 20, color: C.muted, textAlign: 'right' },
+  summaryValue: { fontSize: 13, lineHeight: 20, color: C.ink, textAlign: 'right' },
+  total: { flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderTopWidth: 1, borderTopColor: '#DDDDDD', paddingTop: 18, marginTop: 2 },
+  totalLabel: { fontSize: 14, color: C.ink, fontWeight: '600' },
+  totalValue: { fontSize: 24, lineHeight: 32, color: C.ink, fontWeight: '700', writingDirection: 'ltr' },
 });

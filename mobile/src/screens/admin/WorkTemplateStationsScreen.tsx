@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Toast from '../../components/toast/Toast';
@@ -457,7 +458,7 @@ const s = StyleSheet.create({
   },
   dayPill: {
     backgroundColor: colors.primary,
-    borderRadius: 20,
+    borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 5,
   },
@@ -474,7 +475,7 @@ const s = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'baseline',
     backgroundColor: BG,
-    borderRadius: 14,
+    borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
@@ -502,7 +503,7 @@ const s = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 13,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: radii.surface,
     backgroundColor: 'rgba(37,99,235,0.07)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.15)',
@@ -526,7 +527,7 @@ const s = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: BG,
-    borderRadius: 12,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: SEPARATOR,
     paddingHorizontal: 12,
@@ -543,7 +544,7 @@ const s = StyleSheet.create({
   searchClear: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: radii.pill,
     backgroundColor: LABEL_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
@@ -560,7 +561,7 @@ const s = StyleSheet.create({
   /* ══ Card ══ */
   card: {
     backgroundColor: CARD_BG,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     flexDirection: 'row',
     alignItems: 'stretch',
     shadowColor: '#000',
@@ -609,7 +610,7 @@ const s = StyleSheet.create({
     gap: 9,
   },
   orderPill: {
-    borderRadius: 20,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(37,99,235,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -626,7 +627,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: 'rgba(37,99,235,0.07)',
-    borderRadius: 20,
+    borderRadius: radii.pill,
     paddingHorizontal: 11,
     paddingVertical: 5,
   },
@@ -684,7 +685,7 @@ const s = StyleSheet.create({
   emptyCircle: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(37,99,235,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.12)',
@@ -701,7 +702,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(37,99,235,0.07)',
-    borderRadius: 8,
+    borderRadius: radii.compact,
     paddingHorizontal: 9,
     paddingVertical: 4,
     marginLeft: 10,
@@ -763,7 +764,7 @@ const s = StyleSheet.create({
   emptyIconWrap: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(37,99,235,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -795,7 +796,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 9,
     backgroundColor: colors.primary,
-    borderRadius: 32,
+    borderRadius: radii.pill,
     paddingHorizontal: 28,
     paddingVertical: 17,
     shadowColor: colors.primary,

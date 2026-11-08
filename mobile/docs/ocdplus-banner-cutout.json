@@ -1,0 +1,7 @@
+{
+  "tool": "Built-in image_gen",
+  "asset": "../assets/ocdplus-membership-card-cutout.png",
+  "source": "C:/Users/user/.codex/generated_images/01a1b559-5334-7771-8d90-1c6adb507db8/exec-0a55530f-539d-498c-a6a0-1d0b3efafc4c.png",
+  "delivery": "720x480 PNG with alpha. Explicit image dimensions in native component.",
+  "prompt": "Edit the supplied OCD+ membership card image for use as a transparent foreground asset in a dark native mobile banner. Remove the entire beige background and ground plane, leaving ONLY the single physical black membership card with true transparent alpha around it. Preserve the exact existing matte texture, champagne gold ocd+ logo, SuperClean subtitle, Hebrew כרטיס חבר, subtle embossed circular d, and MEMBER text. Preserve the card's gentle counterclockwise tilt and perspective. Add only a very restrained soft warm edge light so the dark card edge will remain visible on a charcoal #20211F background. Keep shadows tight and alpha-transparent. No surrounding rectangle, no glow, no additional text, no scene, no extra cards. Fit the complete card with 8 percent transparent padding around it, landscape approximately 3:2 canvas. Deliver a clean production-quality transparent PNG."
+}

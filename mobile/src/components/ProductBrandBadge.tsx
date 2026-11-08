@@ -15,6 +15,7 @@ type ProductBrandBadgeProps = {
   top?: number;
   right?: number;
   zIndex?: number;
+  imageOnly?: boolean;
 };
 
 function resolveBrandBadgeBackground(brand: RemoteBrand, hasImage: boolean): string {
@@ -33,6 +34,9 @@ const BADGE_SHADOW = {
   elevation: 3,
 } as const;
 
+// These logos include their own background, which should reach the circular edge.
+const FULL_BLEED_BRANDS = new Set(['פינל-1', 'יעקבי', 'סנו-1', 'shiny', 'ocd']);
+
 export function ProductBrandBadge({
   product,
   brands,
@@ -41,6 +45,7 @@ export function ProductBrandBadge({
   top,
   right = 10,
   zIndex = 3,
+  imageOnly = false,
 }: ProductBrandBadgeProps) {
   const brand = useMemo(
     () =>
@@ -58,7 +63,9 @@ export function ProductBrandBadge({
   if (!brand) return null;
 
   const imageUri = normalizeBrandImageUrl(brand.image);
+  if (imageOnly && !imageUri) return null;
   const tone = resolveBrandBadgeBackground(brand, !!imageUri);
+  const fullBleed = imageOnly && FULL_BLEED_BRANDS.has(brand.handle);
 
   return (
     <View
@@ -81,8 +88,9 @@ export function ProductBrandBadge({
           borderRadius: size / 2,
           overflow: 'hidden',
           backgroundColor: imageUri ? '#FFFFFF' : tone,
-          borderWidth: 2,
-          borderColor: '#FFFFFF',
+          borderWidth: fullBleed ? 0 : imageOnly ? 1 : 2,
+          borderColor: imageOnly ? '#ECEDEF' : '#FFFFFF',
+          padding: imageOnly && !fullBleed ? 3 : 0,
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -90,7 +98,7 @@ export function ProductBrandBadge({
         {imageUri ? (
           <Image
             source={{ uri: imageUri }}
-            resizeMode="cover"
+            resizeMode={imageOnly && !fullBleed ? 'contain' : 'cover'}
             accessibilityLabel={brand.label}
             style={{ width: '100%', height: '100%' }}
           />

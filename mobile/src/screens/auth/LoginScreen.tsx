@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Toast from '../../components/toast/Toast';
+import { isLocalDemoPhone } from '../../lib/localDemoAccount';
 import { Screen } from '../../components/Screen';
 import { useAuth } from '../../state/AuthContext';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
@@ -104,7 +105,7 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
       setStep('code');
       startResendTimer();
       Keyboard.dismiss();
-      setOtpNoticeVisible(true);
+      setOtpNoticeVisible(!isLocalDemoPhone(res.phone));
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שגיאה בשליחת הקוד', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -123,7 +124,7 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
       lastAutoVerifiedCode.current = '';
       startResendTimer();
       Keyboard.dismiss();
-      setOtpNoticeVisible(true);
+      setOtpNoticeVisible(!isLocalDemoPhone(res.phone));
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'שגיאה בשליחת קוד חדש', text2: e?.message ?? 'Unknown error' });
     } finally {
@@ -166,7 +167,9 @@ export function LoginScreen({ onGoToRegister, onTabPress }: LoginScreenProps) {
   const subtitle =
     step === 'phone'
       ? 'הזן מספר טלפון ונשלח לך קוד אימות ב-SMS'
-      : `שלחנו קוד בן 6 ספרות למספר ${displayPhone}`;
+      : isLocalDemoPhone(verifiedPhone)
+        ? 'חשבון דמו מקומי — הזינו 123456. לא נשלח SMS.'
+        : `שלחנו קוד בן 6 ספרות למספר ${displayPhone}`;
 
   return (
     <Screen padded={false} backgroundColor="#FFFFFF" safeAreaEdges={['top']}>

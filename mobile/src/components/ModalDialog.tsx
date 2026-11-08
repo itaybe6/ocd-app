@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut, FadeInUp, FadeOutDown } from 'react-native-reanimated';
@@ -73,7 +74,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 20,
+    borderRadius: radii.sheet,
     padding: 14,
     shadowColor: '#0F172A',
     shadowOpacity: 0.12,

@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React from 'react';
 import { View, type ViewProps } from 'react-native';
 import { colors } from '../../theme/colors';
@@ -11,7 +12,7 @@ export function Card({ style, ...rest }: ViewProps) {
           backgroundColor: colors.card,
           borderColor: colors.border,
           borderWidth: 1,
-          borderRadius: 18,
+          borderRadius: radii.surface,
           padding: 14,
         },
         style,

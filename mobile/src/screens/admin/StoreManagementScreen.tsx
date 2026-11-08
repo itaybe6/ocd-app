@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -77,7 +78,7 @@ const sp = StyleSheet.create({
   arrowBtn: {
     width: 38,
     height: 32,
-    borderRadius: 10,
+    borderRadius: radii.compact,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -88,7 +89,7 @@ const sp = StyleSheet.create({
   valuePill: {
     width: 58,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.pill,
     backgroundColor: '#EFF6FF',
     borderWidth: 1.5,
     borderColor: '#BFDBFE',
@@ -142,7 +143,7 @@ const tp = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -660,7 +661,7 @@ export function StoreManagementScreen() {
               onPress={submitPush}
               style={{
                 backgroundColor: '#1D4ED8',
-                borderRadius: 16,
+                borderRadius: radii.surface,
                 paddingVertical: 16,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -707,7 +708,7 @@ const s = StyleSheet.create({
     flexBasis: '31%',
     flexGrow: 1,
     minWidth: 110,
-    borderRadius: 18,
+    borderRadius: radii.surface,
     paddingVertical: 14,
     paddingHorizontal: 14,
     backgroundColor: '#FFFFFF',
@@ -724,7 +725,7 @@ const s = StyleSheet.create({
   statHint: { color: '#94A3B8', fontWeight: '700', fontSize: 11, textAlign: 'right', marginTop: 6 },
 
   pushLauncher: {
-    borderRadius: 20,
+    borderRadius: radii.surface,
     shadowColor: '#0F172A',
     shadowOpacity: 0.08,
     shadowRadius: 20,
@@ -733,7 +734,7 @@ const s = StyleSheet.create({
   },
   pushLauncherPressed: { opacity: 0.92, transform: [{ scale: 0.992 }] },
   pushLauncherInner: {
-    borderRadius: 20,
+    borderRadius: radii.surface,
     padding: 14,
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1.5,
@@ -742,7 +743,7 @@ const s = StyleSheet.create({
   },
   pushLauncherFrame: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.06)',
   },
@@ -750,7 +751,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     width: 180,
     height: 180,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(37,99,235,0.12)',
     top: -90,
     right: -80,
@@ -759,7 +760,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     width: 140,
     height: 140,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: 'rgba(99,102,241,0.10)',
     bottom: -70,
     left: -70,
@@ -768,7 +769,7 @@ const s = StyleSheet.create({
   pushLauncherIconWrap: {
     width: 46,
     height: 46,
-    borderRadius: 16,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.10)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.18)',
@@ -781,7 +782,7 @@ const s = StyleSheet.create({
   pushLauncherChevronWrap: {
     width: 34,
     height: 34,
-    borderRadius: 12,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.10)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.18)',
@@ -806,7 +807,7 @@ const plusM = StyleSheet.create({
   row: {
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.08)',
@@ -841,7 +842,7 @@ const m = StyleSheet.create({
     minWidth: 44,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: radii.surface,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
   },
@@ -862,7 +863,7 @@ const m = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 14,
-    borderRadius: 16,
+    borderRadius: radii.pill,
     backgroundColor: '#F0F9FF',
     borderWidth: 1,
     borderColor: '#BAE6FD',
@@ -887,7 +888,7 @@ const m = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     padding: 16,
-    borderRadius: 18,
+    borderRadius: radii.surface,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
@@ -896,7 +897,7 @@ const m = StyleSheet.create({
   optionIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -907,7 +908,7 @@ const m = StyleSheet.create({
   check: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
@@ -917,7 +918,7 @@ const m = StyleSheet.create({
   /* Scheduler */
   schedulerWrap: {
     gap: 12,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',

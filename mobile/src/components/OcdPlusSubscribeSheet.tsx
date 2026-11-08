@@ -1,30 +1,35 @@
+import { radii } from '../theme/radii';
 import React, { useCallback, useMemo } from 'react';
 import {
-  Dimensions,
-  Platform,
+  ActivityIndicator,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { ArrowLeft, Check, X } from 'lucide-react-native';
+import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ModalSheet } from './ModalSheet';
 import { OcdPlusMark } from './OcdPlusMark';
-import { LavaLampDark } from './LavaLampDark';
 import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
 import { safeNavigate } from '../navigation/navigationRef';
 import {
+  OCD_PLUS_CHECKLIST_ITEMS,
+  OCD_PLUS_CHECKLIST_SUMMARY,
   OCD_PLUS_HEADLINE,
-  OCD_PLUS_SUBSCRIBE_BUTTON_LABEL,
   OCD_PLUS_SUBTITLE,
-  OcdPlusChecklist,
-  OcdPlusChecklistSummary,
 } from './ocdPlusBenefits';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
-const GOLD = '#D4AF37';
-const GOLD_SOFT = 'rgba(212,175,55,0.22)';
+// Match the store's black navigation, white surfaces and silver OCD+ mark.
+const palette = {
+  surface: '#FFFFFF',
+  ink: '#000000',
+  muted: '#6B6B6B',
+  border: '#E8E8E8',
+};
 
 type Props = {
   visible: boolean;
@@ -39,22 +44,86 @@ function formatBillingDate(iso: string | null | undefined): string | null {
   return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function OcdPlusMemberSheetContent({ onClose }: { onClose: () => void }) {
+function SheetContent({ children, onClose, isSubscriber }: React.PropsWithChildren<{ onClose: () => void; isSubscriber: boolean }>) {
   const insets = useSafeAreaInsets();
-  const { subscription } = useOcdPlusMembership();
+  const { height } = useWindowDimensions();
 
+  return (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      style={{ maxHeight: Math.round(height * 0.80) }}
+      contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.toolbar}>
+        <Pressable
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="סגירת חלון OCD+"
+          style={styles.closeButton}
+        >
+          <X size={20} color={palette.ink} strokeWidth={1.5} />
+        </Pressable>
+      </View>
+      <View style={styles.brand}>
+        <View style={styles.brandStage}>
+          <Svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 320 104"
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+            accessible={false}
+          >
+            <Defs>
+              <RadialGradient id="memberSilver" cx="50%" cy="50%" rx="50%" ry="50%">
+                <Stop offset="0" stopColor="#DADDE1" stopOpacity={0.65} />
+                <Stop offset="0.55" stopColor="#ECEEF0" stopOpacity={0.45} />
+                <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Ellipse cx="160" cy="52" rx="132" ry="52" fill="url(#memberSilver)" />
+            <Path d="M270 24v40M250 44h40" stroke="#E5E5E5" strokeWidth={5} strokeLinecap="round" />
+          </Svg>
+          <OcdPlusMark size={86} color={palette.ink} />
+        </View>
+        <View style={styles.membershipStatus}>
+          {isSubscriber ? <Check size={13} color={palette.ink} strokeWidth={1.7} /> : null}
+          <Text style={styles.statusText}>{isSubscriber ? 'המנוי שלכם פעיל' : 'מועדון החברים של OCD'}</Text>
+        </View>
+      </View>
+      {children}
+      <Pressable onPress={onClose} accessibilityRole="button" style={styles.continueButton}>
+        <Text style={styles.continueLabel}>להמשיך בקניות</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+function SheetButton({ label, onPress, busy = false }: { label: string; onPress: () => void; busy?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: busy, busy }}
+      style={styles.actionHitArea}
+    >
+      {/* Keep the visible surface on a regular View: native styling interop can drop Pressable callback styles. */}
+      <View style={[styles.actionButton, busy && styles.actionBusy]}>
+        <Text style={styles.actionLabel}>{busy ? 'פותחים את ההצטרפות…' : label}</Text>
+        {busy ? <ActivityIndicator size="small" color={palette.surface} /> : <ArrowLeft size={18} color={palette.surface} strokeWidth={1.7} />}
+      </View>
+    </Pressable>
+  );
+}
+
+function OcdPlusMemberSheetContent({ onClose }: { onClose: () => void }) {
+  const { subscription } = useOcdPlusMembership();
   const nextBillingLabel = useMemo(
     () => formatBillingDate(subscription?.next_billing_at ?? subscription?.current_period_end),
     [subscription?.next_billing_at, subscription?.current_period_end],
   );
-
-  const billingNote = useMemo(() => {
-    if (!nextBillingLabel) return null;
-    if (subscription?.cancel_at_period_end) {
-      return `המנוי יסתיים ב־${nextBillingLabel}`;
-    }
-    return `החיוב הבא: ${nextBillingLabel}`;
-  }, [nextBillingLabel, subscription?.cancel_at_period_end]);
 
   const handleManagePress = useCallback(() => {
     onClose();
@@ -64,294 +133,94 @@ function OcdPlusMemberSheetContent({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      style={{ maxHeight: Math.round(SCREEN_H * 0.80) }}
-      contentContainerStyle={{
-        paddingHorizontal: 22,
-        paddingBottom: Math.max(insets.bottom, 16) + 24,
-        paddingTop: 6,
-      }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 20 }}>
-        <OcdPlusMark size={72} />
-        <View
-          style={{
-            marginTop: 16,
-            paddingHorizontal: 14,
-            paddingVertical: 6,
-            borderRadius: 999,
-            backgroundColor: GOLD_SOFT,
-            borderWidth: 1,
-            borderColor: 'rgba(212,175,55,0.45)',
-          }}
-        >
-          <Text style={{ color: GOLD, fontSize: 12.5, fontWeight: '900', letterSpacing: 0.6 }}>
-            חבר VIP פעיל
-          </Text>
-        </View>
-      </View>
-
-      <Text
-        style={{
-          color: '#FFFFFF',
-          fontSize: 24,
-          fontWeight: '900',
-          textAlign: 'center',
-          lineHeight: 32,
-          marginBottom: 10,
-        }}
-      >
-        אתם כבר חברי{' '}
-        <Text style={{ color: GOLD }}>OCD+</Text>
+    <SheetContent onClose={onClose} isSubscriber>
+      <Text style={styles.heading}>טוב שאתם איתנו.</Text>
+      <View style={styles.headingRule} />
+      <Text style={styles.description}>
+        ההנחות הקבועות, ההשקות המוקדמות והשירות המועדף — הכל מחכה לכם בחנות.
       </Text>
-
-      <Text
-        style={{
-          color: 'rgba(255,255,255,0.58)',
-          fontSize: 14.5,
-          lineHeight: 23,
-          textAlign: 'center',
-          marginBottom: 18,
-          paddingHorizontal: 6,
-        }}
-      >
-        תודה שאתם איתנו. ההנחות, ההשקות המוקדמות וכל ההטבות שלכם פעילות ומחכות לכם בחנות.
-      </Text>
-
-      {billingNote ? (
-        <View
-          style={{
-            alignSelf: 'stretch',
-            marginBottom: 20,
-            paddingVertical: 12,
-            paddingHorizontal: 16,
-            borderRadius: 16,
-            backgroundColor: 'rgba(255,255,255,0.06)',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.1)',
-          }}
-        >
-          <Text style={{ color: 'rgba(255,255,255,0.72)', fontSize: 13.5, textAlign: 'center', fontWeight: '700' }}>
-            {billingNote}
-          </Text>
+      {nextBillingLabel ? (
+        <View style={styles.billingRow}>
+          <Text style={styles.billingLabel}>{subscription?.cancel_at_period_end ? 'המנוי מסתיים ב־' : 'החיוב הבא'}</Text>
+          <Text style={styles.billingDate}>{nextBillingLabel}</Text>
         </View>
       ) : null}
-
-      <View
-        style={{
-          alignSelf: 'stretch',
-          borderRadius: 999,
-          overflow: 'hidden',
-          backgroundColor: GOLD,
-          shadowColor: GOLD,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
-          shadowRadius: 14,
-          elevation: 6,
-          marginBottom: 14,
-        }}
-      >
-        <Pressable
-          onPress={handleManagePress}
-          android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
-          style={({ pressed }) => ({
-            width: '100%',
-            opacity: pressed ? 0.88 : 1,
-          })}
-        >
-          <View
-            style={{
-              width: '100%',
-              minHeight: 52,
-              justifyContent: 'center',
-              alignItems: 'center',
-              paddingVertical: 16,
-              paddingHorizontal: 24,
-            }}
-          >
-            <Text
-              style={{
-                color: '#1A1200',
-                fontSize: 16.5,
-                fontWeight: '900',
-                letterSpacing: 0.3,
-                lineHeight: 22,
-                textAlign: 'center',
-                ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
-              }}
-            >
-              לאזור האישי לניהול המנוי
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-
-      <Text
-        style={{
-          color: 'rgba(255,255,255,0.22)',
-          fontSize: 12,
-          textAlign: 'center',
-          letterSpacing: 0.2,
-        }}
-      >
-        גרור למטה לסגירה
-      </Text>
-    </ScrollView>
+      <SheetButton label="לניהול המנוי" onPress={handleManagePress} />
+    </SheetContent>
   );
 }
 
 function OcdPlusSubscribeSheetContent({ onClose }: { onClose: () => void }) {
-  const insets = useSafeAreaInsets();
   const { busy, startPurchase } = useOcdPlusMembership();
-  const opening = busy;
-
   const handlePurchase = useCallback(async () => {
     await startPurchase();
     onClose();
   }, [onClose, startPurchase]);
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      style={{ maxHeight: Math.round(SCREEN_H * 0.80) }}
-      contentContainerStyle={{
-        paddingHorizontal: 22,
-        paddingBottom: Math.max(insets.bottom, 16) + 24,
-        paddingTop: 6,
-      }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 22 }}>
-        <OcdPlusMark size={72} />
-      </View>
-
-      <Text
-        style={{
-          color: '#FFFFFF',
-          fontSize: 24,
-          fontWeight: '900',
-          textAlign: 'center',
-          lineHeight: 32,
-          marginBottom: 10,
-        }}
-      >
-        {OCD_PLUS_HEADLINE}
-      </Text>
-
-      <Text
-        style={{
-          color: 'rgba(255,255,255,0.52)',
-          fontSize: 14.5,
-          lineHeight: 23,
-          textAlign: 'center',
-          marginBottom: 22,
-          paddingHorizontal: 6,
-        }}
-      >
-        {OCD_PLUS_SUBTITLE}
-      </Text>
-
-      <View style={{ marginBottom: 6, paddingHorizontal: 4 }}>
-        <OcdPlusChecklist dark />
-      </View>
-
-      <OcdPlusChecklistSummary dark />
-
-      <View
-        style={{
-          alignSelf: 'stretch',
-          borderRadius: 999,
-          overflow: 'hidden',
-          backgroundColor: '#FFFFFF',
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
-          shadowRadius: 14,
-          elevation: 6,
-          marginBottom: 14,
-        }}
-      >
-        <Pressable
-          onPress={handlePurchase}
-          disabled={opening}
-          android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
-          style={({ pressed }) => ({
-            width: '100%',
-            opacity: pressed || opening ? 0.82 : 1,
-          })}
-        >
-          <View
-            style={{
-              width: '100%',
-              minHeight: 52,
-              justifyContent: 'center',
-              alignItems: 'center',
-              paddingVertical: 16,
-              paddingHorizontal: 24,
-            }}
-          >
-            <Text
-              style={{
-                color: '#000000',
-                fontSize: 16.5,
-                fontWeight: '900',
-                letterSpacing: 0.3,
-                lineHeight: 22,
-                textAlign: 'center',
-                ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
-              }}
-            >
-              {OCD_PLUS_SUBSCRIBE_BUTTON_LABEL}
-            </Text>
+    <SheetContent onClose={onClose} isSubscriber={false}>
+      <Text style={styles.heading}>{OCD_PLUS_HEADLINE}</Text>
+      <View style={styles.headingRule} />
+      <Text style={styles.price}>{OCD_PLUS_SUBTITLE}</Text>
+      <View style={styles.checklist}>
+        {OCD_PLUS_CHECKLIST_ITEMS.map((item) => (
+          <View key={item.lead} style={styles.checklistRow}>
+            <Check size={15} color={palette.ink} strokeWidth={1.5} />
+            <Text style={styles.checklistText}><Text style={styles.checklistLead}>{item.lead}</Text>{item.tail}</Text>
           </View>
-        </Pressable>
+        ))}
       </View>
-
-      <Text
-        style={{
-          color: 'rgba(255,255,255,0.22)',
-          fontSize: 12,
-          textAlign: 'center',
-          letterSpacing: 0.2,
-        }}
-      >
-        גרור למטה לסגירה
-      </Text>
-    </ScrollView>
+      <Text style={styles.summary}>{OCD_PLUS_CHECKLIST_SUMMARY}</Text>
+      <SheetButton label="מצטרפים למועדון OCD+" onPress={handlePurchase} busy={busy} />
+    </SheetContent>
   );
 }
 
 export function OcdPlusSubscribeSheet({ visible, onClose, isSubscriber }: Props) {
-  const sheetMaxH = Math.round(SCREEN_H * 0.92);
-
+  const { height } = useWindowDimensions();
   return (
     <ModalSheet
       visible={visible}
       onClose={onClose}
-      dark
-      background={
-        <LavaLampDark
-          width={SCREEN_W}
-          height={sheetMaxH}
-          count={5}
-          duration={22000}
-        />
-      }
       containerStyle={{
         paddingHorizontal: 0,
         paddingTop: 0,
         paddingBottom: 0,
-        maxHeight: sheetMaxH,
-        backgroundColor: '#08090F',
+        maxHeight: Math.round(height * 0.92),
+        backgroundColor: palette.surface,
+        borderTopLeftRadius: radii.sheet,
+        borderTopRightRadius: radii.sheet,
       }}
     >
-      {isSubscriber ? (
-        <OcdPlusMemberSheetContent onClose={onClose} />
-      ) : (
-        <OcdPlusSubscribeSheetContent onClose={onClose} />
-      )}
+      {isSubscriber ? <OcdPlusMemberSheetContent onClose={onClose} /> : <OcdPlusSubscribeSheetContent onClose={onClose} />}
     </ModalSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  content: { paddingHorizontal: 26 },
+  toolbar: { alignItems: 'flex-start', height: 36, marginHorizontal: -10 },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  brand: { alignItems: 'center', paddingTop: 2, marginBottom: 22, gap: 10 },
+  brandStage: { width: '100%', height: 104, alignItems: 'center', justifyContent: 'center' },
+  membershipStatus: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  statusText: { color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  heading: { color: palette.ink, fontSize: 26, lineHeight: 34, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
+  headingRule: { width: 26, height: 2, backgroundColor: '#BFC2C6', alignSelf: 'center', marginBottom: 14 },
+  description: { color: palette.muted, fontSize: 14, lineHeight: 23, textAlign: 'center', marginBottom: 28, paddingHorizontal: 4 },
+  billingRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: palette.border, paddingVertical: 17, marginBottom: 24 },
+  billingLabel: { color: palette.muted, fontSize: 12, lineHeight: 20, textAlign: 'right', flexShrink: 1 },
+  billingDate: { color: palette.ink, fontSize: 13, lineHeight: 20, fontWeight: '600', textAlign: 'right' },
+  actionHitArea: { alignSelf: 'stretch' },
+  actionButton: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: palette.ink, minHeight: 54, paddingHorizontal: 20, paddingVertical: 16, borderRadius: radii.surface },
+  actionBusy: { opacity: 0.65 },
+  actionLabel: { color: palette.surface, fontSize: 15, lineHeight: 22, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  continueButton: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 6, paddingVertical: 12 },
+  continueLabel: { color: palette.muted, fontSize: 12, lineHeight: 20, textAlign: 'center' },
+  price: { color: palette.muted, fontSize: 15, lineHeight: 23, textAlign: 'center', marginBottom: 26 },
+  checklist: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: palette.border, paddingVertical: 22, gap: 18 },
+  checklistRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  checklistText: { flex: 1, color: palette.muted, fontSize: 14, lineHeight: 22, textAlign: 'right' },
+  checklistLead: { color: palette.ink, fontWeight: '600' },
+  summary: { color: palette.muted, fontSize: 12, lineHeight: 20, textAlign: 'center', marginVertical: 20 },
+});

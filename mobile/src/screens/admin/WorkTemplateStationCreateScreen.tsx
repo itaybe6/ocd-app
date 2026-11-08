@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -135,34 +136,34 @@ const pm = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12,
     backgroundColor: colors.elevated, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { width: 36, height: 36, borderRadius: radii.pill, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   title: { color: colors.text, fontSize: 18, fontWeight: '900' },
   searchWrap: {
     flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: colors.elevated,
-    borderRadius: 14, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radii.surface, borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 16, marginTop: 12, gap: 10,
   },
   searchInput: { flex: 1, color: colors.text, textAlign: 'right', fontSize: 15, padding: 0 },
-  clearQueryBtn: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
+  clearQueryBtn: { width: 20, height: 20, borderRadius: radii.pill, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
   clearRow: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 10,
-    paddingVertical: 10, paddingHorizontal: 14, backgroundColor: '#FEF2F2', borderRadius: 14, borderWidth: 1, borderColor: '#FECACA',
+    paddingVertical: 10, paddingHorizontal: 14, backgroundColor: '#FEF2F2', borderRadius: radii.surface, borderWidth: 1, borderColor: '#FECACA',
   },
   clearText: { color: colors.danger, fontWeight: '700', fontSize: 14 },
   listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40, gap: 8 },
   userRow: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: 12, backgroundColor: colors.elevated,
-    borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radii.surface, paddingVertical: 12, paddingHorizontal: 14,
   },
   userRowSelected: { backgroundColor: 'rgba(37,99,235,0.06)', borderColor: 'rgba(37,99,235,0.25)' },
   userInfo: { flex: 1, alignItems: 'flex-end' },
   userName: { color: colors.text, fontWeight: '700', fontSize: 15, textAlign: 'right' },
   userNameSelected: { fontWeight: '900' },
   userSelectedBadge: { color: colors.primary, fontSize: 11, fontWeight: '700', marginTop: 2 },
-  checkCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  checkCircle: { width: 24, height: 24, borderRadius: radii.pill, backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   checkCircleActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   emptyWrap: { alignItems: 'center', paddingTop: 50, gap: 12 },
-  emptyIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  emptyIcon: { width: 60, height: 60, borderRadius: radii.pill, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: colors.muted, fontSize: 15, fontWeight: '700' },
 });
 
@@ -356,14 +357,14 @@ const s = StyleSheet.create({
     letterSpacing: 0.5, marginBottom: 8, paddingHorizontal: 4,
   },
   card: {
-    backgroundColor: colors.elevated, borderRadius: 20, borderWidth: 1,
+    backgroundColor: colors.elevated, borderRadius: radii.surface, borderWidth: 1,
     borderColor: colors.border, overflow: 'hidden', elevation: 2,
   },
   personRow: {
     flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
   personAvatar: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(37,99,235,0.08)',
+    width: 42, height: 42, borderRadius: radii.pill, backgroundColor: 'rgba(37,99,235,0.08)',
     borderWidth: 1.5, borderColor: 'rgba(37,99,235,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   personAvatarWorker: { backgroundColor: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.15)' },
@@ -371,25 +372,25 @@ const s = StyleSheet.create({
   personRole: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.4, marginBottom: 2 },
   personName: { color: colors.text, fontSize: 15, fontWeight: '800', textAlign: 'right' },
   personNameEmpty: { color: '#94A3B8', fontWeight: '600' },
-  selectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+  selectedDot: { width: 8, height: 8, borderRadius: radii.pill, backgroundColor: colors.primary },
   selectedDotWorker: { backgroundColor: '#8B5CF6' },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: 16 },
   timeRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 14, padding: 16 },
   timeIconWrap: {
-    width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(37,99,235,0.08)',
+    width: 42, height: 42, borderRadius: radii.compact, backgroundColor: 'rgba(37,99,235,0.08)',
     borderWidth: 1, borderColor: 'rgba(37,99,235,0.16)', alignItems: 'center', justifyContent: 'center', marginTop: 16,
   },
   timeInputWrap: { flex: 1 },
   timeInput: { backgroundColor: colors.bg, fontWeight: '900', fontSize: 18 },
   timeHelper: { color: colors.muted, fontSize: 11, fontWeight: '600', textAlign: 'right', marginTop: 6 },
   errorBanner: {
-    backgroundColor: '#FEF2F2', borderRadius: 14, borderWidth: 1, borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2', borderRadius: radii.surface, borderWidth: 1, borderColor: '#FECACA',
     paddingHorizontal: 16, paddingVertical: 12, marginBottom: 20,
   },
   errorText: { color: colors.danger, fontSize: 13, fontWeight: '700', textAlign: 'right' },
   saveBtnInner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
-    backgroundColor: colors.primary, borderRadius: 18, paddingVertical: 16, elevation: 4,
+    backgroundColor: colors.primary, borderRadius: radii.surface, paddingVertical: 16, elevation: 4,
   },
   saveBtnDimmed: { opacity: 0.6 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '900', letterSpacing: -0.2 },

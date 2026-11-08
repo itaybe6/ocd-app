@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import Animated, {
   useSharedValue,
@@ -738,7 +739,7 @@ const st = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: colors.elevated,
-    borderRadius: 14,
+    borderRadius: radii.surface,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
@@ -757,7 +758,7 @@ const st = StyleSheet.create({
   clearBtn: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radii.pill,
     backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
@@ -765,7 +766,7 @@ const st = StyleSheet.create({
   addBtn: {
     width: 48,
     height: 48,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -780,7 +781,7 @@ const st = StyleSheet.create({
   seg: {
     flexDirection: 'row',
     backgroundColor: '#E5E5EA',
-    borderRadius: 13,
+    borderRadius: radii.surface,
     padding: 3,
     gap: 3,
   },
@@ -789,7 +790,7 @@ const st = StyleSheet.create({
     top: 3,
     bottom: 3,
     left: 3,
-    borderRadius: 10,
+    borderRadius: radii.compact,
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOpacity: 0.11,
@@ -799,7 +800,7 @@ const st = StyleSheet.create({
   },
   segPill: {
     flex: 1,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     overflow: 'hidden',
   },
   segPillInner: {
@@ -813,7 +814,7 @@ const st = StyleSheet.create({
   segIconBox: {
     width: 26,
     height: 26,
-    borderRadius: 7,
+    borderRadius: radii.badge,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
@@ -842,7 +843,7 @@ const st = StyleSheet.create({
     minWidth: 22,
     height: 18,
     paddingHorizontal: 6,
-    borderRadius: 9,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(0,0,0,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -868,7 +869,7 @@ const st = StyleSheet.create({
 
   card: {
     backgroundColor: colors.elevated,
-    borderRadius: 18,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: colors.border,
     elevation: 2,
@@ -883,7 +884,7 @@ const st = StyleSheet.create({
   cardIconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(37,99,235,0.15)',
@@ -923,7 +924,7 @@ const st = StyleSheet.create({
   iconBtnEdit: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: radii.compact,
     backgroundColor: colors.bg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -933,7 +934,7 @@ const st = StyleSheet.create({
   iconBtnDanger: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: radii.compact,
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',
@@ -949,7 +950,7 @@ const st = StyleSheet.create({
   emptyIcon: {
     width: 64,
     height: 64,
-    borderRadius: 22,
+    borderRadius: radii.compact,
     backgroundColor: 'rgba(37,99,235,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -971,7 +972,7 @@ const st = StyleSheet.create({
 
   createDialog: {
     padding: 0,
-    borderRadius: 24,
+    borderRadius: radii.sheet,
     overflow: 'hidden',
     maxHeight: '86%',
     width: '100%',
@@ -992,7 +993,7 @@ const st = StyleSheet.create({
   modalIconBubble: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: radii.compact,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
@@ -1012,7 +1013,7 @@ const st = StyleSheet.create({
   modalCloseBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
@@ -1025,13 +1026,13 @@ const st = StyleSheet.create({
     gap: 4,
     padding: 4,
     backgroundColor: colors.border,
-    borderRadius: 16,
+    borderRadius: radii.surface,
   },
   segItem: {
     flexDirection: 'row-reverse',
     paddingVertical: 11,
     paddingHorizontal: 16,
-    borderRadius: 13,
+    borderRadius: radii.surface,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
@@ -1052,7 +1053,7 @@ const st = StyleSheet.create({
 
   formWrap: {
     backgroundColor: colors.elevated,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1079,7 +1080,7 @@ const st = StyleSheet.create({
   sheetDangerIcon: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',

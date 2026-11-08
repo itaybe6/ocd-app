@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React, { useMemo } from 'react';
 import { View, Pressable, StyleSheet, Text } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -86,8 +87,8 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     backgroundColor: colors.adminHeader,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderBottomLeftRadius: radii.sheet,
+    borderBottomRightRadius: radii.sheet,
     overflow: 'hidden',
   },
   topBar: {
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     alignItems: 'center',
     justifyContent: 'center',
   },

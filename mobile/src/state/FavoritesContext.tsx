@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import Toast from '../components/toast/Toast';
+import Toast, { showToast } from '../components/toast/Toast';
 import { safeNavigate } from '../navigation/navigationRef';
 import type { ProductFavoriteRow } from '../types/database';
 import { supabase } from '../lib/supabase';
+import { isLocalDemoUser } from '../lib/localDemoAccount';
 import { useAuth } from './AuthContext';
 import type { FavoriteProductInput } from '../lib/favorites';
 
@@ -19,6 +20,15 @@ type FavoritesContextValue = {
 
 const FavoritesContext = createContext<FavoritesContextValue | null>(null);
 
+function showFavoriteConfirmation(added: boolean) {
+  showToast({
+    key: 'favorite-confirmation',
+    title: added ? 'המוצר נשמר באהבתי' : 'המוצר הוסר מאהבתי',
+    favorite: added ? 'added' : 'removed',
+    duration: 1600,
+  });
+}
+
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<ProductFavoriteRow[]>([]);
@@ -31,6 +41,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     favoritesInitialLoadPendingRef.current = true;
+    setFavorites([]);
   }, [user?.id]);
 
   const setPending = useCallback((productId: string, next: boolean) => {
@@ -44,6 +55,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshFavorites = useCallback(async () => {
+    if (isLocalDemoUser(user?.id)) { setIsHydrating(false); return; }
     if (!canUseFavorites || !user?.id) {
       setFavorites([]);
       favoritesInitialLoadPendingRef.current = true;
@@ -115,6 +127,10 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const removeFavorite = useCallback(
     async (productId: string) => {
       if (!user?.id || user.role !== 'customer') return;
+      if (isLocalDemoUser(user.id)) {
+        setFavorites(current => current.filter(favorite => favorite.product_id !== productId));
+        return;
+      }
       if (pendingProductIds.includes(productId)) return;
 
       setPending(productId, true);
@@ -128,10 +144,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         if (error) throw error;
 
         setFavorites((current) => current.filter((favorite) => favorite.product_id !== productId));
-        Toast.show({
-          type: 'success',
-          text1: 'המוצר הוסר מאהבתי',
-        });
+        showFavoriteConfirmation(false);
       } catch (error: any) {
         Toast.show({
           type: 'error',
@@ -151,6 +164,13 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
       if (pendingProductIds.includes(product.product_id)) return isFavorite(product.product_id);
 
       const currentlyFavorite = isFavorite(product.product_id);
+      if (isLocalDemoUser(user.id)) {
+        setFavorites(current => currentlyFavorite
+          ? current.filter(favorite => favorite.product_id !== product.product_id)
+          : [{ ...product, id: `demo-${product.product_id}`, user_id: user.id, created_at: new Date().toISOString() }, ...current]);
+        showFavoriteConfirmation(!currentlyFavorite);
+        return !currentlyFavorite;
+      }
       setPending(product.product_id, true);
 
       try {
@@ -164,11 +184,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
           if (error) throw error;
 
           setFavorites((current) => current.filter((favorite) => favorite.product_id !== product.product_id));
-          Toast.show({
-            type: 'success',
-            text1: 'המוצר הוסר מאהבתי',
-            text2: product.product_title,
-          });
+          showFavoriteConfirmation(false);
           return false;
         }
 
@@ -189,11 +205,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
         const nextFavorite = data as ProductFavoriteRow;
         setFavorites((current) => [nextFavorite, ...current.filter((favorite) => favorite.product_id !== product.product_id)]);
-        Toast.show({
-          type: 'success',
-          text1: 'המוצר נשמר באהבתי',
-          text2: product.product_title,
-        });
+        showFavoriteConfirmation(true);
         return true;
       } catch (error: any) {
         Toast.show({

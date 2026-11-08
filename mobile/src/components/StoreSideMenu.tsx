@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { radii } from '../theme/radii';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Image,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,13 +12,16 @@ import {
 } from 'react-native';
 import Animated, {
   Easing,
-  runOnJS,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, Heart, Phone, Search, User, X } from 'lucide-react-native';
+import { ChevronDown, Phone, Search } from 'lucide-react-native';
+import { ModalSheet, SheetScrollView } from './ModalSheet';
+import type { RemoteBrand } from '../lib/brands';
+import { normalizeBrandImageUrl } from '../lib/brands';
 
 export type StoreSideMenuSection = {
   id: string;
@@ -47,18 +50,104 @@ type StoreSideMenuProps = {
   onSearchPress: () => void;
   onProfilePress: () => void;
   onFavoritesPress?: () => void;
+  brands?: RemoteBrand[];
+  onPressBrand?: (brand: RemoteBrand) => void;
 };
 
-const SLIDE_MS = 360;
-const PANEL_WIDTH_RATIO = 0.88;
-const PANEL_MAX_WIDTH = 380;
 const STORE_PHONE = '08-6422822';
 const STORE_PHONE_TEL = 'tel:086422822';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const STORE_LOGO = require('../../assets/logopng/OCDLOGO-04.png');
+/** Same brand groups the website menu shows under each top category. */
+const CATEGORY_BRAND_HANDLES: Record<string, string[]> = {
+  'חומרי-ניקיון': ['סנו-1', 'סוסיטסא', 'סאג', 'מארזי-ניקיון-משתלמים-copy-1', 'יעקבי', 'פינל-1', 'מוצרי-tnx', 'ocd', 'טאצ'],
+  'בישום-חללים': ['voluspa', 'דקרודו', 'cereria-molla', 'spring-collection'],
+  'מרככי-כביסה-וטקסטיל': ['פינל-1', 'מוצרי-פרפיוםכביסכל', 'מוצרי-tnx', 'mari', 'be-fresh'],
+  'אביזרי-נקיון': ['טירולר', 'shiny', 'יעקבי'],
+};
 
-export function StoreSideMenu({
+const SECTION_EASE = Easing.bezier(0.22, 1, 0.36, 1);
+const SECTION_MS = 240;
+
+function AnimatedChevron({ open }: { open: boolean }) {
+  const progress = useSharedValue(open ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(open ? 1 : 0, { duration: SECTION_MS, easing: SECTION_EASE });
+  }, [open, progress]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(progress.value, [0, 1], [0, 180])}deg` }],
+  }));
+
+  return (
+    <Animated.View style={style}>
+      <ChevronDown size={18} color="#9CA3AF" strokeWidth={2} />
+    </Animated.View>
+  );
+}
+
+function CollapsibleSection({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const progress = useSharedValue(open ? 1 : 0);
+  const measured = useSharedValue(0);
+  const [hasOpened, setHasOpened] = useState(open);
+
+  useEffect(() => {
+    if (open) setHasOpened(true);
+    progress.value = withTiming(open ? 1 : 0, { duration: SECTION_MS, easing: SECTION_EASE });
+  }, [open, progress]);
+
+  const clipStyle = useAnimatedStyle(() => ({
+    height: measured.value * progress.value,
+    opacity: interpolate(progress.value, [0, 0.35, 1], [0, 1, 1]),
+  }));
+
+  return (
+    <Animated.View style={[styles.collapseClip, clipStyle]} pointerEvents={open ? 'auto' : 'none'}>
+      {hasOpened ? <View
+        style={styles.collapseMeasure}
+        onLayout={(event) => {
+          const next = event.nativeEvent.layout.height;
+          if (next > 0 && Math.abs(next - measured.value) > 1) {
+            if (measured.value === 0 && open) {
+              progress.value = 0;
+              progress.value = withTiming(1, { duration: SECTION_MS, easing: SECTION_EASE });
+            }
+            measured.value = next;
+          }
+        }}
+      >
+        {children}
+      </View> : null}
+    </Animated.View>
+  );
+}
+
+function brandsForCategory(categoryId: string | undefined, brands: RemoteBrand[]): RemoteBrand[] {
+  if (!categoryId) return [];
+  const handles = CATEGORY_BRAND_HANDLES[categoryId];
+  if (!handles?.length) return [];
+  const byHandle = new Map(brands.map((brand) => [brand.handle, brand]));
+  return handles.flatMap((handle) => {
+    const brand = byHandle.get(handle);
+    return brand ? [brand] : [];
+  });
+}
+
+export type StoreSideMenuHandle = { open: () => void; close: () => void };
+
+// Keep menu interaction state out of the storefront's product-heavy render tree.
+export const StoreSideMenu = forwardRef<StoreSideMenuHandle, Omit<StoreSideMenuProps, 'visible' | 'onClose' | 'expandedSections' | 'onToggleSection'>>(function StoreSideMenu(props, ref) {
+  const [visible, setVisible] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const close = useCallback(() => setVisible(false), []);
+  useImperativeHandle(ref, () => ({ open: () => setVisible(true), close }), [close]);
+  const toggle = useCallback((id: string) => {
+    setExpandedSections((current) => ({ ...current, [id]: !current[id] }));
+  }, []);
+  return <StoreSideMenuContent {...props} visible={visible} onClose={close} expandedSections={expandedSections} onToggleSection={toggle} />;
+});
+
+function StoreSideMenuContent({
   visible,
   onClose,
   sections,
@@ -67,238 +156,189 @@ export function StoreSideMenu({
   onPressSection,
   onPressChild,
   onSearchPress,
-  onProfilePress,
-  onFavoritesPress,
+  brands = [],
+  onPressBrand,
 }: StoreSideMenuProps) {
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
-  const panelWidth = Math.min(screenWidth * PANEL_WIDTH_RATIO, PANEL_MAX_WIDTH);
-  const progress = useSharedValue(0);
-  const [mounted, setMounted] = useState(false);
-
+  const { height: screenHeight } = useWindowDimensions();
+  const sheetHeight = Math.round(screenHeight * 0.86);
+  const listMaxHeight = Math.max(220, sheetHeight - 224);
+  const pendingNavigation = useRef<(() => void) | null>(null);
+  const closeAndNavigate = (action: () => void) => {
+    if (pendingNavigation.current) return;
+    pendingNavigation.current = action;
+    onClose();
+  };
+  const afterClose = useCallback(() => {
+    const action = pendingNavigation.current;
+    pendingNavigation.current = null;
+    action?.();
+  }, []);
   useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      progress.value = withTiming(1, {
-        duration: SLIDE_MS,
-        easing: Easing.out(Easing.cubic),
-      });
-      return;
-    }
-
-    if (!mounted) return;
-
-    progress.value = withTiming(
-      0,
-      {
-        duration: SLIDE_MS,
-        easing: Easing.in(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) runOnJS(setMounted)(false);
-      },
-    );
-  }, [visible, mounted, progress]);
-
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: progress.value * 0.22,
-  }));
-
-  const panelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: (1 - progress.value) * panelWidth }],
-  }));
+    if (visible) pendingNavigation.current = null;
+  }, [visible]);
 
   const handleSearch = () => {
-    onClose();
-    requestAnimationFrame(() => onSearchPress());
-  };
-
-  const handleProfile = () => {
-    onClose();
-    requestAnimationFrame(() => onProfilePress());
-  };
-
-  const handleFavorites = () => {
-    onClose();
-    requestAnimationFrame(() => onFavoritesPress?.());
+    closeAndNavigate(onSearchPress);
   };
 
   const handlePhone = () => {
     void Linking.openURL(STORE_PHONE_TEL);
   };
 
-  if (!mounted) return null;
+  const handleBrand = (brand: RemoteBrand) => {
+    closeAndNavigate(() => onPressBrand?.(brand));
+  };
 
   return (
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <Animated.View style={[StyleSheet.absoluteFillObject, styles.backdrop, backdropStyle]}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityLabel="סגירת תפריט" />
-        </Animated.View>
+    <ModalSheet
+      visible={visible}
+      onClose={onClose}
+      onAfterClose={afterClose}
+      dismissOnScroll
+      containerStyle={{ maxHeight: sheetHeight, backgroundColor: '#FFFFFF' }}
+    >
+      <View style={[styles.panel, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <Text style={styles.title}>תפריט</Text>
 
-        <Animated.View
-          style={[
-            styles.panel,
-            {
-              width: panelWidth,
-              paddingTop: insets.top + 8,
-              paddingBottom: Math.max(insets.bottom, 16),
-            },
-            panelStyle,
-          ]}
+        <Pressable
+          onPress={handleSearch}
+          style={styles.searchBar}
+          accessibilityRole="button"
+          accessibilityLabel="חיפוש מוצרים"
         >
-          <View style={styles.headerRow}>
-            <Pressable
-              onPress={onClose}
-              hitSlop={10}
-              style={styles.iconButton}
-              accessibilityRole="button"
-              accessibilityLabel="סגירת תפריט"
-            >
-              <X size={22} color="#111827" strokeWidth={1.8} />
-            </Pressable>
-            <Image source={STORE_LOGO} style={styles.logo} resizeMode="contain" />
-          </View>
+          <Search size={18} color="#9CA3AF" strokeWidth={2} />
+          <Text style={styles.searchPlaceholder}>חיפוש מוצרים</Text>
+        </Pressable>
 
-          <Pressable
-            onPress={handleSearch}
-            style={styles.searchBar}
-            accessibilityRole="button"
-            accessibilityLabel="חיפוש מוצרים"
-          >
-            <Text style={styles.searchPlaceholder}>חיפוש מוצרים</Text>
-            <Search size={18} color="#9CA3AF" strokeWidth={2} />
-          </Pressable>
+        <SheetScrollView
+          style={{ maxHeight: listMaxHeight, flexGrow: 0 }}
+          contentContainerStyle={styles.menuScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {sections.map((section) => {
+            const hasChildren = !!section.children?.length;
+            const isExpanded = !!expandedSections[section.id];
+            const categoryBrands = brandsForCategory(section.categoryId, brands);
 
-          <ScrollView
-            style={styles.menuScroll}
-            contentContainerStyle={styles.menuScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {sections.map((section) => {
-              const hasChildren = !!section.children?.length;
-              const isExpanded = !!expandedSections[section.id];
-
-              return (
-                <View key={section.id}>
-                  <Pressable
-                    onPress={() => {
-                      if (hasChildren) {
-                        onToggleSection(section.id);
-                        return;
-                      }
-                      onPressSection(section);
-                    }}
-                    style={styles.menuRow}
-                  >
-                    <Text style={styles.menuRowTitle}>{section.title}</Text>
-                    {hasChildren ? (
-                      <ChevronDown
-                        size={18}
-                        color="#6B7280"
-                        strokeWidth={2}
-                        style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
-                      />
-                    ) : null}
-                  </Pressable>
-
-                  {hasChildren && isExpanded ? (
-                    <View style={styles.submenuWrap}>
-                      {section.children!.map((child) => (
-                        <Pressable
-                          key={child.id}
-                          onPress={() => onPressChild(section, child)}
-                          style={styles.submenuRow}
-                        >
-                          <Text style={styles.submenuTitle}>{child.title}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  <View style={styles.divider} />
-                </View>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <Pressable onPress={handleProfile} style={styles.footerRow}>
-              <View style={styles.footerRowInner}>
-                <Text style={styles.footerText}>החשבון שלי</Text>
-                <User size={18} color="#111827" strokeWidth={1.8} />
-              </View>
-            </Pressable>
-            <View style={styles.divider} />
-
-            {onFavoritesPress ? (
-              <>
-                <Pressable onPress={handleFavorites} style={styles.footerRow}>
-                  <View style={styles.footerRowInner}>
-                    <Text style={styles.footerText}>רשימת משאלות</Text>
-                    <Heart size={18} color="#111827" strokeWidth={1.8} />
-                  </View>
+            return (
+              <View key={section.id}>
+                <Pressable
+                  onPress={() => {
+                    if (hasChildren) {
+                      onToggleSection(section.id);
+                      return;
+                    }
+                    closeAndNavigate(() => onPressSection(section));
+                  }}
+                  style={styles.menuRow}
+                >
+                  {hasChildren ? (
+                    <AnimatedChevron open={isExpanded} />
+                  ) : (
+                    <View style={styles.chevronSpacer} />
+                  )}
+                  <Text style={styles.menuRowTitle}>{section.title}</Text>
                 </Pressable>
-                <View style={styles.divider} />
-              </>
-            ) : null}
 
-            <Pressable onPress={handlePhone} style={styles.footerRow}>
-              <View style={styles.footerRowInner}>
-                <Text style={styles.footerText}>{STORE_PHONE}</Text>
-                <Phone size={18} color="#111827" strokeWidth={1.8} />
+                {hasChildren ? (
+                  <CollapsibleSection open={isExpanded}>
+                  <View style={styles.submenuWrap}>
+                    <Pressable onPress={() => closeAndNavigate(() => onPressSection(section))} style={styles.submenuRow}>
+                      <Text style={styles.submenuTitle}>{`כל ${section.title}`}</Text>
+                    </Pressable>
+                    {section.children!.map((child) => (
+                      <Pressable
+                        key={child.id}
+                        onPress={() => closeAndNavigate(() => onPressChild(section, child))}
+                        style={styles.submenuRow}
+                      >
+                        <Text style={styles.submenuTitle}>{child.title}</Text>
+                      </Pressable>
+                    ))}
+
+                    {categoryBrands.length > 0 ? (
+                      <View style={styles.brandsBlock}>
+                        <Text style={styles.brandsTitle}>מותגים בקטגוריה</Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.brandsRow}
+                        >
+                          {categoryBrands.map((brand) => {
+                            const imageUri = normalizeBrandImageUrl(brand.image);
+                            return (
+                              <Pressable
+                                key={brand.handle}
+                                onPress={() => handleBrand(brand)}
+                                style={styles.brandItem}
+                                accessibilityRole="button"
+                                accessibilityLabel={brand.label}
+                              >
+                                <View style={styles.brandRing}>
+                                  {imageUri ? (
+                                    <Image
+                                      source={{ uri: imageUri }}
+                                      accessibilityLabel={brand.label}
+                                      resizeMode="contain"
+                                      style={styles.brandImage}
+                                    />
+                                  ) : (
+                                    <Text style={styles.brandFallback}>{brand.short}</Text>
+                                  )}
+                                </View>
+                                <Text numberOfLines={1} style={styles.brandLabel}>
+                                  {brand.label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    ) : null}
+                  </View>
+                  </CollapsibleSection>
+                ) : null}
+
+                <View style={styles.divider} />
               </View>
-            </Pressable>
-          </View>
-        </Animated.View>
+            );
+          })}
+        </SheetScrollView>
+
+        <View style={styles.footer}>
+          <Pressable onPress={handlePhone} style={styles.phoneRow} accessibilityRole="button" accessibilityLabel={`לשיחה ישירה, ${STORE_PHONE}`}>
+            <View style={styles.phoneEnd}>
+              <View style={styles.phoneIcon}>
+                <Phone size={14} color="#FFFFFF" strokeWidth={2.2} />
+              </View>
+              <Text style={styles.phoneHint}>לשיחה ישירה</Text>
+            </View>
+            <Text style={styles.phoneNumber}>{STORE_PHONE}</Text>
+          </Pressable>
+        </View>
       </View>
-    </Modal>
+    </ModalSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  backdrop: {
-    backgroundColor: '#111827',
-  },
   panel: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: -4, height: 0 },
-    elevation: 16,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    direction: 'ltr',
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    width: 118,
-    height: 40,
+  title: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 14,
   },
   searchBar: {
-    marginHorizontal: 18,
+    marginHorizontal: 16,
     marginBottom: 8,
-    minHeight: 46,
-    borderRadius: 999,
-    backgroundColor: '#F3F4F6',
+    minHeight: 48,
+    borderRadius: radii.pill,
+    backgroundColor: '#F3F2F0',
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -306,70 +346,151 @@ const styles = StyleSheet.create({
   },
   searchPlaceholder: {
     flex: 1,
-    color: '#9CA3AF',
+    color: '#A1A1AA',
     fontSize: 15,
     textAlign: 'right',
-  },
-  menuScroll: {
-    flex: 1,
+    writingDirection: 'rtl',
   },
   menuScrollContent: {
     paddingBottom: 8,
   },
+  collapseClip: {
+    overflow: 'hidden',
+  },
+  collapseMeasure: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+  },
   menuRow: {
-    minHeight: 54,
-    paddingHorizontal: 22,
+    minHeight: 56,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
+  },
+  chevronSpacer: {
+    width: 18,
   },
   menuRowTitle: {
     flex: 1,
-    color: '#111827',
+    color: '#1F2937',
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   submenuWrap: {
-    paddingBottom: 4,
+    backgroundColor: '#F6F4F1',
+    paddingTop: 6,
+    paddingBottom: 12,
   },
   submenuRow: {
     minHeight: 44,
     paddingHorizontal: 22,
-    paddingRight: 34,
     justifyContent: 'center',
   },
   submenuTitle: {
-    color: '#374151',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'right',
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 18,
-  },
-  footer: {
-    paddingTop: 4,
-  },
-  footerRow: {
-    minHeight: 52,
-    paddingHorizontal: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  footerRowInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    direction: 'ltr',
-  },
-  footerText: {
-    color: '#111827',
+    color: '#3F3F46',
     fontSize: 15,
     fontWeight: '500',
     textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  brandsBlock: {
+    marginTop: 8,
+    paddingTop: 8,
+  },
+  brandsTitle: {
+    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    paddingHorizontal: 22,
+    marginBottom: 12,
+  },
+  brandsRow: {
+    flexDirection: 'row-reverse',
+    gap: 16,
+    paddingHorizontal: 18,
+  },
+  brandItem: {
+    width: 76,
+    alignItems: 'center',
+    gap: 8,
+  },
+  brandRing: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.pill,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  brandImage: {
+    width: 46,
+    height: 46,
+  },
+  brandFallback: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  brandLabel: {
+    color: '#52525B',
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#ECEAE7',
+  },
+  footer: {
+    paddingTop: 12,
+  },
+  phoneRow: {
+    direction: 'ltr',
+    marginHorizontal: 16,
+    minHeight: 48,
+    borderRadius: radii.surface,
+    backgroundColor: '#F7F6F4',
+    paddingHorizontal: 14,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  phoneHint: {
+    writingDirection: 'rtl',
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  phoneEnd: {
+    direction: 'ltr',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  phoneNumber: {
+    writingDirection: 'ltr',
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  phoneIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.pill,
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

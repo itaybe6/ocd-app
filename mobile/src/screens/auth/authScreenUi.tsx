@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -53,7 +54,7 @@ export function PrimaryButton({
       <View
         style={{
           height: 54,
-          borderRadius: 16,
+          borderRadius: radii.surface,
           backgroundColor: disabled ? DISABLED_BG : INK,
           alignItems: 'center',
           justifyContent: 'center',
@@ -76,7 +77,7 @@ export function GhostButton({ title, onPress, disabled }: { title: string; onPre
       <View
         style={{
           height: 54,
-          borderRadius: 16,
+          borderRadius: radii.surface,
           borderWidth: 1,
           borderColor: BORDER,
           backgroundColor: '#FFFFFF',
@@ -123,7 +124,7 @@ export function OtpInput({
               style={{
                 width: 46,
                 height: 58,
-                borderRadius: 14,
+                borderRadius: radii.surface,
                 borderWidth: 1.5,
                 borderColor: filled || active ? INK : BORDER,
                 backgroundColor: filled ? '#FFFFFF' : SURFACE,
@@ -183,7 +184,7 @@ export function Field({
         style={[
           {
             height: 54,
-            borderRadius: 16,
+            borderRadius: radii.surface,
             borderWidth: 1.5,
             borderColor: focused ? INK : BORDER,
             backgroundColor: '#FFFFFF',
@@ -207,7 +208,7 @@ export function ReadOnlyField({ label, value }: { label: string; value: string }
       <View
         style={{
           height: 54,
-          borderRadius: 16,
+          borderRadius: radii.surface,
           borderWidth: 1.5,
           borderColor: BORDER,
           backgroundColor: SURFACE,
@@ -255,7 +256,7 @@ export function GenderChips({
                 opacity: pressed ? 0.88 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 12,
-                borderRadius: 999,
+                borderRadius: radii.pill,
                 borderWidth: 1.5,
                 borderColor: selected ? INK : BORDER,
                 backgroundColor: selected ? INK : '#FFFFFF',
@@ -312,7 +313,7 @@ export function DateOfBirthField({
         style={({ pressed }) => ({
           opacity: pressed ? 0.92 : 1,
           height: 54,
-          borderRadius: 16,
+          borderRadius: radii.surface,
           borderWidth: 1.5,
           borderColor: open || selectedDate ? INK : BORDER,
           backgroundColor: '#FFFFFF',
@@ -387,7 +388,7 @@ export function PhoneField({
       <View
         style={{
           height: 58,
-          borderRadius: 16,
+          borderRadius: radii.surface,
           borderWidth: 1.5,
           borderColor: focused ? INK : BORDER,
           backgroundColor: '#FFFFFF',

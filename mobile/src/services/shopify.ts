@@ -11,12 +11,35 @@ import {
   type ShopifyCartLineInput,
 } from '../lib/shopify';
 
-/** 13% member discount code (Shopify Admin). Env overrides; default matches store setup. */
+/**
+ * Member discount codes (Shopify Admin). Both must be limited to the
+ * OCD+ Members customer segment, so typing the code does nothing for anyone else.
+ * The app attaches the member's phone before applying them, which is how
+ * Shopify recognizes that customer at checkout.
+ *
+ * OCDPLUS  — 8% off the order
+ * OCDSHIP  — free shipping when the order is over 149₪
+ */
 const OCD_PLUS_DISCOUNT_CODE =
-  process.env.EXPO_PUBLIC_OCD_PLUS_DISCOUNT_CODE?.trim() || 'OCDPLUS13';
+  process.env.EXPO_PUBLIC_OCD_PLUS_DISCOUNT_CODE?.trim() || 'OCDPLUS';
+const OCD_PLUS_SHIPPING_CODE =
+  process.env.EXPO_PUBLIC_OCD_PLUS_SHIPPING_CODE?.trim() || 'OCDSHIP';
 
 export function getOcdPlusDiscountCode(): string {
   return OCD_PLUS_DISCOUNT_CODE;
+}
+
+function memberDiscountCodes(): string[] {
+  return [OCD_PLUS_DISCOUNT_CODE, OCD_PLUS_SHIPPING_CODE];
+}
+
+/** Shopify matches a segment discount to the phone stored on the customer. */
+function toE164Israel(input: string): string | null {
+  const digits = input.replace(/\D+/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('972')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+972${digits.slice(1)}`;
+  return `+${digits}`;
 }
 
 /**
@@ -116,21 +139,30 @@ export async function createCheckout(lineItems: CheckoutLineItem[]): Promise<Cre
 }
 
 /**
- * Apply OCD+ member discount on the live cart.
- * Clears any stored buyer phone first — a phone-linked cart makes OCDPLUS13
- * inapplicable for identified Shopify customers (persisted carts from older builds).
+ * Apply OCD+ member discounts on the live cart.
+ * Attach contact information first. Segment eligibility is enforced by Shopify
+ * at checkout; this does not create a Shopify Customer Account login session.
  */
 export async function prepareMemberCart(args: {
   cartId: string;
+  phone?: string | null;
+  email?: string | null;
 }): Promise<ShopifyCart | null> {
-  try {
-    await updateCartBuyerIdentity(args.cartId, { phone: null });
-  } catch {
-    // best effort — discount may still apply on carts without identity
+  const phone = toE164Israel(args.phone ?? '');
+  const email = args.email?.trim() || null;
+  if (phone || email) {
+    try {
+      await updateCartBuyerIdentity(args.cartId, {
+        ...(phone ? { phone, countryCode: 'IL' } : {}),
+        ...(email ? { email } : {}),
+      });
+    } catch {
+      // Identity is best-effort. Checkout can still match the phone the member types.
+    }
   }
 
   try {
-    return await updateCartDiscountCodes(args.cartId, [OCD_PLUS_DISCOUNT_CODE]);
+    return await updateCartDiscountCodes(args.cartId, memberDiscountCodes());
   } catch {
     return null;
   }
@@ -143,8 +175,14 @@ export async function prepareMemberCart(args: {
 export async function applyOcdPlusMemberCheckout(args: {
   cartId: string;
   fallbackCheckoutUrl: string;
+  phone?: string | null;
+  email?: string | null;
 }): Promise<string> {
-  const cart = await prepareMemberCart({ cartId: args.cartId });
+  const cart = await prepareMemberCart({
+    cartId: args.cartId,
+    phone: args.phone,
+    email: args.email,
+  });
   const url = cart?.checkoutUrl?.trim() || args.fallbackCheckoutUrl;
-  return appendCheckoutDiscountCode(normalizeCheckoutUrl(url), OCD_PLUS_DISCOUNT_CODE);
+  return appendCheckoutDiscountCode(normalizeCheckoutUrl(url), memberDiscountCodes().join(','));
 }

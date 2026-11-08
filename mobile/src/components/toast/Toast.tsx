@@ -1,3 +1,5 @@
+import { storeAccent } from '../../theme/storeAccent';
+import { radii } from '../../theme/radii';
 import React, {
   createContext,
   useCallback,
@@ -9,7 +11,12 @@ import React, {
 } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import { Heart } from 'lucide-react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  FadeInUp, LinearTransition, ReduceMotion, cancelAnimation, runOnJS,
+  useAnimatedStyle, useSharedValue, withSpring, withTiming,
+} from 'react-native-reanimated';
 
 export type ToastInput = {
   title: string;
@@ -17,6 +24,8 @@ export type ToastInput = {
   autodismiss?: boolean;
   leading?: () => React.ReactNode;
   key?: string;
+  duration?: number;
+  favorite?: 'added' | 'removed';
 };
 
 type ToastItem = ToastInput & {
@@ -66,33 +75,98 @@ function ToastCard({
   toast: ToastItem;
   onDismiss: (id: string) => void;
 }) {
+  const offset = useSharedValue(0);
+  const opacity = useSharedValue(1);
+  const closing = useSharedValue(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismiss = useCallback(() => {
+    'worklet';
+    if (closing.value) return;
+    closing.value = true;
+    offset.value = withTiming(Math.min(offset.value - 80, -100), { duration: 140 });
+    opacity.value = withTiming(0, { duration: 140 }, (finished) => {
+      if (finished) runOnJS(onDismiss)(toast.id);
+    });
+  }, [closing, offset, onDismiss, opacity, toast.id]);
+
+  const pauseTimer = useCallback(() => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+
+  const startTimer = useCallback(() => {
+    pauseTimer();
+    if (toast.autodismiss === false || closing.value) return;
+    timer.current = setTimeout(dismiss, toast.duration ?? AUTO_DISMISS_MS);
+  }, [closing, dismiss, pauseTimer, toast.autodismiss, toast.duration]);
+
   useEffect(() => {
-    if (toast.autodismiss === false) return;
-    const timer = setTimeout(() => onDismiss(toast.id), AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
-  }, [onDismiss, toast.autodismiss, toast.id]);
+    startTimer();
+    return pauseTimer;
+  }, [pauseTimer, startTimer]);
+
+  const pan = useMemo(() => Gesture.Pan()
+    .activeOffsetY(-6)
+    .failOffsetX([-24, 24])
+    .onBegin(() => { runOnJS(pauseTimer)(); })
+    .onStart(() => { if (!closing.value) cancelAnimation(offset); })
+    .onUpdate((event) => {
+      if (!closing.value) offset.value = Math.min(0, event.translationY);
+    })
+    .onEnd((event) => {
+      if (event.translationY < -32 || (event.translationY < -8 && event.velocityY < -450)) dismiss();
+    })
+    .onFinalize(() => {
+      if (!closing.value) {
+        offset.value = withSpring(0, { damping: 20, stiffness: 300 });
+        runOnJS(startTimer)();
+      }
+    }), [closing, dismiss, offset, pauseTimer, startTimer]);
+
+  const motionStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: offset.value }],
+    opacity: opacity.value * Math.max(0.25, 1 + offset.value / 160),
+  }));
+  const compact = !!toast.favorite;
 
   return (
     <Animated.View
-      entering={FadeInUp.duration(220)}
-      exiting={FadeOutUp.duration(180)}
-      style={styles.card}
+      entering={FadeInUp.duration(180).reduceMotion(ReduceMotion.System)}
+      layout={LinearTransition.duration(160).reduceMotion(ReduceMotion.System)}
+      style={compact ? styles.compactWrapper : undefined}
     >
-      <Pressable onPress={() => onDismiss(toast.id)} style={({ pressed }) => pressed && styles.cardPressed}>
-        <View style={styles.cardInner}>
-          {toast.leading ? <View style={styles.leading}>{toast.leading()}</View> : null}
-          <View style={styles.copy}>
-            <Text style={styles.title} numberOfLines={2}>
-              {toast.title}
-            </Text>
-            {toast.subtitle ? (
-              <Text style={styles.subtitle} numberOfLines={2}>
-                {toast.subtitle}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      </Pressable>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[styles.card, compact && styles.compactCard, motionStyle]}>
+          <Pressable
+            onPress={dismiss}
+            accessibilityRole="button"
+            accessibilityLabel={[toast.title, toast.subtitle].filter(Boolean).join('. ')}
+            accessibilityHint="לחצו לסגירה או החליקו כלפי מעלה"
+            accessibilityLiveRegion="polite"
+            style={({ pressed }) => [styles.cardPadding, compact && styles.compactPadding, pressed && styles.cardPressed]}
+          >
+            <View style={[styles.cardInner, compact && styles.compactInner]}>
+              {toast.favorite ? (
+                <View style={[styles.favoriteIcon, toast.favorite === 'removed' && styles.removedIcon]}>
+                  <Heart size={18} strokeWidth={1.8} color={toast.favorite === 'added' ? storeAccent.ink : '#797580'} fill={toast.favorite === 'added' ? storeAccent.ink : 'transparent'} />
+                </View>
+              ) : null}
+              {toast.leading ? <View style={styles.leading}>{toast.leading()}</View> : null}
+              <View style={styles.copy}>
+                <Text style={[styles.title, compact && styles.compactTitle]} numberOfLines={2}>
+                  {toast.title}
+                </Text>
+                {toast.subtitle ? (
+                  <Text style={styles.subtitle} numberOfLines={2}>
+                    {toast.subtitle}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }
@@ -110,7 +184,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showToast = useCallback((toast: ToastInput) => {
-    const id = toast.key ?? `toast-${Date.now()}-${idRef.current++}`;
+    // A replacement gets a fresh lifetime; a previous exit cannot dismiss it.
+    const id = `toast-${Date.now()}-${idRef.current++}`;
     const next: ToastItem = {
       ...toast,
       id,
@@ -163,6 +238,7 @@ const Toast = {
       title: options.text1?.trim() || 'הודעה',
       subtitle: options.text2?.trim() || undefined,
       autodismiss: options.autoHide ?? true,
+      duration: options.visibilityTime,
       // No default icon — only show when explicitly provided via showToast({ leading })
     });
   },
@@ -186,15 +262,30 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    borderRadius: radii.surface,
     shadowColor: '#000000',
     shadowOpacity: 0.12,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
+  cardPadding: { paddingHorizontal: 24, paddingVertical: 20 },
+  compactWrapper: { width: '100%', maxWidth: 360, alignSelf: 'center' },
+  compactCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: storeAccent.border,
+    shadowColor: storeAccent.onPrimary,
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  compactPadding: { paddingHorizontal: 14, paddingVertical: 10 },
+  compactInner: { flexDirection: 'row-reverse', gap: 10 },
+  compactTitle: { color: storeAccent.onPrimary, fontSize: 14, fontWeight: '600' },
+  favoriteIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: storeAccent.soft, alignItems: 'center', justifyContent: 'center' },
+  removedIcon: { backgroundColor: '#F4F3F5' },
   cardInner: {
     flexDirection: 'row',
     alignItems: 'center',

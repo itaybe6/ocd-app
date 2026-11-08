@@ -1,3 +1,5 @@
+import { radii } from '../theme/radii';
+import { ScreenFade } from '../components/ScreenFade';
 import React, { useMemo } from 'react';
 import { Text, View, Pressable } from 'react-native';
 import {
@@ -12,6 +14,7 @@ import { colors } from '../theme/colors';
 import { useAuth } from '../state/AuthContext';
 import { useOcdPlusMembership } from '../state/useOcdPlusMembership';
 import { CustomerProfileScreen } from '../screens/customer/ProfileScreen';
+import { CustomerPersonalDetailsScreen } from '../screens/customer/PersonalDetailsScreen';
 import { CustomerServicesScreen } from '../screens/customer/ServicesScreen';
 import { CustomerFavoritesScreen } from '../screens/customer/FavoritesScreen';
 import { CustomerOrdersScreen } from '../screens/customer/OrdersScreen';
@@ -30,6 +33,7 @@ export type CustomerDrawerParamList = {
       }
     | undefined;
   Profile: undefined;
+  PersonalDetails: undefined;
   Orders: undefined;
   OrderDetail: { orderId: string; returnTo: 'Profile' | 'Orders' };
   Addresses: undefined;
@@ -104,10 +108,20 @@ function CustomerStoreScreen({ navigation, route }: DrawerScreenProps<CustomerDr
 function CustomerProfileRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'Profile'>) {
   return (
     <CustomerProfileScreen
+      onOpenPersonalDetails={() => navigation.navigate('PersonalDetails')}
       onOpenOrders={() => navigation.navigate('Orders')}
       onOpenOrder={(orderId) => navigation.navigate('OrderDetail', { orderId, returnTo: 'Profile' })}
       onOpenAddresses={() => navigation.navigate('Addresses')}
       onOpenOcdPlus={() => navigation.navigate('OcdPlus')}
+      onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
+    />
+  );
+}
+
+function CustomerPersonalDetailsRoute({ navigation }: DrawerScreenProps<CustomerDrawerParamList, 'PersonalDetails'>) {
+  return (
+    <CustomerPersonalDetailsScreen
+      onBack={() => navigation.navigate('Profile')}
       onTabPress={(tabId) => handleCustomerTabPress(navigation as any, tabId)}
     />
   );
@@ -187,14 +201,14 @@ function CustomerDrawerContent(props: DrawerContentComponentProps) {
             icon={() => it.icon}
             onPress={() => props.navigation.navigate(it.key as any)}
             labelStyle={{ color: colors.text, textAlign: 'right', fontWeight: '700' }}
-            style={{ borderRadius: 14, marginHorizontal: 4 }}
+            style={{ borderRadius: radii.surface, marginHorizontal: 4 }}
           />
         ))}
       </View>
       <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
         <Pressable
           onPress={() => signOut()}
-          style={{ borderRadius: 16, paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated }}
+          style={{ borderRadius: radii.surface, paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated }}
         >
           <Text style={{ color: colors.text, fontWeight: '800', textAlign: 'right' }}>התנתקות</Text>
         </Pressable>
@@ -207,6 +221,7 @@ export function CustomerDrawer({ initialRouteName = 'Store' }: CustomerDrawerPro
   return (
     <Drawer.Navigator
       initialRouteName={initialRouteName}
+      screenLayout={({ children, route }) => <ScreenFade skipInitialAnimation={route.name === initialRouteName}>{children}</ScreenFade>}
       drawerContent={(p) => <CustomerDrawerContent {...p} />}
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
@@ -222,6 +237,7 @@ export function CustomerDrawer({ initialRouteName = 'Store' }: CustomerDrawerPro
     >
       <Drawer.Screen name="Store" options={{ title: 'חנות', headerShown: false }} component={CustomerStoreScreen} />
       <Drawer.Screen name="Profile" options={{ title: 'פרופיל', headerShown: false }} component={CustomerProfileRoute} />
+      <Drawer.Screen name="PersonalDetails" options={{ title: 'פרטים אישיים', headerShown: false }} component={CustomerPersonalDetailsRoute} />
       <Drawer.Screen name="Orders" options={{ title: 'רכישות', headerShown: false }} component={CustomerOrdersRoute} />
       <Drawer.Screen
         name="OrderDetail"

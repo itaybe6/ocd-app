@@ -1,0 +1,12 @@
+{
+  "tool": "built-in image_gen",
+  "prompt": "Edit/reference roles: image 1 is the OLD BANNER STYLE AND SCENE to match; image 2 is the EXACT PRODUCT TRIO to feature; image 3 is the original bottle reference for faithful packaging. Create a wide 2:1 landscape ecommerce hero photograph. Recreate the beautiful minimal sculptural white plaster alcove / curved arch and stone shelf from image 1, with warm-neutral daylight coming diagonally from upper left and graceful architectural shadows. REPLACE ALL of the old scene's products with EXACTLY THREE VITRO PLUS 750ml white trigger-spray bottles from images 2 and 3. No vase, no diffuser, no other objects. Arrange the three bottles as a curated editorial still life, staggered slightly in depth, all clearly visible/countable and upright, center bottle slightly forward, tiny height variation from a subtle low stone step. Preserve the white trigger heads, correct bottle shape, blue green original SUCITESA VITRO PLUS labels, proportions. This must look like photographed products in a real beautiful setting, not isolated catalog cutouts. All three bottles and the main curved alcove occupy the LEFT 55 percent, with full bottle silhouettes and comfortable outer margins. RIGHT 42 percent must be almost pure white clean negative space reserved for live app text, with the scene softly fading into white, no hard dividing line. At phone size products should be large and the alcove clearly visible. Elegant, calm, tangible depth, no confetti, no flowers, no sparkles, no water splash, no text overlay, no prices, no UI, no new logos, no excessive beige. Final image opaque, not transparent.",
+  "asset": "../assets/vitro-trio-editorial-v2.jpg",
+  "original": "C:/Users/user/.codex/generated_images/01a1b559-5334-7771-8d90-1c6adb507db8/exec-cd091ff1-4dae-455c-8ed0-0a79d93efc71.png",
+  "processing": "Resized to 1200px wide, JPEG quality 90. Original retained.",
+  "references": [
+    "../assets/home-intro-editorial-v4.png",
+    "../assets/vitro-trio-promo.png",
+    "promo-references/vitro-plus-single.png"
+  ]
+}

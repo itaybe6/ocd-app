@@ -1,4 +1,6 @@
 import React from 'react';
+import { useReducedMotion } from 'react-native-reanimated';
+import { PAGE_TRANSITION } from '../theme/sheetMotion';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { colors } from '../theme/colors';
 import { AdminHeader } from '../components/AdminHeader';
@@ -12,9 +14,12 @@ import type { WorkTemplatesStackParamList } from './workTemplatesTypes';
 const Stack = createNativeStackNavigator<WorkTemplatesStackParamList>();
 
 export function WorkTemplatesStack() {
+  const reducedMotion = useReducedMotion();
   return (
     <Stack.Navigator
       screenOptions={{
+        ...PAGE_TRANSITION,
+        ...(reducedMotion ? { animation: 'none' as const } : {}),
         contentStyle: { backgroundColor: colors.bg },
         header: ({ navigation, back }) => (
           <AdminHeader

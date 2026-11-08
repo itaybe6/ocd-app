@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -401,7 +402,7 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
+    borderRadius: radii.surface,
     padding: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -420,7 +421,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 180,
     height: 180,
-    borderRadius: 90,
+    borderRadius: radii.pill,
     backgroundColor: '#2563EB',
     opacity: 0.06,
     top: -70,
@@ -430,7 +431,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: radii.pill,
     backgroundColor: '#7C3AED',
     opacity: 0.05,
     bottom: -40,
@@ -444,7 +445,7 @@ const styles = StyleSheet.create({
   heroIconWrap: {
     width: 48,
     height: 48,
-    borderRadius: 16,
+    borderRadius: radii.compact,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -471,7 +472,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
   /** מסגרת חיצונית עגולה (טבעת) + פנים לבן — שתי שכבות מסגרת */
   cardFrame: {
     padding: 5,
-    borderRadius: 26,
+    borderRadius: radii.surface,
     backgroundColor: '#E2E8F0',
     borderWidth: 2,
     borderColor: '#C2CCD9',
@@ -538,7 +539,7 @@ const styles = StyleSheet.create({
   },
   cardInner: {
     backgroundColor: colors.elevated,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: '#E8ECF2',
     overflow: 'hidden',
@@ -556,7 +557,7 @@ const styles = StyleSheet.create({
   kindIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: radii.compact,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -583,13 +584,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: 1,
   },
   kindPillDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radii.pill,
   },
   kindPillText: {
     fontSize: 11,
@@ -635,7 +636,7 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 76,
     height: 76,
-    borderRadius: 26,
+    borderRadius: radii.compact,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',

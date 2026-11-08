@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 
 export function formatOrderPrice(amount: number | string, currencyCode = 'ILS') {
   const normalizedAmount = Number(amount ?? 0);
-  if (currencyCode === 'ILS') return `₪${normalizedAmount.toLocaleString('he-IL')}.00`;
+  if (currencyCode === 'ILS') return `₪${normalizedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return `${normalizedAmount.toLocaleString('he-IL')} ${currencyCode}`;
 }
 

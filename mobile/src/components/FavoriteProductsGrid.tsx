@@ -1,3 +1,4 @@
+import { radii } from '../theme/radii';
 import React from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,7 @@ type FavoriteProductsGridProps = {
   onRemoveFavorite: (productId: string) => void;
 };
 
-function FavoriteProductCard({
+export function FavoriteProductCard({
   favorite,
   isFavoritePending,
   onOpenProduct,
@@ -39,14 +40,14 @@ function FavoriteProductCard({
         width: '48%',
         alignSelf: 'stretch',
         marginBottom: 18,
-        borderRadius: 18,
+        borderRadius: radii.surface,
         ...storeProductCardShadowStyle,
       }}
     >
       <View
         style={{
           flex: 1,
-          borderRadius: 18,
+          borderRadius: radii.surface,
           overflow: 'hidden',
           backgroundColor: '#FFFFFF',
         }}
@@ -61,8 +62,8 @@ function FavoriteProductCard({
                 style={{
                   width: '100%',
                   height: 160,
-                  borderTopLeftRadius: 18,
-                  borderTopRightRadius: 18,
+                  borderTopLeftRadius: radii.surface,
+                  borderTopRightRadius: radii.surface,
                 }}
               />
             ) : (

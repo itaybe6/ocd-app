@@ -22,6 +22,8 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   StoreOcdPlus: undefined;
+  OcdPlusPaymentSignIn: undefined;
+  OcdPlusCheckout: { paymentUrl: string };
   StoreFavorites: undefined;
   StoreSearch: undefined;
   Product: { handle: string };

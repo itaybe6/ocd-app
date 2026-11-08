@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React from 'react';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
 import { colors } from '../../theme/colors';
@@ -20,7 +21,7 @@ export function Input({ label, style, placeholderTextColor, ...rest }: InputProp
             backgroundColor: colors.elevated,
             borderColor: colors.border,
             borderWidth: 1,
-            borderRadius: 14,
+            borderRadius: radii.surface,
             paddingHorizontal: 14,
             paddingVertical: 12,
             color: colors.text,

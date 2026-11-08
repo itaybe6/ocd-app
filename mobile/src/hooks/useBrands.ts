@@ -8,7 +8,7 @@ import {
 
 const BRANDS_URL = 'https://www.ocd-online.co.il/api/public/brands';
 
-export const REMOTE_BRANDS_QUERY_KEY = ['remote-brands', 'v5'] as const;
+export const REMOTE_BRANDS_QUERY_KEY = ['remote-brands', 'v6'] as const;
 
 function normalizeBrands(brands: RemoteBrand[]): RemoteBrand[] {
   return brands.map((brand) =>

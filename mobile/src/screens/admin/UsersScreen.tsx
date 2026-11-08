@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/toast/Toast';
@@ -928,7 +929,7 @@ const s = StyleSheet.create({
 
   /* ── Hero ── */
   hero: {
-    borderRadius: 22,
+    borderRadius: radii.surface,
     padding: 18,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -949,7 +950,7 @@ const s = StyleSheet.create({
   heroIconCircle: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     backgroundColor: '#EBF5FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -976,7 +977,7 @@ const s = StyleSheet.create({
   fabBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: radii.compact,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#007AFF',
@@ -994,7 +995,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#E8E8ED',
-    borderRadius: 12,
+    borderRadius: radii.surface,
     paddingHorizontal: 12,
     height: 40,
   },
@@ -1009,7 +1010,7 @@ const s = StyleSheet.create({
   searchClear: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#8E8E93',
@@ -1019,7 +1020,7 @@ const s = StyleSheet.create({
   statsRow: { marginTop: 14, flexDirection: 'row', gap: 8 },
   statPill: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: radii.pill,
     backgroundColor: '#F0F0F5',
     borderWidth: 1.5,
     borderColor: '#F0F0F5',
@@ -1031,11 +1032,11 @@ const s = StyleSheet.create({
   statValue: { fontWeight: '800', fontSize: 20, color: A.text, letterSpacing: -0.4 },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
   statLabel: { fontWeight: '600', fontSize: 12, color: A.muted },
-  statDot: { width: 7, height: 7, borderRadius: 3.5 },
+  statDot: { width: 7, height: 7, borderRadius: radii.pill },
 
   /* ── User Card ── */
   userCard: {
-    borderRadius: 16,
+    borderRadius: radii.surface,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#EBEBF0',
@@ -1074,7 +1075,7 @@ const s = StyleSheet.create({
   actionBtn: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1095,7 +1096,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 14,
     backgroundColor: A.card,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     padding: 16,
     borderWidth: 1,
     borderColor: A.separator,
@@ -1106,7 +1107,7 @@ const s = StyleSheet.create({
   /* ── Empty ── */
   emptyCard: {
     backgroundColor: A.card,
-    borderRadius: 20,
+    borderRadius: radii.surface,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
@@ -1116,7 +1117,7 @@ const s = StyleSheet.create({
   emptyIconCircle: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: radii.pill,
     backgroundColor: A.fill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1153,7 +1154,7 @@ const s = StyleSheet.create({
   modalCloseBtn: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radii.pill,
     backgroundColor: A.fillSecondary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1161,7 +1162,7 @@ const s = StyleSheet.create({
   modalHeaderBtn: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radii.pill,
     backgroundColor: A.fillSecondary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1171,7 +1172,7 @@ const s = StyleSheet.create({
   /* ── Avatar section in edit modal ── */
   avatarSection: {
     backgroundColor: A.fill,
-    borderRadius: 16,
+    borderRadius: radii.pill,
     padding: 14,
   },
   avatarSectionInner: {
@@ -1187,19 +1188,19 @@ const s = StyleSheet.create({
   /* ── Points ── */
   pointAddCard: {
     backgroundColor: A.fill,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     padding: 14,
   },
   pointCard: {
     backgroundColor: A.card,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     padding: 14,
     borderWidth: 1,
     borderColor: A.separator,
   },
   pointEmptyCard: {
     backgroundColor: A.fill,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     padding: 20,
   },
 });

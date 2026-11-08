@@ -1,346 +1,119 @@
+import { storeAccent } from '../../theme/storeAccent';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, Pressable, RefreshControl, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FavoriteProductsGrid } from '../../components/FavoriteProductsGrid';
+import { FavoriteCatalogCard } from '../../components/FavoriteCatalogCard';
 import { useFavorites } from '../../state/FavoritesContext';
 import { useAuth } from '../../state/AuthContext';
+import { useStoreCatalog } from '../../hooks/useStoreCatalog';
+import { useBrands } from '../../hooks/useBrands';
+import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
+import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
+import { normalizeSearchQuery } from '../../lib/catalogSearch';
+import { radii } from '../../theme/radii';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from './StoreHomeScreen';
 
-const INK = '#111827';
-const MUTED = '#6B7280';
-
-export function StoreFavoritesScreen({
-  onOpenProduct,
-  onTabPress,
-  onLoginPress,
-}: {
+export function StoreFavoritesScreen({ onOpenProduct, onTabPress, onLoginPress }: {
   onOpenProduct: (handle: string) => void;
   onTabPress: (tabId: StoreBottomTabId) => void;
   onLoginPress: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const cardWidth = (width - 42) / 2;
   const { contentPaddingBottom } = getStoreBottomBarMetrics(insets.bottom);
   const { user } = useAuth();
-  const { favorites, isHydrating, isFavoritePending, removeFavorite } = useFavorites();
+  const { favorites, isHydrating, isFavoritePending, removeFavorite, refreshFavorites } = useFavorites();
+  const catalog = useStoreCatalog();
+  const { data: brands = [] } = useBrands();
+  const { isActiveMember } = useOcdPlusMembership();
+  const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const [query, setQuery] = useState('');
-
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredFavorites = useMemo(() => {
-    if (!normalizedQuery) return favorites;
-    return favorites.filter((favorite) => {
-      const haystack = [
-        favorite.product_title,
-        favorite.product_type ?? '',
-        favorite.product_description ?? '',
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(normalizedQuery);
+  const [refreshing, setRefreshing] = useState(false);
+  const needle = normalizeSearchQuery(query);
+  const byId = useMemo(() => new Map(catalog.products.map(product => [product.id, product])), [catalog.products]);
+  const byHandle = useMemo(() => new Map(catalog.products.map(product => [product.handle, product])), [catalog.products]);
+  const filtered = useMemo(() => {
+    const words = needle.split(' ').filter(Boolean);
+    return favorites.filter(favorite => {
+      const live = byId.get(favorite.product_id) ?? byHandle.get(favorite.product_handle);
+      const name = normalizeSearchQuery(live?.title ?? favorite.product_title);
+      return words.every(word => name.includes(word));
     });
-  }, [favorites, normalizedQuery]);
-
-  const showToolbar = favorites.length > 0;
-
-  if (!user || user.role !== 'customer') {
-    return (
-      <View style={styles.root}>
-        <View style={[styles.guestBody, { paddingTop: insets.top, paddingBottom: contentPaddingBottom }]}>
-          <View style={styles.guestContent}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="heart" size={30} color="#FFFFFF" />
-            </View>
-
-            <View style={styles.copyBlock}>
-              <Text style={styles.title}>אהבתי</Text>
-              <Text style={styles.subtitle}>
-                התחבר כלקוח כדי לשמור מוצרים{'\n'}ולראות כאן את כל הפריטים שאהבת.
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={onLoginPress}
-              style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
-            >
-              <Text style={styles.ctaText}>התחברות</Text>
-            </Pressable>
-          </View>
+  }, [favorites, needle, byId, byHandle]);
+  const refresh = async () => {
+    setRefreshing(true);
+    try { await Promise.all([refreshFavorites(), catalog.refetch()]); }
+    finally { setRefreshing(false); }
+  };
+  const goHome = () => { Keyboard.dismiss(); onTabPress('home'); };
+  const guest = !user || user.role !== 'customer';
+  return <View style={styles.root}>
+    <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+      <View style={styles.headingRow}>
+        <Pressable onPress={goHome} accessibilityRole="button" accessibilityLabel="חזרה לדף הבית" style={styles.roundButton}><Ionicons name="arrow-forward" size={21} color="#202020" /></Pressable>
+        <View style={styles.headingCopy}>
+          <Text style={styles.title} accessibilityRole="header">המועדפים שלי</Text>
+          <Text style={styles.subtitle}>כל מה שאהבתם, במקום אחד.</Text>
         </View>
-
-        <StoreFloatingTabBar activeTab="favorites" onTabPress={onTabPress} />
       </View>
-    );
-  }
-
-  return (
-    <View style={styles.root}>
-      {showToolbar ? (
-        <View style={[styles.topBar, { paddingTop: insets.top }]}>
-          <View style={styles.topBarRow}>
-            <Text style={styles.topBarTitle}>אהבתי</Text>
-          </View>
-        </View>
-      ) : null}
-
-      <ScrollView
-        style={styles.flex}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: showToolbar ? 16 : insets.top,
-          paddingBottom: contentPaddingBottom + 8,
-          gap: 16,
-          flexGrow: 1,
-          justifyContent: showToolbar ? undefined : 'center',
-        }}
-      >
-        {showToolbar ? (
-          <View style={styles.searchShell}>
-            <Ionicons name="search-outline" size={18} color="#9CA3AF" />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="חיפוש במוצרים שאהבתי"
-              placeholderTextColor="#B7BDC8"
-              style={styles.searchInput}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-            {query.length > 0 ? (
-              <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="נקה חיפוש">
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        {showToolbar ? (
-          <View style={styles.countRow}>
-            <Text style={styles.countText}>
-              {normalizedQuery
-                ? `${filteredFavorites.length} מתוך ${favorites.length} מוצרים`
-                : `${favorites.length} מוצר${favorites.length === 1 ? '' : 'ים'}`}
-            </Text>
-          </View>
-        ) : null}
-
-        {isHydrating ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={INK} />
-            <Text style={styles.loadingText}>טוען מוצרים שאהבת…</Text>
-          </View>
-        ) : null}
-
-        {!isHydrating && !favorites.length ? (
-          <View style={styles.emptyWrap}>
-            <View style={styles.iconCircleMuted}>
-              <Ionicons name="heart-outline" size={32} color="#CBD5E1" />
-            </View>
-            <Text style={styles.emptyTitle}>עדיין לא שמרת מוצרים</Text>
-            <Text style={styles.emptySubtitle}>
-              לחץ על הלב בכל מוצר,{'\n'}והוא יופיע כאן מיד.
-            </Text>
-            <Pressable
-              onPress={() => onTabPress('home')}
-              style={({ pressed }) => [styles.cta, styles.emptyCta, pressed && styles.pressed]}
-            >
-              <Text style={styles.ctaText}>לגלות מוצרים</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {!isHydrating && favorites.length > 0 && filteredFavorites.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <View style={styles.iconCircleMuted}>
-              <Ionicons name="search-outline" size={28} color="#CBD5E1" />
-            </View>
-            <Text style={styles.emptyTitle}>לא נמצאו מוצרים</Text>
-            <Text style={styles.emptySubtitle}>נסה מילת חיפוש אחרת</Text>
-          </View>
-        ) : null}
-
-        {!isHydrating && filteredFavorites.length > 0 ? (
-          <FavoriteProductsGrid
-            favorites={filteredFavorites}
-            isFavoritePending={isFavoritePending}
-            onOpenProduct={onOpenProduct}
-            onRemoveFavorite={removeFavorite}
-          />
-        ) : null}
-      </ScrollView>
-
-      <StoreFloatingTabBar activeTab="favorites" onTabPress={onTabPress} />
+      {!guest && favorites.length > 0 ? <View style={styles.search}>
+        <Ionicons name="search-outline" size={19} color="#888888" />
+        <TextInput value={query} onChangeText={setQuery} placeholder="חיפוש במועדפים" placeholderTextColor="#919191" accessibilityLabel="חיפוש במועדפים" style={styles.input} returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} autoCorrect={false} />
+        {query ? <Pressable onPress={() => setQuery('')} accessibilityRole="button" accessibilityLabel="ניקוי החיפוש" style={styles.clear}><Ionicons name="close" size={18} color="#777777" /></Pressable> : null}
+      </View> : null}
     </View>
-  );
+    {guest ? <View style={[styles.empty, { flex: 1, paddingBottom: contentPaddingBottom }]}>
+      <View style={styles.heartDisc}><Ionicons name="heart-outline" size={30} color="#535353" /></View>
+      <Text style={styles.emptyTitle}>שמרו את מה שאהבתם</Text>
+      <Text style={styles.emptyText}>{'התחברו לחשבון כדי לשמור מוצרים\nולחזור אליהם מתי שתרצו.'}</Text>
+      <Pressable onPress={onLoginPress} accessibilityRole="button" style={styles.cta}><Text style={styles.ctaText}>כניסה לחשבון</Text></Pressable>
+    </View> : <FlatList
+      data={isHydrating ? [] : filtered} numColumns={2} keyExtractor={item => item.id}
+      initialNumToRender={3} maxToRenderPerBatch={3} windowSize={5}
+      columnWrapperStyle={styles.row} style={styles.list}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: contentPaddingBottom + 8, flexGrow: 1 }}
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refresh(); }} tintColor="#202020" />}
+      ListHeaderComponent={favorites.length > 0 ? <View style={styles.countRow}><Text style={styles.count}>{needle ? `${filtered.length} מתוך ${favorites.length} מוצרים` : `${favorites.length} מוצרים ששמרתם`}</Text></View> : undefined}
+      ListEmptyComponent={<View style={styles.empty}>
+        {isHydrating ? <><ActivityIndicator color="#202020" /><Text style={styles.emptyText}>טוענים את המועדפים שלכם…</Text></> : <>
+          <View style={styles.heartDisc}><Ionicons name={favorites.length ? 'search-outline' : 'heart-outline'} size={30} color="#666666" /></View>
+          <Text style={styles.emptyTitle}>{favorites.length ? 'לא מצאנו התאמה' : 'המוצרים שתאהבו יחכו כאן'}</Text>
+          <Text style={styles.emptyText}>{favorites.length ? 'נסו שם אחר או חלק משם המוצר.' : 'לחצו על הלב ליד מוצר שאהבתם.\nמכאן תוכלו להוסיף אותו ישר לעגלה.'}</Text>
+          <Pressable onPress={favorites.length ? () => setQuery('') : goHome} accessibilityRole="button" style={styles.cta}><Text style={styles.ctaText}>{favorites.length ? 'ניקוי החיפוש' : 'לגלות מוצרים'}</Text></Pressable>
+        </>}
+      </View>}
+      renderItem={({ item }) => <FavoriteCatalogCard
+        favorite={item} liveProduct={byId.get(item.product_id) ?? byHandle.get(item.product_handle)} width={cardWidth}
+        brands={brands} isSubscriber={isActiveMember} pending={isFavoritePending(item.product_id)}
+        onRemove={() => { void removeFavorite(item.product_id); }} onOpenProduct={onOpenProduct} onOpenMembership={openOcdPlusSubscribeSheet}
+      />}
+    />}
+    <StoreFloatingTabBar activeTab="favorites" onTabPress={onTabPress} />
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  flex: { flex: 1 },
-
-  topBar: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  topBarRow: {
-    minHeight: 52,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarTitle: {
-    color: INK,
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-
-  searchShell: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 48,
-  },
-  searchInput: {
-    flex: 1,
-    color: INK,
-    textAlign: 'right',
-    fontSize: 13,
-    backgroundColor: '#F3F4F6',
-    padding: 0,
-  },
-
-  countRow: {
-    alignItems: 'flex-end',
-  },
-  countText: {
-    color: MUTED,
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-
-  guestBody: {
-    flex: 1,
-  },
-  guestContent: {
-    flex: 1,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 28,
-  },
-
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: INK,
-  },
-  iconCircleMuted: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-  },
-
-  copyBlock: {
-    alignItems: 'center',
-    gap: 12,
-  },
-  title: {
-    color: INK,
-    fontSize: 28,
-    fontWeight: '900',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  subtitle: {
-    color: MUTED,
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-
-  cta: {
-    width: '100%',
-    maxWidth: 320,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: INK,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyCta: {
-    marginTop: 8,
-    maxWidth: 220,
-  },
-  pressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.99 }],
-  },
-  ctaText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 12,
-  },
-  loadingText: {
-    color: INK,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  emptyWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 48,
-  },
-  emptyTitle: {
-    color: INK,
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    color: MUTED,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 21,
-  },
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  list: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#FFFFFF', gap: 18 },
+  headingRow: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  headingCopy: { flex: 1, gap: 3 },
+  title: { fontSize: 23, lineHeight: 31, fontWeight: '700', color: '#202020', textAlign: 'right', writingDirection: 'rtl' },
+  subtitle: { fontSize: 12, lineHeight: 19, color: '#818181', textAlign: 'right', writingDirection: 'rtl' },
+  roundButton: { width: 44, height: 44, borderRadius: radii.pill, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
+  search: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 9, minHeight: 48, paddingRight: 14, paddingLeft: 4, borderRadius: radii.surface, backgroundColor: '#F5F5F5' },
+  input: { flex: 1, minWidth: 0, minHeight: 48, paddingVertical: 12, fontSize: 14, textAlign: 'right', writingDirection: 'rtl', color: '#202020' },
+  clear: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  row: { direction: 'ltr', flexDirection: 'row-reverse', gap: 10 },
+  countRow: { paddingTop: 2, paddingBottom: 14 },
+  count: { fontSize: 12, lineHeight: 18, color: '#888888', textAlign: 'right' },
+  empty: { paddingHorizontal: 24, paddingVertical: 54, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  heartDisc: { width: 68, height: 68, borderRadius: radii.pill, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  emptyTitle: { fontSize: 19, fontWeight: '600', color: '#202020', textAlign: 'center' },
+  emptyText: { fontSize: 14, lineHeight: 22, color: '#818181', textAlign: 'center' },
+  cta: { minHeight: 48, marginTop: 10, paddingHorizontal: 28, paddingVertical: 13, borderRadius: radii.surface, backgroundColor: storeAccent.primary, alignItems: 'center', justifyContent: 'center' },
+  ctaText: { color: storeAccent.onPrimary, fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });

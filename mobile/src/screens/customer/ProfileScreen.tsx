@@ -1,124 +1,22 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { ModalDialog } from '../../components/ModalDialog';
 import Toast from '../../components/toast/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatOrderDate, formatOrderPrice } from '../../lib/orders';
 import { supabase } from '../../lib/supabase';
+import { isLocalDemoUser } from '../../lib/localDemoAccount';
 import type { OcdPlusStatus } from '../../lib/ocdPlus';
 import { useAuth } from '../../state/AuthContext';
 import { useFavorites } from '../../state/FavoritesContext';
 import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 import { getStoreBottomBarMetrics, StoreFloatingTabBar, type StoreBottomTabId } from '../store/StoreHomeScreen';
 import type { CustomerOrderRow } from '../../types/database';
+import { AccountSection, AccountLoading, AccountOrderRow, accountColors as C } from './AccountUI';
 
-/* ─── palette (minimal, monochrome) ───────────────────────────────────────── */
-const P = {
-  bg: '#EEEEEE',
-  card: '#FFFFFF',
-  separator: '#ECECEC',
-  label: '#111111',
-  secondaryLabel: '#555555',
-  tertiaryLabel: '#999999',
-  destructive: '#D94040',
-  iconBg: '#F0F0F0',
-  iconColor: '#444444',
-};
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const STORE_LOGO = require('../../../assets/logopng/OCDLOGO-04.png');
-
-/* ─── sub-components ──────────────────────────────────────────────────────── */
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Text style={styles.sectionHeader} numberOfLines={1}>
-      {title}
-    </Text>
-  );
-}
-
-/**
- * Hebrew settings-style row, laid out with absolute positioning so it
- * is immune to RTL/LTR flex-direction quirks across devices.
- *
- *   ┌─────────────────────────────────────────┐
- *   │ <  1     ............ label    [icon] │
- *   └─────────────────────────────────────────┘
- *     ↑ left edge                  right edge ↑
- */
-function ListRow({
-  icon,
-  label,
-  value,
-  chevron = true,
-  onPress,
-  destructive,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value?: string;
-  chevron?: boolean;
-  onPress?: () => void;
-  destructive?: boolean;
-}) {
-  const labelColor = destructive ? P.destructive : P.label;
-  const iconColor = destructive ? P.destructive : P.iconColor;
-  const iconBg = destructive ? '#FFF0F0' : P.iconBg;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-    >
-      {/* icon — absolutely positioned on the RIGHT edge */}
-      <View style={[styles.iconSlot, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={18} color={iconColor} />
-      </View>
-
-      {/* label — fills the row, with fixed padding on both sides */}
-      <Text
-        style={[styles.rowLabel, { color: labelColor }]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-
-      {/* end cluster — chevron + optional value, on the LEFT edge */}
-      <View style={styles.endSlot} pointerEvents="none">
-        {value != null ? (
-          <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>
-        ) : null}
-        {chevron ? (
-          <Ionicons name="chevron-back" size={15} color={P.tertiaryLabel} />
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
-function RowDivider() {
-  return <View style={styles.rowDivider} />;
-}
-
-function StatPill({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.statPill}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
+const P = { label: C.ink, secondaryLabel: C.muted, destructive: C.red, card: C.bg, separator: C.line };
 
 function ocdPlusStatusLabel(status: OcdPlusStatus): string {
   switch (status) {
@@ -209,7 +107,28 @@ function DeleteAccountDialog({
   );
 }
 
-/* ─── main screen ─────────────────────────────────────────────────────────── */
+function ProfileShortcut({ icon, title, subtitle, value, onPress }: {
+  icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string; value?: string; onPress: () => void;
+}) {
+  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={[title, value, subtitle].filter(Boolean).join(', ')} style={styles.shortcut}>
+    <View style={styles.shortcutTop}>
+      <Ionicons name={icon} size={24} color={C.ink} />
+      {value != null ? <Text style={styles.shortcutValue}>{value}</Text> : <Ionicons name="arrow-back" size={17} color="#9A9A9A" />}
+    </View>
+    <Text style={styles.shortcutTitle}>{title}</Text>
+    <Text style={styles.shortcutSubtitle}>{subtitle}</Text>
+  </Pressable>;
+}
+
+function ProfileLink({ icon, title, subtitle, onPress }: {
+  icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string; onPress: () => void;
+}) {
+  return <Pressable onPress={onPress} accessibilityRole="button" style={styles.detailRow}>
+    <View style={styles.detailIcon}><Ionicons name={icon} size={21} color="#424242" /></View>
+    <View style={styles.detailCopy}><Text style={styles.detailTitle}>{title}</Text><Text style={styles.detailSubtitle}>{subtitle}</Text></View>
+    <Ionicons name="chevron-back" size={15} color="#939393" />
+  </Pressable>;
+}
 
 export function CustomerProfileScreen({
   onTabPress,
@@ -217,12 +136,14 @@ export function CustomerProfileScreen({
   onOpenOrder,
   onOpenAddresses,
   onOpenOcdPlus,
+  onOpenPersonalDetails,
 }: {
   onTabPress: (tabId: StoreBottomTabId) => void;
   onOpenOrders: () => void;
   onOpenOrder: (orderId: string) => void;
   onOpenAddresses: () => void;
   onOpenOcdPlus: () => void;
+  onOpenPersonalDetails: () => void;
 }) {
   const { user, signOut, deleteCustomerAccount } = useAuth();
   const { favoriteCount } = useFavorites();
@@ -237,6 +158,7 @@ export function CustomerProfileScreen({
 
   const fetchAll = useCallback(async () => {
     if (!user?.id) return;
+    if (isLocalDemoUser(user.id)) { setRecentOrders([]); setLoading(false); return; }
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -272,11 +194,6 @@ export function CustomerProfileScreen({
     }
   }, [deleteCustomerAccount]);
 
-  const totalSpent = useMemo(
-    () => recentOrders.reduce((sum, o) => sum + Number(o.total_amount ?? 0), 0),
-    [recentOrders],
-  );
-
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 12) return 'בוקר טוב';
@@ -284,445 +201,147 @@ export function CustomerProfileScreen({
     return 'ערב טוב';
   }, []);
 
-  const listHeaderBelowHero = (
-    <View style={[styles.headerStack, { paddingTop: 16 }]}>
-      <View style={styles.greetingWrap}>
-        <Text style={styles.greetingLine}>{greeting},</Text>
-        <Text style={styles.greetingName} numberOfLines={1}>
-          {user?.name ?? 'שם משתמש'}
-        </Text>
-      </View>
-
-      {/* ── stats row (gap below fixed hero matches previous headerStack layout) ── */}
-      <View style={styles.statsCard}>
-        <StatPill value={String(recentOrders.length)} label="הזמנות" />
-        <View style={styles.statsSep} />
-        <StatPill value={String(favoriteCount)} label="מועדפים" />
-        <View style={styles.statsSep} />
-        <StatPill
-          value={totalSpent > 0 ? `₪${totalSpent.toLocaleString('he-IL')}` : '—'}
-          label="סה״כ רכישות"
-        />
-      </View>
-
-      {/* ── orders + addresses — single card (no split sections) ── */}
-      <View>
-        <View style={styles.listCard}>
-          {isCustomer ? (
-            <>
-              <ListRow
-                icon="ribbon-outline"
-                label="מנוי OCD+"
-                value={ocdPlusLoading ? '…' : ocdPlusStatusLabel(ocdPlusStatus)}
-                onPress={onOpenOcdPlus}
-              />
-              <RowDivider />
-            </>
-          ) : null}
-          <ListRow
-            icon="bag-outline"
-            label="היסטוריית הזמנות"
-            onPress={onOpenOrders}
-          />
-          <RowDivider />
-          <ListRow
-            icon="location-outline"
-            label="כתובות שמורות"
-            onPress={onOpenAddresses}
-          />
-        </View>
-      </View>
-
-      {/* ── recent orders header ── */}
-      <SectionHeader title="הזמנות אחרונות" />
-    </View>
-  );
-
-  const listFooterSettings = (
-    <View style={styles.settingsFooter}>
-      <SectionHeader title="הגדרות" />
-      <View style={styles.listCard}>
-        <ListRow
-          icon="trash-outline"
-          label={deletingAccount ? 'מוחק חשבון…' : 'מחיקת חשבון'}
-          chevron={false}
-          destructive
-          onPress={confirmDeleteAccount}
-        />
-        <RowDivider />
-        <ListRow
-          icon="log-out-outline"
-          label="התנתקות"
-          chevron={false}
-          onPress={() => void signOut()}
-        />
-      </View>
-    </View>
-  );
+  const nameParts = user?.name?.trim().split(/\s+/).filter(Boolean) ?? [];
+  const initials = nameParts.length
+    ? [nameParts[0], ...(nameParts.length > 1 ? [nameParts[nameParts.length - 1]] : [])]
+        .map((part) => Array.from(part)[0]).join('')
+    : null;
 
   return (
-    <View style={styles.screenRoot}>
-      <View style={styles.root}>
-        {/* Hero fixed outside FlatList — avoids bounce gap between status bar and dark header */}
-        <View style={styles.heroLightWrap}>
-          <View style={[styles.headerBg, { paddingTop: insets.top }]}>
-            <View style={styles.topBar}>
-              <Image
-                source={STORE_LOGO}
-                style={styles.headerLogo}
-                resizeMode="contain"
-                tintColor="#FFFFFF"
-              />
-            </View>
-          </View>
-        </View>
-
-        <FlatList
-          data={recentOrders}
-          keyExtractor={(item) => item.id}
-          style={styles.listFill}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: contentPaddingBottom + 16, flexGrow: 1 }}
-          ListHeaderComponent={listHeaderBelowHero}
-          ListFooterComponent={listFooterSettings}
-          renderItem={({ item }) => (
-            <View style={styles.orderCardOuter}>
-              <Pressable
-                onPress={() => onOpenOrder(item.id)}
-                style={({ pressed }) => [styles.orderCard, pressed && styles.rowPressed]}
-              >
-                <View style={styles.orderCardHeader}>
-                  <View style={styles.orderHeaderCopy}>
-                    <Text style={styles.orderEyebrow}>הזמנה שבוצעה</Text>
-                    <Text style={styles.orderNumber}>#{item.order_number}</Text>
-                  </View>
-                  <View style={styles.orderHeaderIcon}>
-                    <Ionicons name="arrow-back" size={17} color="#111111" />
-                  </View>
-                </View>
-
-                <View style={styles.orderCardBody}>
-                  <View style={styles.orderBodyCell}>
-                    <Text style={styles.orderColumnLabel}>תאריך ושעה</Text>
-                    <Text style={styles.orderDate} numberOfLines={1}>
-                      {formatOrderDate(item.created_at)}
-                    </Text>
-                  </View>
-                  <View style={styles.orderBodyDivider} />
-                  <View style={styles.orderBodyCell}>
-                    <Text style={styles.orderColumnLabel}>סה״כ לתשלום</Text>
-                    <Text style={styles.orderPrice}>
-                      {formatOrderPrice(item.total_amount, item.currency_code)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.orderTapHint}>
-                  <Text style={styles.orderTapHintText}>לחץ לצפייה בפרטי ההזמנה</Text>
-                  <Ionicons name="chevron-back" size={14} color="#8A8A8A" />
-                </View>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" />
+      <FlatList
+        data={recentOrders}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: contentPaddingBottom + 24 }}
+        ListHeaderComponent={
+          <>
+            <View style={styles.intro}>
+              <View style={styles.introCopy}>
+                <Text style={styles.greeting}>{greeting},</Text>
+                <Text style={styles.name}>{user?.name?.trim() || 'ברוכים הבאים'}</Text>
+              </View>
+              <Pressable onPress={onOpenPersonalDetails} accessibilityRole="button" accessibilityLabel="עריכת הפרטים האישיים" style={styles.avatar}>
+                {initials ? <Text style={styles.initials}>{initials}</Text> : <Ionicons name="person-outline" size={23} color={C.ink} />}
+                <View style={styles.avatarEdit}><Ionicons name="pencil" size={10} color="#FFFFFF" /></View>
               </Pressable>
             </View>
-          )}
-          ListEmptyComponent={
-            loading ? (
-              <View style={[styles.listCard, styles.emptyCard]}>
-                <ActivityIndicator size="small" color={P.iconColor} />
-                <Text style={styles.emptyText}>טוען הזמנות…</Text>
+            {isCustomer ? (
+              <Pressable onPress={onOpenOcdPlus} accessibilityRole="button" accessibilityLabel="פרטי מנוי OCD+" style={styles.membershipLink}>
+                <View style={styles.membershipTop}>
+                  <Text style={styles.membershipEyebrow}>המועדון שלכם</Text>
+                  <View style={styles.membershipStatusRow}>
+                    {!ocdPlusLoading && ocdPlusStatus === 'active' ? <Ionicons name="checkmark" size={12} color="#DDD1B5" /> : null}
+                    <Text style={styles.membershipStatus}>{ocdPlusLoading ? 'טוען פרטי מנוי…' : ocdPlusStatusLabel(ocdPlusStatus)}</Text>
+                  </View>
+                </View>
+                <View style={styles.membershipBody}>
+                  <View style={styles.membershipCopy}>
+                    <Text style={styles.membershipTitle}>הטבות בכל קנייה.</Text>
+                    <Text style={styles.membershipNote}>כל מה שמגיע לכם כחברי OCD+</Text>
+                  </View>
+                  <Image source={require('../../../assets/ocdplus-membership-card-cutout.png')} resizeMode="contain" style={styles.memberCard} accessible={false} />
+                </View>
+                <View style={styles.membershipFooter}>
+                  <Text style={styles.membershipAction}>למועדון שלי</Text>
+                  <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+                </View>
+              </Pressable>
+            ) : null}
+            <View style={styles.shortcuts}>
+              <ProfileShortcut icon="bag-handle-outline" title="ההזמנות שלי" subtitle="למעקב ופרטי הזמנות" onPress={onOpenOrders} />
+              <ProfileShortcut icon="heart-outline" title="המועדפים שלי" subtitle="כל מה ששמרתם" value={String(favoriteCount)} onPress={() => onTabPress('favorites')} />
+            </View>
+            <View style={styles.details}>
+              <ProfileLink icon="person-outline" title="פרטים אישיים" subtitle="שם ומספר הטלפון שלכם" onPress={onOpenPersonalDetails} />
+              <View style={styles.detailDivider} />
+              <ProfileLink icon="location-outline" title="הכתובת שלי" subtitle="כתובת המשלוח השמורה" onPress={onOpenAddresses} />
+            </View>
+            <AccountSection title="הזמנות אחרונות" action="לכל ההזמנות" onPress={onOpenOrders} />
+          </>
+        }
+        renderItem={({ item }) => <View style={styles.orderCard}><AccountOrderRow order={item} onPress={() => onOpenOrder(item.id)} /></View>}
+        ListEmptyComponent={loading ? <AccountLoading label="טוען הזמנות…" /> : (
+          <View style={styles.emptyOrders}>
+            <View style={styles.emptyTop}>
+              <View style={styles.emptyIcon}><Ionicons name="bag-handle-outline" size={24} color="#747474" /></View>
+              <View style={styles.detailCopy}>
+                <Text style={styles.emptyTitle}>עוד לא הזמנתם?</Text>
+                <Text style={styles.detailSubtitle}>ההזמנות שלכם יופיעו כאן, מסודרות במקום אחד.</Text>
               </View>
-            ) : (
-              <View style={[styles.listCard, styles.emptyCard]}>
-                <Ionicons name="bag-outline" size={32} color={P.tertiaryLabel} />
-                <Text style={styles.emptyTitle}>אין הזמנות עדיין</Text>
-                <Text style={styles.emptyText}>ברגע שתבצע רכישה היא תופיע כאן.</Text>
-              </View>
-            )
-          }
-        />
-
-        <DeleteAccountDialog
-          visible={deleteConfirmVisible}
-          deleting={deletingAccount}
-          onCancel={() => setDeleteConfirmVisible(false)}
-          onConfirm={handleDeleteAccount}
-        />
-
-        <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
-      </View>
+            </View>
+            <Pressable onPress={() => onTabPress('home')} accessibilityRole="button" style={styles.shopAction}>
+              <Text style={styles.shopActionText}>בואו למצוא משהו לבית</Text><Ionicons name="arrow-back" size={15} color={C.ink} />
+            </Pressable>
+          </View>
+        )}
+        ListFooterComponent={
+          <View style={styles.settings}>
+            <Pressable onPress={() => void signOut()} accessibilityRole="button" style={styles.logout}>
+              <Ionicons name="log-out-outline" size={19} color={C.ink} />
+              <Text style={styles.logoutText}>התנתקות מהחשבון</Text>
+            </Pressable>
+            <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount} accessibilityRole="button" accessibilityState={{ disabled: deletingAccount }} style={styles.deleteLink}>
+              <Text style={styles.deleteText}>{deletingAccount ? 'מוחק חשבון…' : 'מחיקת החשבון'}</Text>
+            </Pressable>
+          </View>
+        }
+      />
+      <DeleteAccountDialog visible={deleteConfirmVisible} deleting={deletingAccount} onCancel={() => setDeleteConfirmVisible(false)} onConfirm={handleDeleteAccount} />
+      <StoreFloatingTabBar activeTab="profile" onTabPress={onTabPress} />
     </View>
   );
 }
 
-/* ─── styles ──────────────────────────────────────────────────────────────── */
-const ROW_HEIGHT = 56;
-const ICON_SIZE = 32;
-const SIDE_PADDING = 16;
-
 const styles = StyleSheet.create({
-  screenRoot: { flex: 1, backgroundColor: P.bg },
-  root: { flex: 1, backgroundColor: P.bg },
-  /** Same role as store home: light strip so rounded header corners read cleanly */
-  heroLightWrap: { backgroundColor: P.bg },
-  listFill: { flex: 1, backgroundColor: P.bg },
-
-  headerStack: { gap: 16, paddingTop: 0 },
-  settingsFooter: { gap: 0, marginTop: 16 },
-
-  /* top bar — black slab with rounded bottom corners (matches store chrome) */
-  headerBg: {
-    backgroundColor: '#000000',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-  },
-  topBar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 12,
-    paddingBottom: 20,
-    minHeight: 72,
-  },
-  headerLogo: {
-    width: 115,
-    height: 42,
-  },
-  greetingWrap: {
-    paddingHorizontal: 20,
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  greetingLine: {
-    fontSize: 13,
-    color: P.tertiaryLabel,
-    textAlign: 'right',
-    letterSpacing: 0.2,
-  },
-  greetingName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: P.label,
-    textAlign: 'right',
-    letterSpacing: -0.3,
-  },
-
-  /* stats */
-  statsCard: {
-    marginHorizontal: 20,
-    backgroundColor: P.card,
-    borderRadius: 16,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: P.separator,
-  },
-  statPill: { flex: 1, alignItems: 'center', paddingVertical: 14, gap: 2 },
-  statValue: { fontSize: 20, fontWeight: '700', color: P.label, letterSpacing: -0.5 },
-  statLabel: { fontSize: 12, color: P.tertiaryLabel },
-  statsSep: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: P.separator,
-    marginVertical: 14,
-  },
-
-  /* section headers */
-  sectionHeader: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: P.tertiaryLabel,
-    textAlign: 'right',
-    paddingHorizontal: 20,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-
-  /* list card */
-  listCard: {
-    marginHorizontal: 20,
-    backgroundColor: P.card,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: P.separator,
-  },
-
-  /* ── absolute-positioned row ── */
-  row: {
-    position: 'relative',
-    minHeight: ROW_HEIGHT,
-    backgroundColor: P.card,
-    justifyContent: 'center',
-  },
-  rowPressed: { backgroundColor: P.bg },
-
-  /* icon pinned to RIGHT, vertically centered via top:0/bottom:0 + justifyContent */
-  iconSlot: {
-    position: 'absolute',
-    right: SIDE_PADDING,
-    top: (ROW_HEIGHT - ICON_SIZE) / 2,
-    width: ICON_SIZE,
-    height: ICON_SIZE,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /* label fills row width, padded for icon (right) and chevron (left) */
-  rowLabel: {
-    fontSize: 16,
-    textAlign: 'right',
-    paddingLeft: 50,
-    paddingRight: SIDE_PADDING + ICON_SIZE + 12,
-    paddingVertical: 16,
-  },
-
-  /* chevron + value cluster pinned to LEFT */
-  endSlot: {
-    position: 'absolute',
-    left: SIDE_PADDING,
-    top: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  rowValue: { fontSize: 14, color: P.tertiaryLabel },
-
-  rowDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: P.separator,
-    marginRight: SIDE_PADDING + ICON_SIZE + 12,
-    marginLeft: SIDE_PADDING,
-  },
-
-  /* ── recent order cards ── */
-  orderCardOuter: {
-    marginHorizontal: 20,
-    marginBottom: 12,
-    backgroundColor: '#111111',
-    borderRadius: 22,
-    shadowColor: '#000000',
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 4,
-    overflow: 'hidden',
-  },
-  orderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    overflow: 'hidden',
-  },
-  orderCardHeader: {
-    minHeight: 78,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    backgroundColor: '#111111',
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-  },
-  orderHeaderIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  orderHeaderCopy: {
-    flex: 1,
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  orderEyebrow: {
-    color: 'rgba(255,255,255,0.58)',
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  orderNumber: {
-    fontSize: 21,
-    lineHeight: 26,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    textAlign: 'right',
-  },
-  orderBrandMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#2A2A2A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  orderBrandText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  orderCardBody: {
-    minHeight: 86,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 14,
-  },
-  orderBodyCell: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    gap: 7,
-  },
-  orderBodyDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 46,
-    backgroundColor: P.separator,
-  },
-  orderColumnLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#737373',
-    textAlign: 'center',
-  },
-  orderDate: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#111111',
-    textAlign: 'center',
-  },
-  orderPrice: {
-    fontSize: 19,
-    fontWeight: '900',
-    color: '#111111',
-    textAlign: 'center',
-  },
-  orderTapHint: {
-    minHeight: 40,
-    paddingHorizontal: 18,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: '#F7F7F7',
-  },
-  orderTapHintText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8A8A8A',
-  },
-
-  /* empty state */
-  emptyCard: { alignItems: 'center', paddingVertical: 36, gap: 8, marginTop: 8 },
-  emptyTitle: { fontSize: 16, fontWeight: '600', color: P.label },
-  emptyText: { fontSize: 14, color: P.tertiaryLabel, textAlign: 'center' },
-
-  /* delete-account dialog */
+  root: { flex: 1, backgroundColor: '#F7F7F7' },
+  intro: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 16, paddingTop: 18, paddingBottom: 24 },
+  introCopy: { flex: 1, gap: 3 },
+  greeting: { color: C.muted, fontSize: 13, lineHeight: 20, textAlign: 'right', writingDirection: 'rtl' },
+  name: { color: C.ink, fontSize: 26, lineHeight: 35, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  avatar: { width: 52, height: 52, borderRadius: radii.pill, backgroundColor: '#ECECEC', borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  initials: { color: '#444444', fontSize: 17, fontWeight: '600' },
+  avatarEdit: { position: 'absolute', bottom: -2, right: -2, width: 20, height: 20, borderRadius: radii.pill, borderWidth: 2, borderColor: '#F7F7F7', backgroundColor: '#202020', alignItems: 'center', justifyContent: 'center' },
+  membershipLink: { backgroundColor: '#202020', borderRadius: radii.surface, paddingHorizontal: 18, paddingTop: 15, marginBottom: 16 },
+  membershipTop: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  membershipEyebrow: { color: '#CDCDCD', fontSize: 11, lineHeight: 17, textAlign: 'right' },
+  membershipStatusRow: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 4, borderRadius: radii.pill, backgroundColor: '#323232', paddingHorizontal: 8, paddingVertical: 3 },
+  membershipStatus: { color: '#DDD1B5', fontSize: 10, lineHeight: 15, textAlign: 'right', flexShrink: 1 },
+  membershipBody: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingVertical: 8 },
+  membershipCopy: { flex: 1, gap: 5 },
+  membershipTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', lineHeight: 27, textAlign: 'right', writingDirection: 'rtl' },
+  membershipNote: { color: '#BCBCBC', fontSize: 11, lineHeight: 17, textAlign: 'right', writingDirection: 'rtl' },
+  memberCard: { width: '42%', height: 86 },
+  membershipFooter: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, borderTopWidth: 1, borderTopColor: '#3A3A3A' },
+  membershipAction: { color: '#F2F2F2', fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  shortcuts: { direction: 'ltr', flexDirection: 'row-reverse', gap: 12, marginBottom: 16 },
+  shortcut: { flex: 1, minWidth: 0, backgroundColor: '#FFFFFF', borderRadius: radii.surface, borderWidth: 1, borderColor: '#EBEBEB', padding: 15 },
+  shortcutTop: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  shortcutValue: { fontSize: 19, lineHeight: 24, color: '#686868', fontWeight: '500', fontVariant: ['tabular-nums'] },
+  shortcutTitle: { color: C.ink, fontSize: 15, lineHeight: 22, fontWeight: '600', textAlign: 'right' },
+  shortcutSubtitle: { color: C.muted, fontSize: 11, lineHeight: 18, textAlign: 'right', marginTop: 2 },
+  details: { backgroundColor: '#FFFFFF', borderRadius: radii.surface, borderWidth: 1, borderColor: '#EBEBEB', paddingHorizontal: 14 },
+  detailRow: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 12, minHeight: 72, paddingVertical: 12 },
+  detailIcon: { width: 34, alignItems: 'center' },
+  detailCopy: { flex: 1, gap: 3 },
+  detailTitle: { fontSize: 14, lineHeight: 21, fontWeight: '600', color: C.ink, textAlign: 'right' },
+  detailSubtitle: { fontSize: 11, lineHeight: 18, color: C.muted, textAlign: 'right', writingDirection: 'rtl' },
+  detailDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#EAEAEA', marginRight: 46 },
+  orderCard: { backgroundColor: '#FFFFFF', borderRadius: radii.surface, paddingHorizontal: 16, marginBottom: 10 },
+  emptyOrders: { backgroundColor: '#FFFFFF', borderRadius: radii.surface, padding: 16, borderWidth: 1, borderColor: '#EBEBEB' },
+  emptyTop: { direction: 'ltr', flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  emptyIcon: { width: 44, height: 44, borderRadius: radii.compact, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: C.ink, fontSize: 14, lineHeight: 22, fontWeight: '600', textAlign: 'right' },
+  shopAction: { direction: 'ltr', flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', minHeight: 44, marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#EAEAEA', paddingTop: 6 },
+  shopActionText: { color: C.ink, fontSize: 12, fontWeight: '500', textAlign: 'right' },
+  settings: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12, marginTop: 16, gap: 2 },
+  logout: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, minHeight: 48 },
+  logoutText: { color: C.ink, fontSize: 14, textAlign: 'right' },
+  deleteLink: { alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', paddingHorizontal: 3 },
+  deleteText: { color: C.red, fontSize: 12, textAlign: 'right' },
   dialogCard: {
-    borderRadius: 24,
+    borderRadius: radii.sheet,
     borderWidth: 0,
     padding: 0,
     overflow: 'hidden',
@@ -742,7 +361,7 @@ const styles = StyleSheet.create({
   dialogIcon: {
     width: 56,
     height: 56,
-    borderRadius: 18,
+    borderRadius: radii.compact,
     backgroundColor: '#FFF0F0',
     alignItems: 'center',
     justifyContent: 'center',
@@ -767,7 +386,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#FFF5F5',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
@@ -791,7 +410,7 @@ const styles = StyleSheet.create({
   dialogButton: {
     width: '100%',
     minHeight: 52,
-    borderRadius: 16,
+    borderRadius: radii.surface,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,

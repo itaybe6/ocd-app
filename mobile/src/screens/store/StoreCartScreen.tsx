@@ -1,14 +1,20 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, Text, View } from 'react-native';
+import { storeAccent } from '../../theme/storeAccent';
+import { radii } from '../../theme/radii';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Image, Platform, Pressable, ScrollView as HorizontalScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { ArrowLeft, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Gift, Minus, Plus, Trash2, Truck } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { computeOcdPlusPrice } from '../../components/OcdPlusProductPriceBlock';
+import { useBottomSheetReady, useInBottomSheet } from '../../components/BottomSheetScreen';
+import { computeOcdPlusPrice, OCD_PLUS_FREE_SHIPPING_AT } from '../../components/OcdPlusProductPriceBlock';
 import { OcdPlusMark } from '../../components/OcdPlusMark';
 import { useOcdPlusSubscribeSheet } from '../../context/OcdPlusSubscribeSheetContext';
+import { type CartRecommendation } from '../../lib/shopify';
+import { useStoreResources } from '../../hooks/useStoreResources';
+import { isCatalogBundleProduct } from '../../lib/productBundles';
 import { useCart } from '../../state/CartContext';
 import { useOcdPlusMembership } from '../../state/useOcdPlusMembership';
 
@@ -18,17 +24,16 @@ const RTL_TEXT = {
 };
 
 const COLORS = {
-  /** רקע ראשי — אוף-וייט עדין שמרים את האפליקציה אווירירית */
-  background: '#F6F7F9',
+  background: '#FFFFFF',
   surface: '#FFFFFF',
-  surfaceMuted: '#FAFBFC',
-  border: '#E5E8EE',
-  divider: '#F0F2F5',
+  surfaceMuted: '#FFFFFF',
+  border: '#ECECEC',
+  divider: '#F0F0F0',
   text: '#0F172A',
   muted: '#64748B',
   softText: '#94A3B8',
   dark: '#0B1220',
-  accent: '#00C2A8',
+  accent: storeAccent.primary,
   danger: '#DC2626',
   pill: '#F1F5F9',
   /** רקע בורר הכמות — אפור בהיר עדין */
@@ -70,9 +75,9 @@ function CartProductImage({
         style={{
           width: '100%',
           height: '100%',
-          borderRadius: 18,
+          borderRadius: radii.compact,
           overflow: 'hidden',
-          backgroundColor: '#F4F6F9',
+          backgroundColor: '#FFFFFF',
         }}
       >
         <Image
@@ -89,7 +94,7 @@ function CartProductImage({
     <View
       style={{
         flex: 1,
-        borderRadius: 16,
+        borderRadius: radii.compact,
         backgroundColor: coverColor,
         justifyContent: 'center',
         alignItems: 'center',
@@ -99,7 +104,7 @@ function CartProductImage({
         style={{
           width: 34,
           height: 48,
-          borderRadius: 12,
+          borderRadius: radii.compact,
           backgroundColor: accentColor,
         }}
       />
@@ -163,82 +168,368 @@ function CartLineSwipeable({
 function StepperButton({
   onPress,
   children,
-  disabled = false,
+  label,
 }: {
   onPress: () => void;
   children: React.ReactNode;
-  disabled?: boolean;
+  label: string;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
-      hitSlop={8}
-      style={({ pressed }) => ({
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.surface,
-        opacity: pressed || disabled ? 0.55 : 1,
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
-        elevation: 1,
-      })}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{ width: 44, height: 44 }}
     >
-      {children}
+      <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 32, height: 32, borderRadius: radii.pill, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8E8E8', alignItems: 'center', justifyContent: 'center' }}>
+          {children}
+        </View>
+      </View>
     </Pressable>
+  );
+}
+
+function RollingQuantity({ value }: { value: number }) {
+  const progress = React.useRef(new Animated.Value(1)).current;
+  const previous = React.useRef(value);
+  const [pair, setPair] = React.useState({ from: value, to: value, dir: 1 });
+
+  React.useEffect(() => {
+    if (previous.current === value) return;
+    const dir = value > previous.current ? 1 : -1;
+    const from = previous.current;
+    previous.current = value;
+    setPair({ from, to: value, dir });
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [progress, value]);
+
+  const distance = 16;
+  const outgoingY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, pair.dir * -distance],
+  });
+  const incomingY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [pair.dir * distance, 0],
+  });
+  const outgoingOpacity = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const incomingOpacity = progress.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, 1, 1] });
+  const digitStyle = {
+    color: '#111111',
+    fontSize: 16,
+    fontWeight: '600' as const,
+    textAlign: 'center' as const,
+    lineHeight: 22,
+    includeFontPadding: false,
+    fontVariant: ['tabular-nums'] as const,
+  };
+
+  return (
+    <View accessible accessibilityLabel={`כמות: ${value}`} accessibilityLiveRegion="polite" style={{ minWidth: 32, paddingHorizontal: 2, height: 44, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.Text style={[digitStyle, { position: 'absolute', opacity: outgoingOpacity, transform: [{ translateY: outgoingY }] }]}>
+        {pair.from}
+      </Animated.Text>
+      <Animated.Text style={[digitStyle, { opacity: incomingOpacity, transform: [{ translateY: incomingY }] }]}>
+        {pair.to}
+      </Animated.Text>
+    </View>
+  );
+}
+
+const STORE_FREE_SHIPPING_AT = 299;
+const DEAL_AT = 600;
+
+function CartRewardBar({ subtotal, freeShippingAt }: { subtotal: number; freeShippingAt: number }) {
+  const freeLeft = Math.max(0, freeShippingAt - subtotal);
+  const dealLeft = Math.max(0, DEAL_AT - subtotal);
+  const hasFree = freeLeft <= 0;
+  const hasDeal = dealLeft <= 0;
+  const fill = Math.min(100, (subtotal / DEAL_AT) * 100);
+  const freeAt = (freeShippingAt / DEAL_AT) * 100;
+
+  return (
+    <View style={{ paddingTop: 2, paddingBottom: 6 }}>
+      <Text style={{ textAlign: 'center', fontSize: 12, lineHeight: 18, color: '#6B7280' }}>
+        {!hasFree ? (
+          <>
+            הוסיפו עוד{' '}
+            <Text style={{ color: storeAccent.ink, fontWeight: '700' }}>₪{Math.round(freeLeft)}</Text>
+            {' '}למשלוח חינם
+          </>
+        ) : !hasDeal ? (
+          <>
+            <Text style={{ color: storeAccent.ink, fontWeight: '700' }}>יש לך משלוח חינם 🎉</Text>
+            {' '}עוד{' '}
+            <Text style={{ color: storeAccent.ink, fontWeight: '700' }}>₪{Math.round(dealLeft)}</Text>
+            {' '}ומקבלים ₪100 הנחה!
+          </>
+        ) : (
+          <Text style={{ color: storeAccent.ink, fontWeight: '700' }}>
+            זכיתם במשלוח חינם ובמבצע קונים ב־600 משלמים 500! 🎉
+          </Text>
+        )}
+      </Text>
+
+      <View style={{ height: 64, marginHorizontal: 18, marginTop: 10 }}>
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 10,
+            height: 8,
+            borderRadius: radii.pill,
+            backgroundColor: storeAccent.soft,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              right: 0,
+              width: `${fill}%`,
+              backgroundColor: storeAccent.primary,
+            }}
+          />
+        </View>
+
+        <RewardMark percent={freeAt} active={hasFree} label="משלוח חינם">
+          <Truck size={14} color={hasFree ? storeAccent.ink : '#A1A1AA'} strokeWidth={2} />
+        </RewardMark>
+        <RewardMark percent={100} active={hasDeal} label={'קנה ב־₪600\nשלם ₪500'} anchor="start">
+          <Gift size={14} color={hasDeal ? storeAccent.ink : '#A1A1AA'} strokeWidth={2} />
+        </RewardMark>
+      </View>
+    </View>
+  );
+}
+
+function RewardMark({
+  percent,
+  active,
+  label,
+  anchor = 'center',
+  children,
+}: {
+  percent: number;
+  active: boolean;
+  label: string;
+  anchor?: 'center' | 'start';
+  children: React.ReactNode;
+}) {
+  const atStart = anchor === 'start';
+
+  return (
+    <View
+      style={
+        atStart
+          ? {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              alignItems: 'flex-start',
+            }
+          : {
+              position: 'absolute',
+              top: 0,
+              right: `${percent}%`,
+              width: 28,
+              marginRight: -14,
+              alignItems: 'center',
+            }
+      }
+    >
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: radii.pill,
+          backgroundColor: '#FFFFFF',
+          borderWidth: 2,
+          borderColor: active ? storeAccent.ink : '#D4D4D8',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {children}
+      </View>
+      <Text
+        style={{
+          marginTop: 3,
+          fontSize: 10,
+          lineHeight: 13,
+          textAlign: atStart ? 'left' : 'center',
+          writingDirection: 'rtl',
+          color: active ? storeAccent.ink : '#A1A1AA',
+          fontWeight: active ? '600' : '500',
+          width: atStart ? undefined : 64,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function CartUpsellRail({
+  items,
+  remainingForFree,
+  addingVariantId,
+  disabled,
+  onAdd,
+}: {
+  items: CartRecommendation[];
+  remainingForFree: number;
+  addingVariantId: string | null;
+  disabled?: boolean;
+  onAdd: (item: CartRecommendation) => void;
+}) {
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(328, Math.round(width * 0.84));
+
+  if (!items.length) return null;
+
+  return (
+    <View
+      style={{
+        marginHorizontal: -16,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: '#EEEEEE',
+        backgroundColor: '#FFFFFF',
+        paddingTop: 20,
+        paddingBottom: 6,
+      }}
+    >
+      <View style={{ paddingHorizontal: 16 }}>
+        <Text style={{ color: '#202124', fontSize: 17, lineHeight: 24, fontWeight: '600', ...RTL_TEXT }}>
+          משלימים את הסל
+        </Text>
+        <Text style={{ color: '#83868A', fontSize: 12, lineHeight: 19, marginTop: 3, ...RTL_TEXT }}>
+          {remainingForFree > 0
+            ? `עוד ${formatPrice(remainingForFree, items[0].currencyCode)} למשלוח חינם`
+            : 'עוד כמה דברים שיכולים להתאים לכם'}
+        </Text>
+      </View>
+
+      <HorizontalScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginTop: 14, transform: [{ scaleX: -1 }] }}
+        contentContainerStyle={{ paddingStart: 16, paddingEnd: 16, paddingBottom: 4, gap: 10 }}
+      >
+        {items.map((item) => {
+          const adding = addingVariantId === item.variantId;
+          return (
+            <View
+              key={item.id}
+              style={{
+                width: cardWidth,
+                transform: [{ scaleX: -1 }],
+                flexDirection: 'row-reverse',
+                alignItems: 'stretch',
+                gap: 12,
+                borderRadius: radii.surface,
+                backgroundColor: '#FAFAFA',
+                borderWidth: 1,
+                borderColor: '#EDEDED',
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+              }}
+            >
+              <View
+                style={{
+                  width: 72,
+                  minHeight: 88,
+                  flexShrink: 0,
+                  borderRadius: radii.surface,
+                  overflow: 'hidden',
+                  backgroundColor: '#FFFFFF',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {item.imageUrl ? (
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    accessibilityLabel={item.imageAltText || item.title}
+                    style={{ width: 60, height: 76 }}
+                    resizeMode="contain"
+                  />
+                ) : null}
+              </View>
+
+              <View style={{ flex: 1, minWidth: 0, justifyContent: 'space-between', gap: 8 }}>
+                <Text
+                  numberOfLines={2}
+                  style={{ color: '#303236', fontSize: 14, fontWeight: '500', lineHeight: 20, ...RTL_TEXT }}
+                >
+                  {item.title}
+                </Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <Text numberOfLines={1} style={{ color: storeAccent.ink, fontSize: 15, fontWeight: '700', writingDirection: 'ltr', flexShrink: 1 }}>
+                    {formatPrice(item.price, item.currencyCode)}
+                  </Text>
+                  <Pressable
+                    onPress={() => onAdd(item)}
+                    disabled={disabled || adding}
+                    accessibilityRole="button"
+                    accessibilityLabel={`הוספת ${item.title} לעגלה`}
+                    accessibilityState={{ disabled: disabled || adding, busy: adding }}
+                    style={{ width: 44, height: 44 }}
+                  >
+                    <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled || adding ? 0.5 : 1 }}>
+                      <View style={{ width: 34, height: 34, borderRadius: radii.pill, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E4E4', alignItems: 'center', justifyContent: 'center' }}>
+                        {adding ? <ActivityIndicator size="small" color="#202124" /> : <Plus size={18} color="#202124" strokeWidth={1.8} />}
+                      </View>
+                    </View>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          );
+        })}
+      </HorizontalScrollView>
+    </View>
   );
 }
 
 function CartQuantityStepper({
   quantity,
-  disabled,
   onIncrement,
   onDecrement,
 }: {
   quantity: number;
-  disabled?: boolean;
   onIncrement: () => void;
   onDecrement: () => void;
 }) {
-  const isRemoveStep = quantity <= 1;
-
   return (
     <View
       style={{
         flexDirection: 'row-reverse',
         alignItems: 'center',
+        alignSelf: 'flex-end',
         flexShrink: 0,
-        backgroundColor: COLORS.quantityStepperTrack,
-        borderRadius: 999,
-        padding: 3,
-        gap: 2,
+        backgroundColor: '#F5F5F5',
+        borderRadius: radii.surface,
+        marginTop: 8,
+        overflow: 'hidden',
       }}
     >
-      <StepperButton onPress={onIncrement} disabled={disabled}>
-        <Plus size={14} color={COLORS.text} strokeWidth={2.4} />
+      <StepperButton onPress={onDecrement} label="הפחתת כמות">
+        <Minus size={16} color="#111111" strokeWidth={2.2} />
       </StepperButton>
-      <Text
-        style={{
-          minWidth: 26,
-          textAlign: 'center',
-          color: COLORS.text,
-          fontSize: 14,
-          fontWeight: '700',
-        }}
-      >
-        {quantity}
-      </Text>
-      <StepperButton onPress={onDecrement} disabled={disabled}>
-        {isRemoveStep ? (
-          <Trash2 size={13} color={COLORS.danger} strokeWidth={2.2} />
-        ) : (
-          <Minus size={14} color={COLORS.text} strokeWidth={2.4} />
-        )}
+      <RollingQuantity value={quantity} />
+      <StepperButton onPress={onIncrement} label="הוספת כמות">
+        <Plus size={16} color="#111111" strokeWidth={2.2} />
       </StepperButton>
     </View>
   );
@@ -261,7 +552,7 @@ function CartOcdPlusSavingsUpsell({
   return (
     <View
       style={{
-        borderRadius: 18,
+        borderRadius: radii.surface,
         backgroundColor: COLORS.dark,
         paddingHorizontal: 14,
         paddingVertical: 12,
@@ -286,8 +577,8 @@ function CartOcdPlusSavingsUpsell({
         >
           <View
             style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 999,
+              backgroundColor: storeAccent.primary,
+              borderRadius: radii.pill,
               paddingHorizontal: 16,
               paddingVertical: 8,
               minWidth: 72,
@@ -303,7 +594,7 @@ function CartOcdPlusSavingsUpsell({
                   }),
             }}
           >
-            <Text style={{ color: '#000000', fontSize: 13, fontWeight: '900' }}>הצטרף</Text>
+            <Text style={{ color: storeAccent.onPrimary, fontSize: 13, fontWeight: '900' }}>הצטרף</Text>
           </View>
         </Pressable>
 
@@ -379,6 +670,9 @@ export function StoreCartScreen({
   onOpenCheckout: (checkoutUrl: string) => Promise<void>;
 }) {
   const insets = useSafeAreaInsets();
+  const inBottomSheet = useInBottomSheet();
+  const sheetReady = useBottomSheetReady();
+  const { fetchCartRecommendations } = useStoreResources();
   const { isActiveMember } = useOcdPlusMembership();
   const { openOcdPlusSubscribeSheet } = useOcdPlusSubscribeSheet();
   const isMember = isActiveMember;
@@ -387,13 +681,88 @@ export function StoreCartScreen({
     items,
     subtotal,
     currencyCode,
+    itemCount,
     isBootstrapping,
     isMutating,
-    updateQuantity,
+    addItem,
+    adjustQuantity,
     removeItem,
-    getQuantity,
   } = useCart();
   const [isCheckoutPreparing, setIsCheckoutPreparing] = useState(false);
+  const [recommendations, setRecommendations] = useState<CartRecommendation[]>([]);
+  const [addingVariantId, setAddingVariantId] = useState<string | null>(null);
+
+  const recommendationSeedId = items[0]?.product.id ?? null;
+  const recommendationExcludeKey = useMemo(
+    () => items.map((item) => item.product.variantId).filter(Boolean).join('|'),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!sheetReady) return;
+    if (!recommendationSeedId) {
+      setRecommendations([]);
+      return;
+    }
+
+    let cancelled = false;
+    const exclude = new Set(recommendationExcludeKey.split('|').filter(Boolean));
+    void fetchCartRecommendations(recommendationSeedId)
+      .then((list) => {
+        if (cancelled) return;
+        setRecommendations(
+          list
+            .filter((item) => {
+              if (!item.variantId || !item.availableForSale) return false;
+              if (exclude.has(item.variantId)) return false;
+              if (item.handle === 'mystery-gift' || item.handle === 'מתנה-מסתורית') return false;
+              if (item.tags.includes('mystery-gift')) return false;
+              if (isCatalogBundleProduct(item.tags)) return false;
+              return true;
+            })
+            .slice(0, 8),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setRecommendations([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recommendationExcludeKey, recommendationSeedId, sheetReady, fetchCartRecommendations]);
+
+  const handleAddRecommendation = useCallback(
+    (item: CartRecommendation) => {
+      if (isMutating || addingVariantId) return;
+      if (Platform.OS !== 'web') {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      setAddingVariantId(item.variantId);
+      void addItem(
+        {
+          id: item.id,
+          name: item.title,
+          subtitle: '',
+          collectionTitle: null,
+          price: item.price,
+          currencyCode: item.currencyCode,
+          handle: item.handle,
+          description: item.description,
+          imageUrl: item.imageUrl,
+          imageAltText: item.imageAltText,
+          variantId: item.variantId,
+          variantTitle: item.variantTitle,
+          coverColor: '#F4F4F5',
+          accentColor: '#FFFFFF',
+        },
+        1,
+      ).finally(() => setAddingVariantId(null));
+    },
+    [addItem, addingVariantId, isMutating],
+  );
+
+  const freeShippingAt = isMember ? OCD_PLUS_FREE_SHIPPING_AT : STORE_FREE_SHIPPING_AT;
 
   const displaySubtotal = useMemo(
     () => (isMember ? computeOcdPlusPrice(subtotal) : subtotal),
@@ -413,26 +782,17 @@ export function StoreCartScreen({
 
   const checkoutDisabled = isMutating || isCheckoutPreparing || !checkoutUrl;
 
-  const totalItemCount = useMemo(
-    () => items.reduce((sum, line) => sum + line.quantity, 0),
-    [items]
-  );
 
   /** גובה בר התשלום הצף + מרווח — בלי טאב בר */
-  const floatingCheckoutReserve = 72;
-  const scrollBottomPadding = insets.bottom + floatingCheckoutReserve + 28;
+  const scrollBottomPadding = 24;
   const handleCartQuantityChange = useCallback(
-    (productId: string, nextQty: number) => {
-      if (nextQty <= 0) {
-        if (Platform.OS !== 'web') {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-        void removeItem(productId);
-        return;
+    (productId: string, delta: number) => {
+      if (Platform.OS !== 'web') {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      void updateQuantity(productId, nextQty);
+      adjustQuantity(productId, delta);
     },
-    [removeItem, updateQuantity]
+    [adjustQuantity]
   );
 
   return (
@@ -448,18 +808,18 @@ export function StoreCartScreen({
               zIndex: 2,
             }}
           >
-            <View style={{ height: insets.top, backgroundColor: COLORS.surface }} />
+            <View style={{ height: inBottomSheet ? 0 : insets.top, backgroundColor: COLORS.surface }} />
             <View
               style={{
                 flexDirection: 'row-reverse',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 paddingHorizontal: 16,
-                paddingTop: 10,
-                paddingBottom: 14,
+                paddingTop: inBottomSheet ? 0 : 10,
+                paddingBottom: inBottomSheet ? 10 : 14,
               }}
             >
-              <View style={{ width: 42, height: 42 }} />
+              <View style={{ width: 42, height: inBottomSheet ? 28 : 42 }} />
 
               <View
                 style={{
@@ -478,65 +838,44 @@ export function StoreCartScreen({
                 <Text
                   style={{
                     color: COLORS.text,
-                    fontSize: 19,
-                    fontWeight: '800',
+                    fontSize: 18,
+                    lineHeight: 26,
+                    fontWeight: '700',
                     letterSpacing: -0.3,
                     textAlign: 'center',
                   }}
                 >
-                  העגלה שלך
+                  {`עגלת קניות${itemCount > 0 ? ` (${itemCount})` : ''}`}
                 </Text>
-                {totalItemCount > 0 ? (
-                  <View
-                    style={{
-                      minWidth: 26,
-                      height: 22,
-                      paddingHorizontal: 8,
-                      borderRadius: 11,
-                      backgroundColor: COLORS.pill,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: COLORS.muted,
-                        fontSize: 12,
-                        fontWeight: '700',
-                        lineHeight: 16,
-                        includeFontPadding: false,
-                      }}
-                    >
-                      {totalItemCount > 99 ? '99+' : totalItemCount}
-                    </Text>
-                  </View>
-                ) : null}
+                {null}
               </View>
 
-              <Pressable
-                onPress={onBack}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="חזרה"
-                style={({ pressed }) => ({
-                  width: 42,
-                  height: 42,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: COLORS.surfaceMuted,
-                  borderWidth: 1,
-                  borderColor: COLORS.border,
-                  opacity: pressed ? 0.65 : 1,
-                })}
-              >
-                <ArrowLeft size={21} color={COLORS.text} strokeWidth={2.2} />
-              </Pressable>
+              {inBottomSheet ? (
+                <View style={{ width: 42, height: 28 }} />
+              ) : (
+                <Pressable
+                  onPress={onBack}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="חזרה"
+                  style={({ pressed }) => ({
+                    width: 42,
+                    height: 42,
+                    borderRadius: radii.compact,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#FFFFFF',
+                    opacity: pressed ? 0.65 : 1,
+                  })}
+                >
+                  <ArrowLeft size={21} color={COLORS.text} strokeWidth={2.2} />
+                </Pressable>
+              )}
             </View>
           </View>
 
           <ScrollView
-            style={{ flex: 1, backgroundColor: COLORS.background }}
+            style={{ flex: 1, minHeight: 0, backgroundColor: COLORS.background }}
             contentContainerStyle={{
               paddingHorizontal: 16,
               paddingTop: 18,
@@ -547,81 +886,33 @@ export function StoreCartScreen({
             keyboardShouldPersistTaps="handled"
           >
           {isBootstrapping && (
-            <View
-              style={{
-                backgroundColor: COLORS.surface,
-                borderRadius: 22,
-                borderWidth: 1,
-                borderColor: COLORS.divider,
-                paddingVertical: 36,
-                paddingHorizontal: 22,
-                alignItems: 'center',
-                gap: 14,
-                shadowColor: '#0F172A',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.04,
-                shadowRadius: 12,
-                elevation: 2,
-              }}
-            >
+            <View style={{ paddingVertical: 48, alignItems: 'center' }}>
               <ActivityIndicator size="large" color={COLORS.dark} />
-              <Text style={{ color: COLORS.text, fontSize: 15, fontWeight: '700', ...RTL_TEXT }}>טוען את העגלה…</Text>
             </View>
           )}
 
           {!isBootstrapping && !items.length && (
-            <View
-              style={{
-                backgroundColor: COLORS.surface,
-                borderRadius: 24,
-                borderWidth: 1,
-                borderColor: COLORS.divider,
-                paddingHorizontal: 24,
-                paddingVertical: 40,
-                alignItems: 'center',
-                gap: 14,
-                shadowColor: '#0F172A',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.05,
-                shadowRadius: 16,
-                elevation: 3,
-              }}
-            >
-              <View
-                style={{
-                  width: 84,
-                  height: 84,
-                  borderRadius: 28,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: COLORS.surfaceMuted,
-                  borderWidth: 1,
-                  borderColor: COLORS.divider,
-                }}
-              >
-                <ShoppingCart size={32} color={COLORS.muted} strokeWidth={1.75} />
-              </View>
-              <Text style={{ color: COLORS.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.3, ...RTL_TEXT }}>
-                העגלה עדיין ריקה
+            <View style={{ paddingHorizontal: 8, paddingVertical: 56, alignItems: 'center', gap: 10 }}>
+              <Text style={{ color: COLORS.text, fontSize: 20, fontWeight: '700', ...RTL_TEXT }}>
+                העגלה ריקה
               </Text>
               <Text
                 style={{
                   color: COLORS.muted,
-                  fontSize: 13.5,
-                  lineHeight: 21,
+                  fontSize: 15,
+                  lineHeight: 22,
                   writingDirection: 'rtl',
                   textAlign: 'center',
-                  paddingHorizontal: 6,
                 }}
               >
-                ברגע שתוסיף מוצרים מהחנות, הם יופיעו כאן — עם סיכום ברור ומעבר מהיר לתשלום.
+                אין כאן מוצרים.
               </Text>
               <Pressable
                 onPress={onBack}
                 style={({ pressed }) => ({
                   marginTop: 8,
                   minWidth: 180,
-                  borderRadius: 16,
+                  borderRadius: radii.surface,
                   backgroundColor: COLORS.dark,
                   paddingHorizontal: 22,
                   paddingVertical: 14,
@@ -634,8 +925,8 @@ export function StoreCartScreen({
                   elevation: 4,
                 })}
               >
-                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', letterSpacing: -0.2 }}>
-                  חזרה לחנות
+                <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>
+                  לחנות
                 </Text>
               </Pressable>
             </View>
@@ -643,361 +934,157 @@ export function StoreCartScreen({
 
           {!!items.length && (
             <>
-              <View
-                style={{
-                  flexDirection: 'row-reverse',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 4,
-                  marginBottom: -4,
-                }}
-              >
-                <Text
-                  style={{
-                    color: COLORS.muted,
-                    fontSize: 12.5,
-                    fontWeight: '700',
-                    letterSpacing: 0.2,
-                    ...RTL_TEXT,
-                  }}
-                >
-                  {totalItemCount} {totalItemCount === 1 ? 'פריט' : 'פריטים'}
-                </Text>
-                <Text
-                  style={{
-                    color: COLORS.softText,
-                    fontSize: 11.5,
-                    fontWeight: '600',
-                    ...RTL_TEXT,
-                  }}
-                >
-                  החלק שמאלה למחיקה
-                </Text>
-              </View>
-
-              <View style={{ gap: 12 }}>
+              <CartRewardBar subtotal={subtotal} freeShippingAt={freeShippingAt} />
+              <View style={{ gap: 0 }}>
                 {items.map((item) => {
-                  const category = (item.product.subtitle ?? '').trim();
                   const variantPart =
                     item.product.variantTitle && item.product.variantTitle !== 'Default Title'
                       ? item.product.variantTitle.trim()
                       : '';
-                  const pageLabel = (item.product.collectionTitle ?? '').trim();
-                  const subtextLine =
-                    category || variantPart
-                      ? [category, variantPart].filter(Boolean).join(' • ')
-                      : pageLabel;
 
-                  const displayQuantity = getQuantity(item.product.id) || item.quantity;
-                  const linePrice = isMember
-                    ? computeOcdPlusPrice(item.cost.totalAmount)
-                    : item.cost.totalAmount;
+                  const displayQuantity = item.quantity;
+                  const unitPrice = isMember
+                    ? computeOcdPlusPrice(item.cost.amountPerQuantity)
+                    : item.cost.amountPerQuantity;
 
                   return (
                     <View
                       key={item.id}
                       style={{
-                        borderRadius: 24,
-                        backgroundColor: COLORS.surface,
-                        overflow: 'hidden',
-                        borderWidth: 1,
-                        borderColor: '#EFF2F6',
-                        shadowColor: '#0F172A',
-                        shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: 0.03,
-                        shadowRadius: 14,
-                        elevation: 1,
+                        backgroundColor: '#FFFFFF',
+                        borderBottomWidth: 1,
+                        borderBottomColor: '#F0F0F0',
                       }}
                     >
-                      <CartLineSwipeable
-                        disabled={isMutating}
-                        removeLabel={`הסר ${item.product.name} מהעגלה`}
-                        onRemove={() => {
-                          if (Platform.OS !== 'web') {
-                            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          }
-                          void removeItem(item.product.id);
-                        }}
-                      >
-                        <View style={{ padding: 14 }}>
-                          <View style={{ flexDirection: 'row-reverse', gap: 14 }}>
-                            <View style={{ width: 84, height: 84, flexShrink: 0 }}>
-                              <CartProductImage
-                                imageUrl={item.product.imageUrl}
-                                imageAltText={item.product.imageAltText}
-                                name={item.product.name}
-                                coverColor={item.product.coverColor}
-                                accentColor={item.product.accentColor}
-                              />
-                            </View>
-
-                            <View style={{ flex: 1, minWidth: 0, justifyContent: 'space-between' }}>
-                              <View style={{ gap: 3, alignItems: 'flex-end' }}>
-                                <Text
-                                  numberOfLines={2}
-                                  style={{
-                                    color: COLORS.text,
-                                    fontSize: 14.5,
-                                    fontWeight: '700',
-                                    lineHeight: 20,
-                                    letterSpacing: -0.2,
-                                    ...RTL_TEXT,
-                                  }}
-                                >
-                                  {item.product.name}
-                                </Text>
-                                {!!subtextLine && (
-                                  <Text
-                                    numberOfLines={1}
-                                    style={{ color: COLORS.softText, fontSize: 12, lineHeight: 16, ...RTL_TEXT }}
-                                  >
-                                    {subtextLine}
-                                  </Text>
-                                )}
-                              </View>
-
-                              <View
-                                style={{
-                                  flexDirection: 'row-reverse',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  marginTop: 10,
-                                }}
-                              >
-                                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-                                  <Text
-                                    style={{
-                                      color: COLORS.text,
-                                      fontSize: 16.5,
-                                      fontWeight: '800',
-                                      letterSpacing: -0.3,
-                                    }}
-                                  >
-                                    {formatPrice(linePrice, item.cost.currencyCode)}
-                                  </Text>
-                                  {isMember && (
-                                    <Text
-                                      style={{
-                                        color: COLORS.softText,
-                                        fontSize: 12,
-                                        fontWeight: '600',
-                                        textDecorationLine: 'line-through',
-                                      }}
-                                    >
-                                      {formatPrice(item.cost.totalAmount, item.cost.currencyCode)}
-                                    </Text>
-                                  )}
-                                </View>
-
-                                <CartQuantityStepper
-                                  quantity={displayQuantity}
-                                  disabled={isMutating}
-                                  onIncrement={() =>
-                                    handleCartQuantityChange(item.product.id, displayQuantity + 1)
-                                  }
-                                  onDecrement={() =>
-                                    handleCartQuantityChange(item.product.id, displayQuantity - 1)
-                                  }
-                                />
-                              </View>
-                            </View>
-                          </View>
+                      <View style={{ flexDirection: 'row-reverse', gap: 12, paddingVertical: 16 }}>
+                        <View style={{ width: 80, height: 80, flexShrink: 0, borderRadius: radii.compact, overflow: 'hidden', backgroundColor: '#F4F4F5' }}>
+                          <CartProductImage
+                            imageUrl={item.product.imageUrl}
+                            imageAltText={item.product.imageAltText}
+                            name={item.product.name}
+                            coverColor={item.product.coverColor}
+                            accentColor={item.product.accentColor}
+                          />
                         </View>
-                      </CartLineSwipeable>
+
+                        <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end' }}>
+                          <Text
+                            numberOfLines={2}
+                            style={{
+                              color: '#111111',
+                              fontSize: 14,
+                              fontWeight: '500',
+                              lineHeight: 20,
+                              ...RTL_TEXT,
+                            }}
+                          >
+                            {item.product.name}
+                          </Text>
+                          {!!variantPart && (
+                            <Text
+                              numberOfLines={1}
+                              style={{ color: '#9CA3AF', fontSize: 12, lineHeight: 16, marginTop: 2, ...RTL_TEXT }}
+                            >
+                              {variantPart}
+                            </Text>
+                          )}
+                          <Text style={{ color: storeAccent.ink, fontSize: 14, fontWeight: '700', marginTop: 4 }}>
+                            {formatPrice(unitPrice, item.cost.currencyCode)}
+                          </Text>
+                          <CartQuantityStepper
+                            quantity={displayQuantity}
+                            onIncrement={() => handleCartQuantityChange(item.product.id, 1)}
+                            onDecrement={() => handleCartQuantityChange(item.product.id, -1)}
+                          />
+                        </View>
+
+                        <Pressable
+                          onPress={() => {
+                            if (Platform.OS !== 'web') {
+                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            }
+                            void removeItem(item.product.id);
+                          }}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`הסר ${item.product.name} מהעגלה`}
+                          style={{ paddingTop: 4 }}
+                        >
+                          <Trash2 size={16} color="#A1A1AA" strokeWidth={1.8} />
+                        </Pressable>
+                      </View>
                     </View>
                   );
                 })}
               </View>
 
-              <View
-                style={{
-                  backgroundColor: COLORS.surface,
-                  borderRadius: 24,
-                  borderWidth: 1,
-                  borderColor: '#EFF2F6',
-                  paddingHorizontal: 18,
-                  paddingVertical: 18,
-                  shadowColor: '#0F172A',
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowOpacity: 0.03,
-                  shadowRadius: 14,
-                  elevation: 1,
-                  gap: 14,
-                }}
-              >
-                <Text
-                  style={{
-                    color: COLORS.muted,
-                    fontSize: 12,
-                    fontWeight: '800',
-                    letterSpacing: 0.6,
-                    ...RTL_TEXT,
-                  }}
-                >
-                  סיכום הזמנה
-                </Text>
-
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>
-                    סכום ביניים
-                  </Text>
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                    {isMember ? (
-                      <Text
-                        style={{
-                          color: COLORS.softText,
-                          fontSize: 13,
-                          fontWeight: '600',
-                          textDecorationLine: 'line-through',
-                        }}
-                      >
-                        {formatPrice(subtotal, currencyCode)}
-                      </Text>
-                    ) : null}
-                    <Text style={{ color: COLORS.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
-                      {formatPrice(displaySubtotal, currencyCode)}
-                    </Text>
-                  </View>
-                </View>
-
-                {isMember && memberSavings > 0 ? (
-                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-                      <OcdPlusMark size={16} />
-                      <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>
-                        הנחת OCD+ (13%)
-                      </Text>
-                    </View>
-                    <Text style={{ color: '#059669', fontSize: 15, fontWeight: '700' }}>
-                      −{formatPrice(memberSavings, currencyCode)}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {!isMember ? (
-                  <CartOcdPlusSavingsUpsell
-                    subtotal={subtotal}
-                    currencyCode={currencyCode}
-                    onJoinPress={openOcdPlusSubscribeSheet}
-                  />
-                ) : null}
-
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ color: COLORS.muted, fontSize: 14, fontWeight: '600', ...RTL_TEXT }}>משלוח</Text>
-                  <Text style={{ color: COLORS.softText, fontSize: 13, fontWeight: '600', ...RTL_TEXT }}>
-                    מחושב בקופה
-                  </Text>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: COLORS.divider, marginVertical: 2 }} />
-
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ color: COLORS.text, fontSize: 16, fontWeight: '800', letterSpacing: -0.2, ...RTL_TEXT }}>
-                    סך הכל
-                  </Text>
-                  <Text style={{ color: COLORS.text, fontSize: 19, fontWeight: '900', letterSpacing: -0.4 }}>
-                    {formatPrice(displaySubtotal, currencyCode)}
-                  </Text>
-                </View>
-              </View>
+              <CartUpsellRail
+                items={recommendations}
+                remainingForFree={Math.max(0, freeShippingAt - subtotal)}
+                addingVariantId={addingVariantId}
+                disabled={isMutating}
+                onAdd={handleAddRecommendation}
+              />
             </>
           )}
         </ScrollView>
 
           {!!items.length && !isBootstrapping && (
             <View
-              pointerEvents="box-none"
               style={{
-                position: 'absolute',
-                left: 16,
-                right: 16,
-                bottom: Math.max(10, insets.bottom + 8),
-                zIndex: 9999,
-                borderRadius: 18,
-                backgroundColor: checkoutDisabled ? '#4B5563' : COLORS.checkoutBar,
-                shadowColor: '#0B1220',
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.22,
-                shadowRadius: 20,
-                elevation: 18,
-                minHeight: 62,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: '#E7E5E4',
+                paddingHorizontal: 20,
+                paddingTop: 16,
+                paddingBottom: Math.max(12, (inBottomSheet ? 10 : insets.bottom) + 8),
+                backgroundColor: '#FFFFFF',
+                flexShrink: 0,
+                gap: 12,
               }}
             >
+              {isMember && memberSavings > 0 ? (
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ color: '#6B7280', fontSize: 14, ...RTL_TEXT }}>הנחת OCD+</Text>
+                  <Text style={{ color: storeAccent.ink, fontSize: 14, fontWeight: '600' }}>
+                    −{formatPrice(memberSavings, currencyCode)}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#6B7280', fontSize: 14 }}>סה״כ</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  {isMember && memberSavings > 0 ? (
+                    <Text style={{ color: '#A1A1AA', fontSize: 14, textDecorationLine: 'line-through' }}>
+                      {formatPrice(subtotal, currencyCode)}
+                    </Text>
+                  ) : null}
+                  <Text style={{ color: storeAccent.ink, fontSize: 18, fontWeight: '700' }}>
+                    {formatPrice(displaySubtotal, currencyCode)}
+                  </Text>
+                </View>
+              </View>
               <Pressable
                 onPress={handleCheckout}
                 disabled={checkoutDisabled}
                 accessibilityRole="button"
-                accessibilityLabel={`מעבר לתשלום, סה״כ ${totalItemCount} פריטים, ${formatPrice(displaySubtotal, currencyCode)}`}
+                accessibilityLabel="מעבר לתשלום מאובטח"
                 style={({ pressed }) => ({
-                  flex: 1,
-                  minHeight: 62,
-                  width: '100%',
-                  justifyContent: 'center',
-                  backgroundColor: 'transparent',
                   opacity: pressed && !checkoutDisabled ? 0.9 : 1,
                 })}
               >
                 <View
                   style={{
-                    flexDirection: 'row',
+                    minHeight: 52,
+                    borderRadius: radii.surface,
+                    backgroundColor: checkoutDisabled ? '#4B5563' : storeAccent.primary,
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    paddingHorizontal: 18,
-                    paddingVertical: 14,
+                    justifyContent: 'center',
+                    paddingHorizontal: 16,
                   }}
                 >
-                  <Text
-                    style={{
-                      color: '#FFFFFF',
-                      fontSize: 18,
-                      fontWeight: '800',
-                      letterSpacing: -0.3,
-                      flexShrink: 0,
-                      lineHeight: 23,
-                      includeFontPadding: false,
-                    }}
-                  >
-                    {formatPrice(displaySubtotal, currencyCode)}
+                  <Text style={{ color: checkoutDisabled ? '#FFFFFF' : storeAccent.onPrimary, fontSize: 16, fontWeight: '700' }}>
+                    {isCheckoutPreparing ? 'מעדכן…' : 'מעבר לתשלום מאובטח'}
                   </Text>
-                  <View
-                    style={{
-                      flexDirection: 'row-reverse',
-                      alignItems: 'center',
-                      gap: 10,
-                      flexShrink: 0,
-                      marginStart: 12,
-                    }}
-                  >
-                    <View
-                      style={{
-                        minWidth: 28,
-                        height: 28,
-                        paddingHorizontal: totalItemCount > 9 ? 8 : 0,
-                        borderRadius: 14,
-                        backgroundColor: 'rgba(255,255,255,0.16)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '800', lineHeight: 18, includeFontPadding: false }}>
-                        {totalItemCount > 99 ? '99+' : totalItemCount}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        color: '#FFFFFF',
-                        fontSize: 16,
-                        fontWeight: '800',
-                        letterSpacing: -0.2,
-                        lineHeight: 21,
-                        includeFontPadding: false,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {isMutating ? 'מעדכן…' : 'מעבר לתשלום'}
-                    </Text>
-                  </View>
                 </View>
               </Pressable>
             </View>

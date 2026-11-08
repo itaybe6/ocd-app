@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ChevronDown, Search } from 'lucide-react-native';
@@ -54,7 +55,7 @@ export function SelectSheet({
             backgroundColor: colors.elevated,
             borderColor: colors.border,
             borderWidth: 1,
-            borderRadius: 14,
+            borderRadius: radii.surface,
             paddingHorizontal: 14,
             paddingVertical: 12,
             flexDirection: 'row',
@@ -82,7 +83,7 @@ export function SelectSheet({
           <View
             style={{
               height: 44,
-              borderRadius: 14,
+              borderRadius: radii.surface,
               backgroundColor: colors.bg,
               borderWidth: 1,
               borderColor: colors.border,
@@ -127,7 +128,7 @@ export function SelectSheet({
                 <View
                   style={{
                     backgroundColor: o.value === value ? colors.primary : colors.elevated,
-                    borderRadius: 14,
+                    borderRadius: radii.surface,
                     paddingVertical: 12,
                     paddingHorizontal: 12,
                     borderWidth: 1,

@@ -1,3 +1,5 @@
+import { storeAccent } from '../theme/storeAccent';
+import { radii } from '../theme/radii';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -12,7 +14,11 @@ import Animated, {
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { OcdPlusMark } from './OcdPlusMark';
 
-const OCD_PLUS_DISCOUNT = 0.13;
+/** קבוע על כל מוצר לחברי OCD+. */
+export const OCD_PLUS_DISCOUNT = 0.08;
+
+/** משלוח חינם לחברי OCD+ כשסכום המוצרים בעגלה עובר את הסף הזה. */
+export const OCD_PLUS_FREE_SHIPPING_AT = 149;
 
 /** Floating price pill + banner CTA — pure black (not slate #111827). */
 const OCD_PLUS_PILL_BG = '#000000';
@@ -24,7 +30,7 @@ const OCD_PLUS_COLLAPSE_PANEL_TOP_PADDING = 10;
 const OCD_PLUS_COLLAPSE_HANDLE_BOTTOM_GAP = 2;
 
 const OCD_PLUS_CLOSED_BAR_HEIGHT = 42;
-const OCD_PLUS_CARD_CORNER_RADIUS = 18;
+const OCD_PLUS_CARD_CORNER_RADIUS = radii.surface;
 const OCD_PLUS_PANEL_OPEN_MS = 320;
 const OCD_PLUS_PANEL_CLOSE_MS = 280;
 const OCD_PLUS_PANEL_FALLBACK_HEIGHT = 120;
@@ -70,11 +76,16 @@ export function OcdPlusCardPriceBar({
   regularPrice,
   isSubscriber,
   onPress,
+  subtle = false,
 }: {
   regularPrice: number;
   isSubscriber: boolean;
   onPress?: () => void;
+  subtle?: boolean;
 }) {
+  const panelBackground = subtle ? '#F5F6F7' : OCD_PLUS_PILL_BG;
+  const panelText = subtle ? storeAccent.onPrimary : '#FFFFFF';
+  const panelMuted = subtle ? '#65676B' : 'rgba(255,255,255,0.72)';
   const memberPrice = computeOcdPlusPrice(regularPrice);
   const savings = Math.max(0, Math.round((regularPrice - memberPrice) * 100) / 100);
   const [isOpen, setIsOpen] = useState(false);
@@ -178,7 +189,7 @@ export function OcdPlusCardPriceBar({
               left: 0,
               right: 0,
               overflow: 'hidden',
-              backgroundColor: OCD_PLUS_PILL_BG,
+              backgroundColor: panelBackground,
             },
             panelShellAnimatedStyle,
           ]}
@@ -188,7 +199,7 @@ export function OcdPlusCardPriceBar({
             style={{
               flex: 1,
               justifyContent: 'flex-end',
-              backgroundColor: OCD_PLUS_PILL_BG,
+              backgroundColor: panelBackground,
             }}
           >
             <View
@@ -198,7 +209,7 @@ export function OcdPlusCardPriceBar({
                 paddingBottom: 13,
                 paddingHorizontal: 13,
                 gap: 5,
-                backgroundColor: OCD_PLUS_PILL_BG,
+                backgroundColor: panelBackground,
               }}
             >
             <View style={{ alignItems: 'center', marginBottom: OCD_PLUS_COLLAPSE_HANDLE_BOTTOM_GAP }}>
@@ -209,10 +220,11 @@ export function OcdPlusCardPriceBar({
                 accessibilityLabel="כיווץ"
                 style={({ pressed }) => ({
                   ...ocdPlusCollapseHandleStyle,
+                  ...(subtle ? { backgroundColor: '#FFFFFF', borderColor: '#E1E2E4', borderWidth: 1, shadowOpacity: 0, elevation: 0 } : {}),
                   opacity: pressed ? 0.82 : 1,
                 })}
               >
-                <ChevronDown size={16} color="#FFFFFF" strokeWidth={2.8} />
+                <ChevronDown size={16} color={panelText} strokeWidth={2.8} />
               </Pressable>
             </View>
 
@@ -220,7 +232,7 @@ export function OcdPlusCardPriceBar({
               <OcdPlusMark size={17} />
               <Text
                 style={{
-                  color: 'rgba(255,255,255,0.8)',
+                  color: panelMuted,
                   fontSize: 11.5,
                   fontWeight: '700',
                   textAlign: 'right',
@@ -232,12 +244,12 @@ export function OcdPlusCardPriceBar({
             </View>
 
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.2 }}>
+              <Text style={{ color: panelText, fontSize: 18, fontWeight: '900', letterSpacing: 0.2 }}>
                 {fmt(memberPrice)}
               </Text>
               <Text
                 style={{
-                  color: 'rgba(255,255,255,0.4)',
+                  color: subtle ? '#77797D' : 'rgba(255,255,255,0.4)',
                   fontSize: 11.5,
                   fontWeight: '600',
                   textDecorationLine: 'line-through',
@@ -249,7 +261,7 @@ export function OcdPlusCardPriceBar({
 
             <Text
               style={{
-                color: 'rgba(255,255,255,0.72)',
+                color: panelMuted,
                 fontSize: 11.5,
                 fontWeight: '700',
                 textAlign: 'right',
@@ -265,14 +277,14 @@ export function OcdPlusCardPriceBar({
                 accessibilityLabel="הצטרפות למועדון הלקוחות"
                 style={({ pressed }) => ({
                   marginTop: 2,
-                  borderRadius: 999,
-                  backgroundColor: '#FFFFFF',
+                  borderRadius: radii.pill,
+                  backgroundColor: subtle ? storeAccent.primary : '#FFFFFF',
                   paddingVertical: 8,
                   alignItems: 'center',
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
-                <Text style={{ color: '#000000', fontSize: 12.5, fontWeight: '900' }}>הצטרפו עכשיו</Text>
+                <Text style={{ color: subtle ? storeAccent.onPrimary : '#000000', fontSize: 12.5, fontWeight: '900' }}>הצטרפו עכשיו</Text>
               </Pressable>
             ) : null}
             </View>
@@ -290,7 +302,7 @@ export function OcdPlusCardPriceBar({
           <View
             style={{
               height: OCD_PLUS_CLOSED_BAR_HEIGHT,
-              backgroundColor: OCD_PLUS_PILL_BG,
+              backgroundColor: subtle ? storeAccent.primary : OCD_PLUS_PILL_BG,
               borderBottomLeftRadius: OCD_PLUS_CARD_CORNER_RADIUS,
               borderBottomRightRadius: OCD_PLUS_CARD_CORNER_RADIUS,
               flexDirection: 'row',
@@ -299,11 +311,11 @@ export function OcdPlusCardPriceBar({
               gap: 7,
             }}
           >
-            <ChevronUp size={13} color="rgba(255,255,255,0.6)" strokeWidth={2.6} />
-            <Text style={{ color: '#FFFFFF', fontSize: 13.5, fontWeight: '800', letterSpacing: 0.2 }}>
+            <ChevronUp size={13} color={subtle ? '#FFFFFF' : 'rgba(255,255,255,0.6)'} strokeWidth={2.6} />
+            <Text style={{ color: '#FFFFFF', fontSize: 13.5, fontWeight: subtle ? '600' : '800', letterSpacing: 0.2 }}>
               {fmt(memberPrice)}
             </Text>
-            <OcdPlusMark size={20} />
+            {subtle ? <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>OCD+</Text> : <OcdPlusMark size={20} />}
           </View>
         </Pressable>
       </Animated.View>
@@ -327,7 +339,7 @@ export function OcdPlusJoinBannerButton({
     alignSelf: 'center' as const,
     gap: 8,
     backgroundColor: OCD_PLUS_PILL_BG,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     paddingVertical: 8,
     paddingHorizontal: 13,
     shadowColor: '#000000',
@@ -390,7 +402,7 @@ function MemberPriceTag({
         gap: 7,
         alignSelf: 'flex-start',
         backgroundColor: pillBg,
-        borderRadius: 999,
+        borderRadius: radii.pill,
         paddingVertical: 5,
         paddingHorizontal: 11,
       }}
@@ -486,7 +498,7 @@ export function OcdPlusProductPriceBlock({
             hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
             style={({ pressed }) => ({
               opacity: pressed ? 0.88 : 1,
-              borderRadius: 999,
+              borderRadius: radii.pill,
               backgroundColor: onDark ? '#FFFFFF' : '#000000',
               paddingHorizontal: 14,
               paddingVertical: 8,
@@ -597,7 +609,7 @@ const ocdPlusHintStyles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     backgroundColor: 'rgba(15, 23, 42, 0.035)',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -638,7 +650,7 @@ const ocdPlusHintStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: '#0B1220',
-    borderRadius: 999,
+    borderRadius: radii.pill,
     paddingHorizontal: 13,
     paddingVertical: 8,
     shadowColor: '#0B1220',

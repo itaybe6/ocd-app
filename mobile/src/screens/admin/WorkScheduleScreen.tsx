@@ -1,3 +1,4 @@
+import { radii } from '../../theme/radii';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -246,7 +247,7 @@ const mv = StyleSheet.create({
   numWrap: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
     transform: [{ translateX: 10 }, { translateY: 20 }],
@@ -269,7 +270,7 @@ const mv = StyleSheet.create({
   badge: {
     marginTop: 3,
     backgroundColor: '#2563EB',
-    borderRadius: 5,
+    borderRadius: radii.badge,
     paddingHorizontal: 4,
     paddingVertical: 2,
     minWidth: 60,
@@ -682,7 +683,7 @@ export function WorkScheduleScreen() {
                   gap: 6,
                   paddingVertical: 10,
                   paddingHorizontal: 16,
-                  borderRadius: 12,
+                  borderRadius: radii.surface,
                   backgroundColor: pressed ? '#1D4ED8' : '#2563EB',
                   minWidth: 88,
                   justifyContent: 'center',
@@ -760,7 +761,7 @@ export function WorkScheduleScreen() {
                                     style={({ pressed }) => ({
                                       width: 38,
                                       height: 38,
-                                      borderRadius: 12,
+                                      borderRadius: radii.compact,
                                       backgroundColor: pressed ? '#1D4ED8' : '#2563EB',
                                       alignItems: 'center',
                                       justifyContent: 'center',
@@ -845,14 +846,14 @@ export function WorkScheduleScreen() {
                   title={selectedSchedule ? 'עדכן תבנית + משימות' : 'שייך תבנית + צור משימות'}
                   onPress={assignTemplate}
                   disabled={!editTemplateId}
-                  style={{ borderRadius: 14 }}
+                  style={{ borderRadius: radii.surface }}
                 />
                 {selectedSchedule && (
                   <Button
                     title="הסר שיוך"
                     variant="danger"
                     onPress={removeTemplate}
-                    style={{ borderRadius: 14 }}
+                    style={{ borderRadius: radii.surface }}
                   />
                 )}
               </View>
@@ -1031,7 +1032,7 @@ const st = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: '#BFDBFE',
   },
@@ -1052,7 +1053,7 @@ const st = StyleSheet.create({
   },
   previewCard: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 14,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     overflow: 'hidden',
@@ -1074,7 +1075,7 @@ const st = StyleSheet.create({
   previewOrder: {
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: radii.pill,
     backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1091,7 +1092,7 @@ const st = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -1116,7 +1117,7 @@ const st = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: radii.compact,
     backgroundColor: '#EFF6FF',
   },
   previewRoleTagWorker: {
@@ -1170,7 +1171,7 @@ const st = StyleSheet.create({
     backgroundColor: colors.elevated,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: radii.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: 'row',
@@ -1210,7 +1211,7 @@ const st = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: '#EFF6FF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
@@ -1230,7 +1231,7 @@ const st = StyleSheet.create({
   pickerInline: {
     marginTop: 4,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     padding: 12,
@@ -1262,7 +1263,7 @@ const st = StyleSheet.create({
   },
   pickerCard: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 16,
+    borderRadius: radii.surface,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     padding: 12,
@@ -1284,7 +1285,7 @@ const st = StyleSheet.create({
   pickerCardNumber: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radii.compact,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
@@ -1321,7 +1322,7 @@ const st = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
@@ -1341,7 +1342,7 @@ const st = StyleSheet.create({
   pickerCheck: {
     width: 26,
     height: 26,
-    borderRadius: 13,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1354,7 +1355,7 @@ const st = StyleSheet.create({
   pickerChip: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -1383,7 +1384,7 @@ const st = StyleSheet.create({
 
   stationsDialogContainer: {
     padding: 0,
-    borderRadius: 20,
+    borderRadius: radii.sheet,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
   },
@@ -1400,7 +1401,7 @@ const st = StyleSheet.create({
   stationsCloseBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F1F5F9',
